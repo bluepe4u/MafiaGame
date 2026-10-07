@@ -1,0 +1,28 @@
+{
+  "name": "mafia-game",
+  "version": "1.0.0",
+  "description": "Web app for playing Mafia (Werewolf) with up to 12 players",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bluepe4u/MafiaGame.git"
+  },
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bluepe4u/MafiaGame/issues"
+  },
+  "homepage": "https://github.com/bluepe4u/MafiaGame#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.4"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}

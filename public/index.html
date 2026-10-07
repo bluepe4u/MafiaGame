@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mafia</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app">
+    <section id="home" class="screen">
+      <h1>Mafia</h1>
+      <p class="muted">Up to 12 players. One phone each.</p>
+      <label>Your name <input id="name" maxlength="20" autocomplete="nickname"></label>
+      <button id="createBtn" class="primary">Create room</button>
+      <div class="row">
+        <input id="joinCode" placeholder="Room code" maxlength="4" autocapitalize="characters">
+        <button id="joinBtn">Join</button>
+      </div>
+    </section>
+
+    <section id="lobby" class="screen hidden">
+      <header class="bar">
+        <div>Room <strong id="lobbyCode" class="code"></strong></div>
+        <button id="leaveBtn" class="ghost">Leave</button>
+      </header>
+      <p class="muted" id="lobbyCount"></p>
+      <ul id="lobbyPlayers" class="list"></ul>
+      <div id="hostSettings" class="card hidden">
+        <h3>Settings</h3>
+        <div class="grid2">
+          <label>Mafia <input type="number" min="1" max="6" data-role="mafia"></label>
+          <label>Cop <input type="number" min="0" max="1" data-role="cop"></label>
+          <label>Doctor <input type="number" min="0" max="1" data-role="doctor"></label>
+          <label>Hooker <input type="number" min="0" max="1" data-role="hooker"></label>
+          <label>Speech (sec) <input type="number" min="10" max="600" id="speechSeconds"></label>
+          <label class="check"><input type="checkbox" id="revealRole"> Reveal role on death</label>
+        </div>
+        <button id="autoRoles" class="ghost small">Auto roles for player count</button>
+      </div>
+      <p id="roleSummary" class="muted"></p>
+      <p id="roleError" class="error"></p>
+      <button id="startBtn" class="primary hidden">Start game</button>
+      <p id="waitHost" class="muted hidden">Waiting for the host to start…</p>
+    </section>
+
+    <section id="game" class="screen hidden">
+      <header class="bar">
+        <div><strong id="phaseTitle"></strong></div>
+        <button id="roleToggle" class="ghost small">Show role</button>
+      </header>
+      <div id="roleCard" class="card hidden"></div>
+      <div id="phasePanel" class="card"></div>
+      <ul id="players" class="players"></ul>
+      <div id="hostControls" class="row hidden"></div>
+      <div id="privateBox" class="card hidden"><h3>Your notes</h3><ul id="privateLog" class="log"></ul></div>
+      <div class="card"><h3>Town log</h3><ul id="log" class="log"></ul></div>
+    </section>
+  </main>
+  <div id="toast" class="toast hidden"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
