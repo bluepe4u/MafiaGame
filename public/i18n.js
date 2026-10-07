@@ -23,7 +23,7 @@ const DICT = {
     'blurb.citizen': 'Find the Mafia and vote them out during the day.',
     'blurb.mafia': 'Each night, agree with your fellow Mafia on someone to kill. Outnumber the town to win.',
     'blurb.cop': 'Each night, check one player and learn whether they are Mafia.',
-    'blurb.doctor': 'Each night, protect one player from being killed — anyone, as often as you like, or nobody. You can protect yourself only once per game.',
+    'blurb.doctor': 'Each night, protect one player from being killed, or nobody. Never the same player two nights in a row, and yourself only once per game.',
     'blurb.hooker': 'Each night, visit one player. Their night action is cancelled — and if you visit any Mafia member, nobody is killed that night.',
 
     'ui.language': 'Language',
@@ -326,7 +326,7 @@ const DICT = {
     'blurb.citizen': 'Вычислите мафию и изгоните её днём на голосовании.',
     'blurb.mafia': 'Каждую ночь договаривайтесь с другими мафиози, кого убить. Вы победите, когда вас станет не меньше, чем мирных.',
     'blurb.cop': 'Каждую ночь проверяйте одного игрока и узнавайте, мафия ли он.',
-    'blurb.doctor': 'Каждую ночь защищайте одного игрока от убийства — любого и сколько угодно раз, или никого. Себя можно лечить только один раз за игру.',
+    'blurb.doctor': 'Каждую ночь защищайте одного игрока от убийства или никого. Нельзя лечить одного и того же игрока две ночи подряд, а себя — только один раз за игру.',
     'blurb.hooker': 'Каждую ночь навещайте одного игрока. Его ночное действие отменяется, а если это мафия — этой ночью никто не умрёт.',
 
     'ui.language': 'Язык',

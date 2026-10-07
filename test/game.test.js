@@ -83,15 +83,20 @@ test('hooker blocks the doctor so the kill goes through', () => {
   assert.strictEqual(by.E.alive, false);
 });
 
-test('doctor can heal the same player night after night', () => {
+test('doctor cannot heal the same player two nights in a row, but can after a gap', () => {
   const { room, by, host } = setup(SIX, SIX_ROLES);
+  const nextNight = () => { room.forceEndNight(host.id); room.skipToVote(host.id); room.forceEndVote(host.id); };
   room.nightAction(by.C.id, by.E.id);
-  room.forceEndNight(host.id);
-  room.skipToVote(host.id);
-  room.forceEndVote(host.id); // no votes -> nobody out
+  nextNight();
   assert.strictEqual(room.phase, PHASES.NIGHT);
-  room.nightAction(by.C.id, by.E.id); // same player again: allowed
-  room.nightAction(by.C.id, by.C.id); // self-heal allowed
+  assert.throws(() => room.nightAction(by.C.id, by.E.id), /err\.invalidTarget/);
+  room.nightAction(by.C.id, by.F.id);
+  nextNight();
+  room.nightAction(by.C.id, by.E.id); // E again after a night in between: allowed
+  nextNight();
+  room.nightAction(by.C.id, 'none'); // healing nobody frees everyone
+  nextNight();
+  room.nightAction(by.C.id, by.C.id); // self-heal allowed once
 });
 
 test('mafia cannot target fellow mafia; split mafia vote means no kill', () => {

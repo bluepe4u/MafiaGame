@@ -38,7 +38,7 @@ const CHAT_MIN_GAP_MS = 400; // per player, against accidental floods
 
 // Everything that makes up a room's state, for saving to disk and restoring after a restart.
 const SAVED_FIELDS = [
-  'code', 'players', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions',
+  'code', 'players', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions', 'lastDoctorTarget',
   'doctorSelfHealUsed', 'speech', 'lastStarterSeat', 'votes', 'voteEndsAt', 'log', 'privateLog', 'history', 'chat',
   'revealedRoles', 'ratings', 'winner', 'lastActivity',
 ];
@@ -111,6 +111,7 @@ class Room {
     this.day = 0;
     this.gameId = null;
     this.nightActions = {}; // playerId -> targetId
+    this.lastDoctorTarget = null; // the Doctor can't protect the same player two nights in a row
     this.doctorSelfHealUsed = false;
     this.speech = null; // { order: [ids], index, endsAt }
     this.lastStarterSeat = null;
@@ -346,7 +347,7 @@ class Room {
       case ROLES.COP: return alive.filter(t => t.id !== p.id).map(t => t.id);
       case ROLES.HOOKER: return alive.filter(t => t.id !== p.id).map(t => t.id);
       case ROLES.DOCTOR: return alive
-        .filter(t => !(t.id === p.id && this.doctorSelfHealUsed))
+        .filter(t => t.id !== this.lastDoctorTarget && !(t.id === p.id && this.doctorSelfHealUsed))
         .map(t => t.id);
       default: return [];
     }
@@ -403,7 +404,9 @@ class Room {
     for (const d of docs) {
       if (!blocked.has(d.id) && this.nightActions[d.id] !== NOBODY) healed = this.nightActions[d.id];
     }
-    // a self-heal is used up even if the Hooker blocked it
+    // restrictions track who the Doctor chose, even if the Hooker blocked it; choosing nobody frees everyone
+    const docChoice = docs.length ? this.nightActions[docs[0].id] : NOBODY;
+    this.lastDoctorTarget = docChoice === NOBODY ? null : docChoice;
     if (docs.some(d => this.nightActions[d.id] === d.id)) this.doctorSelfHealUsed = true;
 
     // 4. Cop checks
