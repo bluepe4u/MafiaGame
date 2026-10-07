@@ -93,7 +93,7 @@ class Room {
     this.players = []; // { id, token, name, seat, connected, alive, role }
     this.hostId = null;
     // voteSeconds: 0 means no time limit
-    this.settings = { speechSeconds: 60, voteSeconds: 180, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null };
+    this.settings = { speechSeconds: 60, voteSeconds: 360, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null };
     this.resetGameState();
     this.lastActivity = Date.now();
   }

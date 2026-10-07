@@ -360,7 +360,7 @@ test('vote timer can be turned off, and a stale vote timer does nothing', () => 
   const timers = [];
   const room = new Room({ code: 'T', setTimer: (fn, ms) => timers.push({ fn, ms }), clearTimer: () => {}, rng: () => 0 });
   const ps = SIX.map(n => room.join(n));
-  assert.strictEqual(room.settings.voteSeconds, 180);
+  assert.strictEqual(room.settings.voteSeconds, 360);
   assert.throws(() => room.updateSettings(ps[0].id, { voteSeconds: 5 }), /err\.voteRange/);
   room.start(ps[0].id);
   room.forceEndNight(ps[0].id);
@@ -412,6 +412,6 @@ test('rooms saved by an older version restore with default settings and an empty
   delete old.chat;
   delete old.voteEndsAt;
   const back = Room.restore(old, { setTimer: () => 0, clearTimer: () => {} });
-  assert.strictEqual(back.settings.voteSeconds, 180);
+  assert.strictEqual(back.settings.voteSeconds, 360);
   assert.deepStrictEqual(back.chat, { town: [], mafia: [] });
 });
