@@ -471,6 +471,47 @@ body[data-phase="ended"] .phase-icon { color: var(--good); }
 .recap-result.bad { color: #ff9a9d; }
 .recap-result.good { color: #8ef0bd; }
 
+/* ---------- chat ---------- */
+.lobby-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.lobby-chat .chat-slot { height: 300px; }
+.chat-slot { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tab-panel[data-panel="chat"] { overflow: hidden; }
+.chat { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.chat-channels { display: flex; gap: 6px; }
+.chat-channels button { flex: 1; padding: 6px 10px; font-size: .8rem; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: transparent; color: var(--muted); }
+.chat-channels button.active { background: var(--surface-3); color: var(--text); border-color: var(--border-strong); }
+.chat-channels button[data-channel="mafia"].active { background: var(--accent-soft); color: #ffb1b3; border-color: rgba(229, 72, 77, .45); }
+.badge { min-width: 17px; height: 17px; padding: 0 5px; border-radius: 99px; background: var(--accent); color: #fff; font-size: .66rem; font-weight: 700; line-height: 17px; text-align: center; font-variant-numeric: tabular-nums; }
+.tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.chat-list { flex: 1; min-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding-right: 4px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .15) transparent; }
+.chat.mafia .chat-list { background: linear-gradient(180deg, rgba(229, 72, 77, .06), transparent 40%); border-radius: 12px; }
+.chat-empty { margin: auto; text-align: center; color: var(--faint); font-size: .85rem; max-width: 240px; }
+.chat-sep { display: flex; align-items: center; gap: 10px; margin: 10px 0 6px; color: var(--faint); font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; }
+.chat-sep::before, .chat-sep::after { content: ''; flex: 1; border-top: 1px solid var(--border); }
+.msg { display: flex; align-items: flex-end; gap: 8px; max-width: 92%; margin-top: 6px; }
+.msg.grouped { margin-top: 0; }
+.msg .avatar, .msg-gap { width: 26px; height: 26px; font-size: .64rem; flex: none; }
+.msg-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.msg-name { font-size: .72rem; color: var(--muted); font-weight: 600; padding-left: 4px; }
+.bubble {
+  background: var(--surface-3); border: 1px solid var(--border); padding: 6px 10px 6px 11px; border-radius: 14px 14px 14px 5px;
+  font-size: .88rem; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.bubble time { float: right; margin: 4px 0 0 10px; font-size: .64rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+.msg.mine { align-self: flex-end; flex-direction: row-reverse; }
+.msg.mine .msg-gap { display: none; }
+.msg.mine .bubble { background: linear-gradient(180deg, rgba(139, 124, 255, .3), rgba(139, 124, 255, .2)); border-color: rgba(139, 124, 255, .35); border-radius: 14px 14px 5px 14px; }
+.msg.mine .bubble time { color: rgba(255, 255, 255, .5); }
+.chat.mafia .msg.mine .bubble { background: linear-gradient(180deg, rgba(229, 72, 77, .32), rgba(229, 72, 77, .2)); border-color: rgba(229, 72, 77, .4); }
+.chat-form { display: flex; gap: 6px; }
+.chat-form input { padding: 9px 12px; font-size: .9rem; }
+.chat-form button { flex: none; width: 40px; padding: 0; display: grid; place-items: center; }
+.chat-form button svg { width: 17px; height: 17px; fill: #fff; }
+.chat-closed { font-size: .82rem; color: var(--muted); text-align: center; padding: 10px; border-radius: 12px; border: 1px dashed var(--border-strong); }
+.timer-wrap.small { width: 84px; height: 84px; }
+.timer-wrap.small .timer-ring { width: 84px; height: 84px; }
+.timer-wrap.small .timer { font-size: 1.35rem; }
+
 /* narrow screens: stacked */
 @media (max-width: 1000px) {
   main { padding: 16px; }
@@ -487,6 +528,7 @@ body[data-phase="ended"] .phase-icon { color: var(--good); }
   }
   .seat { position: static; transform: none; width: auto; }
   .offline-banner { top: auto; bottom: 84px; }
+  .tab-panel[data-panel="chat"] { height: 420px; flex: none; }
 }
 @media (max-width: 560px) {
   .list, .grid2 { grid-template-columns: 1fr; }

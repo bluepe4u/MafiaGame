@@ -30,11 +30,15 @@ const PHASES = {
 const MIN_PLAYERS = 4;
 const MAX_PLAYERS = 12;
 const EXTEND_MS = 30 * 1000;
+const CHAT_MAX_LEN = 300;
+const CHAT_KEEP = 150; // messages kept per channel
+const CHAT_MIN_GAP_MS = 400; // per player, against accidental floods
 
 // Everything that makes up a room's state, for saving to disk and restoring after a restart.
 const SAVED_FIELDS = [
   'code', 'players', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions', 'lastDoctorTarget',
-  'doctorSelfHealUsed', 'speech', 'lastStarterSeat', 'votes', 'log', 'privateLog', 'history', 'winner', 'lastActivity',
+  'doctorSelfHealUsed', 'speech', 'lastStarterSeat', 'votes', 'voteEndsAt', 'log', 'privateLog', 'history', 'chat',
+  'winner', 'lastActivity',
 ];
 
 const id = (bytes = 6) => crypto.randomBytes(bytes).toString('hex');
@@ -88,7 +92,8 @@ class Room {
     this.clearTimer = clearTimer;
     this.players = []; // { id, token, name, seat, connected, alive, role }
     this.hostId = null;
-    this.settings = { speechSeconds: 60, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null };
+    // voteSeconds: 0 means no time limit
+    this.settings = { speechSeconds: 60, voteSeconds: 180, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null };
     this.resetGameState();
     this.lastActivity = Date.now();
   }
@@ -103,6 +108,10 @@ class Room {
     this.speech = null; // { order: [ids], index, endsAt }
     this.lastStarterSeat = null;
     this.votes = {}; // voterId -> targetId | 'skip'
+    this.voteEndsAt = null;
+    // town: everyone (lobby, day, after the game); mafia: the Mafia, at night
+    this.chat = { town: [], mafia: [] };
+    this.lastChatAt = {};
     this.log = []; // public events { day, phase, text }
     this.privateLog = {}; // playerId -> [{ day, text }]
     // what happened each night and vote: [{ type: 'night', day, actions, killed, saved } | { type: 'vote', day, votes, out }]
@@ -125,12 +134,18 @@ class Room {
   // Rebuild a room saved with toJSON(). Everyone starts offline until their client reconnects.
   static restore(data, opts = {}) {
     const room = new Room({ ...opts, code: data.code });
+    const defaults = room.settings;
     for (const k of SAVED_FIELDS) if (data[k] !== undefined) room[k] = data[k];
+    room.settings = { ...defaults, ...room.settings }; // settings added since the room was saved
     for (const p of room.players) p.connected = false;
+    // the server was down for a while: give the current speaker / the vote at least a few seconds back
+    const atLeast = Date.now() + 15 * 1000;
     if (room.phase === PHASES.SPEECH && room.speech?.endsAt) {
-      // the server was down for a while: give the current speaker at least a few seconds back
-      room.speech.endsAt = Math.max(room.speech.endsAt, Date.now() + 15 * 1000);
+      room.speech.endsAt = Math.max(room.speech.endsAt, atLeast);
       room.scheduleSpeechTimer();
+    } else if (room.phase === PHASES.VOTE && room.voteEndsAt) {
+      room.voteEndsAt = Math.max(room.voteEndsAt, atLeast);
+      room.scheduleVoteTimer();
     }
     return room;
   }
@@ -230,6 +245,11 @@ class Room {
       const v = Number(s.speechSeconds);
       this.assert(Number.isInteger(v) && v >= 10 && v <= 600, 'err.speechRange', { min: 10, max: 600 });
       this.settings.speechSeconds = v;
+    }
+    if (s.voteSeconds !== undefined) {
+      const v = Number(s.voteSeconds);
+      this.assert(Number.isInteger(v) && (v === 0 || (v >= 30 && v <= 900)), 'err.voteRange', { min: 30, max: 900 });
+      this.settings.voteSeconds = v;
     }
     if (s.revealRoleOnDeath !== undefined) this.settings.revealRoleOnDeath = !!s.revealRoleOnDeath;
     if (s.firstNightKill !== undefined) this.settings.firstNightKill = !!s.firstNightKill;
@@ -438,12 +458,30 @@ class Room {
     this.touch();
   }
 
-  scheduleSpeechTimer() {
+  // One phase timer at a time; a timer that was replaced or outlived its phase does nothing.
+  scheduleTimer(phase, endsAt, fn) {
     if (this.timer) this.clearTimer(this.timer);
     const seq = this.timerSeq = (this.timerSeq || 0) + 1;
     this.timer = this.setTimer(() => {
-      if (this.phase === PHASES.SPEECH && this.timerSeq === seq) this.nextSpeaker();
-    }, Math.max(0, this.speech.endsAt - Date.now()));
+      if (this.phase === phase && this.timerSeq === seq) fn();
+    }, Math.max(0, endsAt - Date.now()));
+  }
+
+  cancelTimer() {
+    if (this.timer) this.clearTimer(this.timer);
+    this.timer = null;
+    this.timerSeq = (this.timerSeq || 0) + 1;
+  }
+
+  scheduleSpeechTimer() {
+    this.scheduleTimer(PHASES.SPEECH, this.speech.endsAt, () => this.nextSpeaker());
+  }
+
+  scheduleVoteTimer() {
+    this.scheduleTimer(PHASES.VOTE, this.voteEndsAt, () => {
+      this.addPublic('log.voteTimeUp');
+      this.resolveVote();
+    });
   }
 
   // +30 s: the speaker can ask once per speech, the host as often as needed
@@ -480,6 +518,9 @@ class Room {
     this.phase = PHASES.VOTE;
     this.votes = {};
     if (this.speech) this.speech.endsAt = null;
+    this.cancelTimer();
+    this.voteEndsAt = this.settings.voteSeconds ? Date.now() + this.settings.voteSeconds * 1000 : null;
+    if (this.voteEndsAt) this.scheduleVoteTimer();
     this.addPublic('log.votingOpen', { n: this.day });
     this.touch();
   }
@@ -504,6 +545,8 @@ class Room {
   }
 
   resolveVote() {
+    this.cancelTimer();
+    this.voteEndsAt = null;
     const tally = {};
     let skips = 0;
     for (const t of Object.values(this.votes)) {
@@ -524,6 +567,30 @@ class Room {
     }
     if (this.checkWin()) return;
     this.beginNight();
+  }
+
+  // ---------- chat ----------
+  canChat(p, channel) {
+    if (!p) return false;
+    if (channel === 'mafia') return p.role === ROLES.MAFIA && p.alive && this.phase === PHASES.NIGHT;
+    if (channel !== 'town') return false;
+    if (this.phase === PHASES.LOBBY || this.phase === PHASES.ENDED) return true;
+    return this.phase !== PHASES.NIGHT && p.alive;
+  }
+
+  sendChat(pid, channel, text) {
+    const p = this.player(pid);
+    this.assert(this.canChat(p, channel), 'err.chatClosed');
+    text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX_LEN);
+    this.assert(text, 'err.chatEmpty');
+    const now = Date.now();
+    this.assert(now - (this.lastChatAt[pid] || 0) >= CHAT_MIN_GAP_MS, 'err.chatTooFast');
+    this.lastChatAt[pid] = now;
+    const list = this.chat[channel];
+    // names are stored too: lobby players can leave, and their messages should still read right
+    list.push({ id: id(4), from: pid, name: p.name, text, at: now, day: this.day, phase: this.phase });
+    if (list.length > CHAT_KEEP) list.splice(0, list.length - CHAT_KEEP);
+    this.touch();
   }
 
   // ---------- win ----------
@@ -577,6 +644,12 @@ class Room {
       privateLog: this.privateLog[pid] || [],
       winner: this.winner,
       history: ended ? this.history : this.history.filter(h => h.type === 'vote'),
+      // the Mafia's chat is theirs alone until the game ends
+      chat: {
+        town: this.chat.town,
+        mafia: iAmMafia || ended ? this.chat.mafia : null,
+        canPost: { town: this.canChat(me, 'town'), mafia: this.canChat(me, 'mafia') },
+      },
     };
 
     if (this.phase === PHASES.NIGHT && me) {
@@ -596,7 +669,10 @@ class Room {
     if (this.speech && this.phase === PHASES.SPEECH) {
       view.speech = { ...this.speech, current: this.speech.order[this.speech.index] };
     }
-    if (this.phase === PHASES.VOTE) view.votes = { ...this.votes };
+    if (this.phase === PHASES.VOTE) {
+      view.votes = { ...this.votes };
+      view.voteEndsAt = this.voteEndsAt;
+    }
     // who has voted is public; who acted at night is not (it would reveal who has a role)
     return view;
   }

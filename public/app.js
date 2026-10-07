@@ -171,6 +171,8 @@ function leftRoom() {
   saveSession(null);
   state = null;
   urlRoom = '';
+  chatSeen.town = chatSeen.mafia = null;
+  chatRendered = '';
   history.replaceState(null, '', '/');
   render();
 }
@@ -310,6 +312,7 @@ for (const input of $$('[data-role]')) {
   });
 }
 $('#speechSeconds').addEventListener('change', e => send('settings', { speechSeconds: parseInt(e.target.value, 10) }));
+$('#voteSeconds').addEventListener('change', e => send('settings', { voteSeconds: parseInt(e.target.value, 10) || 0 }));
 $('#revealRole').addEventListener('change', e => send('settings', { revealRoleOnDeath: e.target.checked }));
 $('#firstNightKill').addEventListener('change', e => send('settings', { firstNightKill: e.target.checked }));
 
@@ -344,6 +347,7 @@ function renderLobby() {
   $('#setupSummary').innerHTML = [
     t('sum.roles', { ...rc, citizen: citizens, auto: !s.roleCounts }),
     t('sum.speech', { s: s.speechSeconds }),
+    s.voteSeconds ? t('sum.vote', { s: s.voteSeconds }) : t('sum.noVoteLimit'),
     t(s.firstNightKill ? 'sum.firstNightKill' : 'sum.noFirstNightKill'),
     t(s.revealRoleOnDeath ? 'sum.reveal' : 'sum.noReveal'),
   ].map(t => `<li>${esc(t)}</li>`).join('');
@@ -357,6 +361,7 @@ function renderLobby() {
   if (isHost()) {
     for (const i of $$('[data-role]')) setIfNotFocused(i, 'value', rc[i.dataset.role]);
     setIfNotFocused($('#speechSeconds'), 'value', s.speechSeconds);
+    setIfNotFocused($('#voteSeconds'), 'value', s.voteSeconds);
     $('#revealRole').checked = s.revealRoleOnDeath;
     $('#firstNightKill').checked = s.firstNightKill;
   }
@@ -485,7 +490,9 @@ function renderPhasePanel() {
     const myVote = state.votes[me.id];
     const missing = alive.filter(p => !state.votes[p.id]).map(p => p.name);
     panel.innerHTML = `
-      <div class="phase-icon">${ICONS.vote}</div>
+      ${state.voteEndsAt
+        ? '<div class="timer-wrap small" id="timerWrap"><div class="timer-ring"></div><div class="timer" id="timer"></div></div>'
+        : `<div class="phase-icon">${ICONS.vote}</div>`}
       <div class="big">${esc(t('vote.title'))}</div>
       ${progress(voted, alive.length)}
       <div class="muted small-text">${esc(t('vote.status', { voted, total: alive.length }))}</div>
@@ -493,6 +500,7 @@ function renderPhasePanel() {
       ${me.alive ? `<div class="choice">${esc(t('vote.yours', { choice: myVote ? (myVote === 'skip' ? t('vote.skip') : nameOf(myVote)) : '—' }))}</div>
         <button id="skipVote" ${myVote === 'skip' ? 'disabled' : ''}>${esc(t('vote.skipBtn'))}</button>` : `<div class="muted">${esc(t('vote.dead'))}</div>`}`;
     if (me.alive) $('#skipVote').onclick = () => send('vote', { targetId: 'skip' });
+    tickTimer();
   } else if (state.phase === 'ended') {
     panel.innerHTML = `
       <div class="phase-icon">${ICONS.ended}</div>
@@ -669,7 +677,7 @@ $('#revealDone').onclick = () => {
 };
 
 // ---------- sidebar tabs: log, votes, notes ----------
-let tab = store.get(TAB_KEY) || 'log';
+let tab = store.get(TAB_KEY) || 'chat';
 function renderTabs() {
   for (const b of $$('[data-tab]')) {
     b.classList.toggle('active', b.dataset.tab === tab);
@@ -677,7 +685,7 @@ function renderTabs() {
   }
   for (const p of $$('[data-panel]')) p.classList.toggle('hidden', p.dataset.panel !== tab);
 }
-for (const b of $$('[data-tab]')) b.onclick = () => { tab = b.dataset.tab; store.set(TAB_KEY, tab); renderTabs(); };
+for (const b of $$('[data-tab]')) b.onclick = () => { tab = b.dataset.tab; store.set(TAB_KEY, tab); renderTabs(); renderChat(); };
 
 // votes grouped by target, biggest first
 function groupVotes(votes) {
@@ -706,6 +714,120 @@ function renderVotesPanel() {
       ${voteRows(e)}
     </section>`).join('');
 }
+
+// ---------- chat: everyone by day, the Mafia at night ----------
+$('#lobbyChatSlot').append($('#chatTemplate').content.cloneNode(true));
+let chatChannel = 'town';
+let chatPhaseKey = null; // switch channel automatically when night falls / day breaks
+const chatSeen = { town: null, mafia: null }; // messages read, per channel (null: not known yet)
+let chatRendered = '';
+
+const chatMessages = ch => (state && state.chat && state.chat[ch]) || [];
+const chatVisible = () => !!state && (state.phase === 'lobby' || tab === 'chat');
+
+function chatSection(m) {
+  if (m.phase === 'lobby') return t('phase.lobby');
+  if (m.phase === 'night') return t('phase.night', { n: m.day });
+  if (m.phase === 'ended') return t('phase.ended');
+  return t('chat.day', { n: m.day });
+}
+
+function chatClosedReason() {
+  const me = state.me;
+  if (chatChannel === 'mafia') return t('chat.closedMafiaDay');
+  if (state.phase === 'night') return t('chat.closedNight');
+  if (!me.alive) return t('chat.closedDead');
+  return '';
+}
+
+function placeChat() {
+  const slot = state.phase === 'lobby' ? $('#lobbyChatSlot') : $('#gameChatSlot');
+  const chat = $('#chat');
+  if (chat.parentElement !== slot) slot.append(chat);
+}
+
+function renderChat() {
+  if (!state || !state.me || !state.chat) return;
+  const me = state.me;
+  const hasMafia = state.chat.mafia !== null;
+  // night: Mafia players land in their own chat; morning: everyone back in the town chat
+  const phaseKey = `${state.phase}:${state.day}`;
+  if (phaseKey !== chatPhaseKey) {
+    chatPhaseKey = phaseKey;
+    chatChannel = state.phase === 'night' && state.chat.canPost.mafia ? 'mafia' : 'town';
+  }
+  if (!hasMafia) chatChannel = 'town';
+
+  $('#chatChannels').classList.toggle('hidden', !hasMafia);
+  for (const b of $$('[data-channel]')) b.classList.toggle('active', b.dataset.channel === chatChannel);
+
+  const list = chatMessages(chatChannel);
+  for (const ch of ['town', 'mafia']) {
+    const n = chatMessages(ch).length;
+    // first look after (re)loading: what's there already counts as read; a new game starts a fresh chat
+    if (chatSeen[ch] === null || chatSeen[ch] > n) chatSeen[ch] = n;
+  }
+  if (chatVisible()) chatSeen[chatChannel] = list.length;
+  // unread counts on the channel buttons and the Chat tab
+  let unreadTotal = 0;
+  for (const b of $$('[data-channel]')) {
+    const ch = b.dataset.channel;
+    const n = Math.max(0, chatMessages(ch).length - chatSeen[ch]);
+    unreadTotal += n;
+    const badge = b.querySelector('.badge');
+    badge.textContent = n > 9 ? '9+' : n;
+    badge.classList.toggle('hidden', !n || ch === chatChannel);
+  }
+  const tabBadge = $('#chatBadge');
+  tabBadge.textContent = unreadTotal > 9 ? '9+' : unreadTotal;
+  tabBadge.classList.toggle('hidden', !unreadTotal || chatVisible());
+
+  const canPost = state.chat.canPost[chatChannel];
+  $('#chatForm').classList.toggle('hidden', !canPost);
+  $('#chatClosed').classList.toggle('hidden', canPost);
+  $('#chatClosed').textContent = canPost ? '' : chatClosedReason();
+  $('#chat').classList.toggle('mafia', chatChannel === 'mafia');
+
+  // re-render the list only when something changed, so scrolling isn't disturbed
+  const key = `${chatChannel}:${list.length}:${list.at(-1)?.id}:${lang}`;
+  if (key === chatRendered) return;
+  chatRendered = key;
+  const box = $('#chatList');
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  let html = '';
+  let section = null;
+  let prev = null;
+  for (const m of list) {
+    const sec = chatSection(m);
+    if (sec !== section) { html += `<div class="chat-sep"><span>${esc(sec)}</span></div>`; section = sec; prev = null; }
+    const mine = m.from === me.id;
+    const grouped = prev && prev.from === m.from && m.at - prev.at < 5 * 60 * 1000;
+    const time = new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    html += `<div class="msg ${mine ? 'mine' : ''} ${grouped ? 'grouped' : ''}">
+      ${mine || grouped ? '<span class="msg-gap"></span>' : avatar(m.name)}
+      <div class="msg-body">
+        ${mine || grouped ? '' : `<div class="msg-name">${esc(m.name)}</div>`}
+        <div class="bubble">${esc(m.text)}<time>${esc(time)}</time></div>
+      </div>
+    </div>`;
+    prev = m;
+  }
+  box.innerHTML = html || `<p class="chat-empty">${esc(t(chatChannel === 'mafia' ? 'chat.emptyMafia' : 'chat.empty'))}</p>`;
+  if (nearBottom || list.at(-1)?.from === me.id) box.scrollTop = box.scrollHeight;
+}
+
+for (const b of $$('[data-channel]')) {
+  b.onclick = () => { chatChannel = b.dataset.channel; chatRendered = ''; renderChat(); $('#chatList').scrollTop = 1e9; };
+}
+$('#chatForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = $('#chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const res = await send('chat', { channel: chatChannel, text });
+  if (res && res.ok) input.value = '';
+  input.focus();
+});
 
 // ---------- end-of-game recap ----------
 function openRecap() {
@@ -764,15 +886,20 @@ function renderGame() {
   maybeReveal();
 }
 
+// counts down the current speech, or the vote when it has a time limit
 function tickTimer() {
   const el = $('#timer');
-  if (!el || !state || !state.speech || !state.speech.endsAt) return;
-  const left = Math.max(0, Math.ceil((state.speech.endsAt - (Date.now() + clockOffset)) / 1000));
+  if (!el || !state) return;
+  const speech = state.phase === 'speech' && state.speech;
+  const endsAt = speech ? speech.endsAt : state.phase === 'vote' && state.voteEndsAt;
+  if (!endsAt) return;
+  const total = speech ? state.settings.speechSeconds : state.settings.voteSeconds;
+  const left = Math.max(0, Math.ceil((endsAt - (Date.now() + clockOffset)) / 1000));
   el.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
   el.classList.toggle('low', left <= 10);
   const wrap = $('#timerWrap');
   wrap.classList.toggle('low', left <= 10);
-  wrap.style.setProperty('--p', Math.min(1, left / state.settings.speechSeconds));
+  wrap.style.setProperty('--p', Math.min(1, left / total));
 }
 setInterval(tickTimer, 250);
 
@@ -794,9 +921,11 @@ function render() {
   if (!inRoom || state.phase === 'lobby' || state.phase === 'ended') $('#reveal').classList.add('hidden');
   if (!inRoom || state.phase !== 'ended') $('#recap').classList.add('hidden');
   if (!inRoom) { closeMarkMenu(); return show('home'); }
-  if (state.phase === 'lobby') { show('lobby'); renderLobby(); return; }
+  placeChat();
+  if (state.phase === 'lobby') { show('lobby'); renderLobby(); renderChat(); return; }
   show('game');
   renderGame();
+  renderChat();
 }
 
 // ---------- language ----------

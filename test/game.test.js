@@ -338,3 +338,80 @@ test('a saved room restores mid-game with everyone offline', () => {
   assert.strictEqual(mid.phase, PHASES.SPEECH);
   assert.ok(timers.at(-1) >= 14000, 'speech timer resumes with time left');
 });
+
+test('vote timer closes the vote when it runs out', () => {
+  const timers = [];
+  const room = new Room({ code: 'T', setTimer: (fn, ms) => timers.push({ fn, ms }), clearTimer: () => {}, rng: () => 0 });
+  const ps = SIX.map(n => room.join(n));
+  room.updateSettings(ps[0].id, { voteSeconds: 60 });
+  room.start(ps[0].id);
+  room.forceEndNight(ps[0].id);
+  room.skipToVote(ps[0].id);
+  assert.strictEqual(room.phase, PHASES.VOTE);
+  assert.strictEqual(timers.at(-1).ms > 59000 && timers.at(-1).ms <= 60000, true);
+  room.vote(ps[1].id, ps[2].id);
+  timers.at(-1).fn();
+  assert.notStrictEqual(room.phase, PHASES.VOTE);
+  assert.ok(room.log.some(e => e.key === 'log.voteTimeUp'));
+  assert.strictEqual(room.history.at(-1).type, 'vote');
+});
+
+test('vote timer can be turned off, and a stale vote timer does nothing', () => {
+  const timers = [];
+  const room = new Room({ code: 'T', setTimer: (fn, ms) => timers.push({ fn, ms }), clearTimer: () => {}, rng: () => 0 });
+  const ps = SIX.map(n => room.join(n));
+  assert.strictEqual(room.settings.voteSeconds, 180);
+  assert.throws(() => room.updateSettings(ps[0].id, { voteSeconds: 5 }), /err\.voteRange/);
+  room.start(ps[0].id);
+  room.forceEndNight(ps[0].id);
+  room.skipToVote(ps[0].id);
+  const voteTimer = timers.at(-1);
+  room.forceEndVote(ps[0].id); // vote closed early: the old timer must not close a later vote
+  room.forceEndNight(ps[0].id);
+  if (room.phase === PHASES.SPEECH) room.skipToVote(ps[0].id);
+  const before = room.history.length;
+  voteTimer.fn();
+  assert.strictEqual(room.history.length, before);
+
+  const r2 = new Room({ code: 'U', setTimer: (fn, ms) => timers.push({ fn, ms }), clearTimer: () => {}, rng: () => 0 });
+  const qs = SIX.map(n => r2.join(n));
+  r2.updateSettings(qs[0].id, { voteSeconds: 0 });
+  r2.start(qs[0].id);
+  r2.forceEndNight(qs[0].id);
+  r2.skipToVote(qs[0].id);
+  assert.strictEqual(r2.voteEndsAt, null);
+});
+
+test('chat: town by day, mafia-only at night, dead can read but not write', () => {
+  const { room, by } = setup(SIX, SIX_ROLES);
+  // night: town closed, mafia open for mafia only
+  assert.throws(() => room.sendChat(by.E.id, 'town', 'hi'), /err\.chatClosed/);
+  assert.throws(() => room.sendChat(by.B.id, 'mafia', 'hi'), /err\.chatClosed/);
+  room.sendChat(by.A.id, 'mafia', '  kill   E  ');
+  assert.strictEqual(room.chat.mafia[0].text, 'kill E');
+  assert.strictEqual(room.viewFor(by.B.id).chat.mafia, null, 'town cannot read mafia chat');
+  assert.strictEqual(room.viewFor(by.A.id).chat.mafia.length, 1);
+  // day
+  room.nightAction(by.A.id, by.E.id);
+  room.nightAction(by.B.id, by.A.id);
+  room.nightAction(by.C.id, by.F.id);
+  room.nightAction(by.D.id, by.F.id);
+  assert.throws(() => room.sendChat(by.A.id, 'mafia', 'x'), /err\.chatClosed/);
+  room.sendChat(by.B.id, 'town', 'I think A is mafia');
+  assert.throws(() => room.sendChat(by.B.id, 'town', 'again'), /err\.chatTooFast/);
+  assert.throws(() => room.sendChat(by.E.id, 'town', 'I am dead'), /err\.chatClosed/);
+  assert.throws(() => room.sendChat(by.C.id, 'town', '   '), /err\.chatEmpty/);
+  assert.strictEqual(room.viewFor(by.E.id).chat.town.length, 1);
+  assert.deepStrictEqual(room.viewFor(by.E.id).chat.canPost, { town: false, mafia: false });
+});
+
+test('rooms saved by an older version restore with default settings and an empty chat', () => {
+  const { room } = setup(SIX, SIX_ROLES);
+  const old = JSON.parse(JSON.stringify(room));
+  delete old.settings.voteSeconds;
+  delete old.chat;
+  delete old.voteEndsAt;
+  const back = Room.restore(old, { setTimer: () => 0, clearTimer: () => {} });
+  assert.strictEqual(back.settings.voteSeconds, 180);
+  assert.deepStrictEqual(back.chat, { town: [], mafia: [] });
+});

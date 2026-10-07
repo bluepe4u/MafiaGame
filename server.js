@@ -176,6 +176,7 @@ io.on('connection', socket => {
   on('forceEndNight', () => { const { room, pid } = ctx(); room.forceEndNight(pid); });
   on('endSpeech', () => { const { room, pid } = ctx(); room.endSpeech(pid); });
   on('extendSpeech', () => { const { room, pid } = ctx(); room.extendSpeech(pid); });
+  on('chat', ({ channel, text }) => { const { room, pid } = ctx(); room.sendChat(pid, channel, text); });
   on('skipToVote', () => { const { room, pid } = ctx(); room.skipToVote(pid); });
   on('vote', ({ targetId }) => { const { room, pid } = ctx(); room.vote(pid, targetId); });
   on('forceEndVote', () => { const { room, pid } = ctx(); room.forceEndVote(pid); });

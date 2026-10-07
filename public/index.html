@@ -50,6 +50,7 @@
 
     <section id="lobby" class="screen hidden">
       <div class="lobby-grid">
+        <div class="lobby-col">
         <div class="card">
           <div class="card-head">
             <h2 data-i18n="ui.players"></h2>
@@ -68,6 +69,11 @@
             </div>
           </div>
         </div>
+        <div class="card lobby-chat">
+          <div class="card-head"><h2 data-i18n="tab.chat"></h2></div>
+          <div id="lobbyChatSlot" class="chat-slot"></div>
+        </div>
+        </div>
         <div class="card">
           <div class="card-head"><h2 data-i18n="ui.gameSetup"></h2></div>
           <div id="hostSettings" class="hidden">
@@ -79,7 +85,10 @@
             </div>
             <button id="autoRoles" class="ghost small" data-i18n="ui.resetAuto"></button>
             <div class="grid2 settings-rest">
-              <label class="field"><span data-i18n="ui.speechTime"></span> <input type="number" min="10" max="600" id="speechSeconds"></label>
+              <div class="checks">
+                <label class="field"><span data-i18n="ui.speechTime"></span> <input type="number" min="10" max="600" id="speechSeconds"></label>
+                <label class="field"><span data-i18n="ui.voteTime"></span> <input type="number" min="0" max="900" step="10" id="voteSeconds"></label>
+              </div>
               <div class="checks">
                 <label class="check"><input type="checkbox" class="switch" id="firstNightKill"> <span data-i18n="ui.firstNightKill"></span></label>
                 <label class="check"><input type="checkbox" class="switch" id="revealRole"> <span data-i18n="ui.revealRole"></span></label>
@@ -110,10 +119,12 @@
           <div id="privateBox" class="card hidden"><h3 data-i18n="ui.privateNotes"></h3><ul id="privateLog" class="log"></ul></div>
           <div class="card grow tabs-card">
             <div class="tabs" role="tablist">
+              <button role="tab" data-tab="chat"><span data-i18n="tab.chat"></span><span id="chatBadge" class="badge hidden"></span></button>
               <button role="tab" data-tab="log" data-i18n="tab.log"></button>
               <button role="tab" data-tab="votes" data-i18n="tab.votes"></button>
               <button role="tab" data-tab="notes" data-i18n="tab.notes"></button>
             </div>
+            <div class="tab-panel" data-panel="chat"><div id="gameChatSlot" class="chat-slot"></div></div>
             <div class="tab-panel" data-panel="log"><ul id="log" class="log"></ul></div>
             <div class="tab-panel" data-panel="votes"><div id="votesPanel" class="votes-panel"></div></div>
             <div class="tab-panel" data-panel="notes">
@@ -175,6 +186,21 @@
     </div>
     <input id="markNote" maxlength="40" data-i18n-placeholder="mark.note">
   </div>
+
+  <template id="chatTemplate">
+    <div id="chat" class="chat">
+      <div id="chatChannels" class="chat-channels hidden">
+        <button data-channel="town"><span data-i18n="chat.town"></span><span class="badge hidden"></span></button>
+        <button data-channel="mafia"><span data-i18n="chat.mafia"></span><span class="badge hidden"></span></button>
+      </div>
+      <div id="chatList" class="chat-list" aria-live="polite"></div>
+      <p id="chatClosed" class="chat-closed hidden"></p>
+      <form id="chatForm" class="chat-form" autocomplete="off">
+        <input id="chatInput" maxlength="300" data-i18n-placeholder="chat.placeholder">
+        <button id="chatSend" class="primary" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-2.5-6.5z"/></svg></button>
+      </form>
+    </div>
+  </template>
 
   <div id="toast" class="toast hidden"></div>
   <script src="/socket.io/socket.io.js"></script>
