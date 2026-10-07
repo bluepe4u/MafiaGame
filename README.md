@@ -44,5 +44,6 @@ Default counts by player count (host can override in the lobby):
 - `src/game.js` — game rules and state (no I/O), unit-tested in `test/`
 - `server.js` — Express + Socket.IO; rooms are kept in memory
 - `public/` — static client (vanilla JS, no build step)
+- `public/i18n.js` — English and Russian translations. The server never sends display text: log entries and errors are `{ key, params }`, rendered in each player's chosen language (auto-detected from the browser, switchable in the top bar). To add a language, add a dictionary to `DICT` and an entry to `LANGS`.
 
 Players reconnect automatically after a refresh (session token in `localStorage`).

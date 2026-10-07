@@ -1,0 +1,397 @@
+'use strict';
+
+// Translations. Values are strings with {param} placeholders, or functions of params.
+// Server log entries and errors arrive as { key, params } and are rendered with t().
+
+const LANGS = { en: 'English', ru: 'Русский' };
+
+// Russian plural form: 1 голос, 2 голоса, 5 голосов
+function ruPlural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+const DICT = {
+  en: {
+    'role.citizen': 'Citizen',
+    'role.mafia': 'Mafia',
+    'role.cop': 'Cop',
+    'role.doctor': 'Doctor',
+    'role.hooker': 'Hooker',
+    'blurb.citizen': 'Find the Mafia and vote them out during the day.',
+    'blurb.mafia': 'Each night, agree with your fellow Mafia on someone to kill. Outnumber the town to win.',
+    'blurb.cop': 'Each night, check one player and learn whether they are Mafia.',
+    'blurb.doctor': 'Each night, protect one player from being killed. You can protect yourself only once per game, and never the same player two nights in a row.',
+    'blurb.hooker': 'Each night, visit one player. Their night action is cancelled.',
+
+    'ui.language': 'Language',
+    'ui.tagline': '4–12 players. Everyone joins from their own device.',
+    'ui.yourName': 'Your name',
+    'ui.createRoom': 'Create a new room',
+    'ui.orJoin': 'or join an existing one',
+    'ui.roomCode': 'Room code',
+    'ui.join': 'Join',
+    'ui.room': 'Room',
+    'ui.leaveRoom': 'Leave room',
+    'ui.playingAs': 'Playing as {name}',
+    'ui.playingAsHost': 'Playing as {name} (host)',
+    'ui.players': 'Players',
+    'ui.lobbyCount': '{count}/{max} · minimum {min}',
+    'ui.shareCode': 'Share the room code {code} so others can join.',
+    'ui.gameSetup': 'Game setup',
+    'ui.resetAuto': 'Reset to auto roles for player count',
+    'ui.speechTime': 'Speech time (seconds)',
+    'ui.firstNightKill': 'Mafia kill on the first night',
+    'ui.revealRole': 'Reveal role on death',
+    'ui.startGame': 'Start game…',
+    'ui.waitHost': 'Waiting for the host to start the game…',
+    'ui.yourRole': 'Your role',
+    'ui.show': 'Show',
+    'ui.hide': 'Hide',
+    'ui.roleHidden': 'Hidden. Click “Show” when nobody is looking at your screen.',
+    'ui.fellowMafia': 'Fellow Mafia: {names}',
+    'ui.privateNotes': 'Your private notes',
+    'ui.townLog': 'Town log',
+    'ui.hostControls': 'Host controls',
+    'ui.hostHint': 'These affect everyone. Each one asks for confirmation and a press-and-hold.',
+    'ui.cancel': 'Cancel',
+    'ui.hold': 'Press and hold to confirm',
+    'ui.remove': 'Remove',
+    'ui.nightNote': 'Night {n}: {text}',
+
+    'tag.host': 'host',
+    'tag.you': 'you',
+    'tag.offline': 'offline',
+    'tag.dead': 'dead',
+
+    'phase.lobby': 'Lobby',
+    'phase.night': 'Night {n}',
+    'phase.speech': 'Day {n} · Discussion',
+    'phase.vote': 'Day {n} · Vote',
+    'phase.ended': 'Game over',
+
+    'sum.roles': p => `Roles${p.auto ? ' (auto)' : ''}: ${p.mafia} Mafia, ${p.cop} Cop, ${p.doctor} Doctor, ${p.hooker} Hooker, ${p.citizen} Citizen`,
+    'sum.speech': '{s} seconds per speech',
+    'sum.firstNightKill': 'Mafia kill on the first night',
+    'sum.noFirstNightKill': 'No kill on the first night (Mafia only meet)',
+    'sum.reveal': 'Roles are revealed on death',
+    'sum.noReveal': 'Roles stay hidden on death',
+
+    'night.sleeps': 'The town sleeps…',
+    'night.prompt.mafia': 'Pick someone to kill. Your team sees your picks — agree on one target (a tie means no kill).',
+    'night.prompt.cop': 'Pick someone to investigate.',
+    'night.prompt.doctor': 'Pick someone to protect tonight.',
+    'night.prompt.hooker': 'Pick someone to visit. Their night action will be cancelled.',
+    'night.prompt.citizen': 'You sleep through the night. Wait for morning.',
+    'night.mafiaNoKill': 'There is no kill tonight. Use this night to learn who your fellow Mafia are.',
+    'night.dead': 'You are dead. Stay quiet while the night plays out.',
+    'night.yourChoice': 'Your choice: {name}',
+    'night.canChange': 'You can change it until everyone has acted.',
+    'night.waiting': p => `Waiting on ${p.n} night action${p.n === 1 ? '' : 's'}.`,
+    'action.mafia': 'Kill',
+    'action.cop': 'Check',
+    'action.doctor': 'Heal',
+    'action.hooker': 'Visit',
+    'seat.mafiaPick': 'Mafia pick: {names}',
+
+    'speech.now': 'Speaking now',
+    'speech.you': '(you)',
+    'speech.finish': 'Finish my speech',
+
+    'vote.title': 'Who should leave the town?',
+    'vote.status': '{voted}/{total} voted. The top vote-getter leaves only with strictly more votes than anyone else and than “skip”.',
+    'vote.yours': 'Your vote: {choice}',
+    'vote.skip': 'Skip',
+    'vote.skipBtn': 'Vote to skip',
+    'vote.dead': 'You are dead and cannot vote.',
+    'vote.btn': 'Vote',
+    'seat.votes': p => `${p.n} vote${p.n === 1 ? '' : 's'}: ${p.names}`,
+
+    'end.town': 'Town wins!',
+    'end.mafia': 'Mafia wins!',
+    'end.revealed': 'All roles are revealed around the table.',
+
+    'host.start.title': 'Start the game?',
+    'host.start.text': 'Roles will be dealt to all {n} players. Nobody can join after this.',
+    'host.kick.title': 'Remove {name}?',
+    'host.kick.text': 'They will be taken out of the room and will need to join again.',
+    'host.endNight.label': 'Force end night',
+    'host.endNight.title': 'End the night now?',
+    'host.endNight.text': '{n} player(s) have not acted yet. Their actions will be skipped and the night will resolve immediately.',
+    'host.endSpeech.label': 'End {name}’s speech',
+    'host.endSpeech.title': 'Cut off {name}?',
+    'host.endSpeech.text': '{name}’s speech will end now and the next player will start speaking.',
+    'host.skipVote.label': 'Skip to vote',
+    'host.skipVote.title': 'Skip the rest of the discussion?',
+    'host.skipVote.text': 'Everyone who has not spoken yet will lose their turn and voting will open immediately.',
+    'host.closeVote.label': 'Close voting now',
+    'host.closeVote.title': 'Close the vote now?',
+    'host.closeVote.text': '{n} player(s) have not voted yet. The vote will be counted as it stands.',
+    'host.lobby.label': 'Back to lobby',
+    'host.lobby.title': 'Return everyone to the lobby?',
+    'host.lobby.text': 'The table resets for a new game. Offline players are removed.',
+
+    'toast.kicked': 'You were removed from the room',
+    'toast.hostCancelled': 'The game moved on, so that host action was cancelled.',
+    'confirm.leave': 'Leave this game? You will not be able to rejoin it.',
+
+    'log.gameBegun': 'The game has begun. Roles have been dealt.',
+    'log.nightFalls': 'Night {n} falls. The town sleeps.',
+    'log.nightFallsNoKill': 'Night {n} falls. The Mafia meet each other — there is no kill tonight.',
+    'log.hookerVisited': 'You were visited by the Hooker last night. Any night action you took had no effect.',
+    'log.copResult': p => `Your investigation: ${p.name} is ${p.mafia ? 'MAFIA' : 'NOT Mafia'}.`,
+    'log.morningKilled': p => `Morning ${p.n}: ${p.name} was killed during the night${p.role ? ` — they were ${t('role.' + p.role)}` : ''}.`,
+    'log.morningNobody': 'Morning {n}: nobody died last night.',
+    'log.discussionOpens': 'Day {n}: discussion opens with {name}.',
+    'log.votingOpen': 'Day {n}: voting is open.',
+    'log.votedOut': p => `The town voted out ${p.name}${p.role ? ` — they were ${t('role.' + p.role)}` : ''}. (${tally(p)})`,
+    'log.noneVotedOut': p => `No one was voted out. (${tally(p)})`,
+    'log.tallySkip': 'skip {n}',
+    'log.noVotes': 'no votes',
+    'log.townWins': 'All Mafia are gone. The Town wins!',
+    'log.mafiaWins': 'The Mafia have taken over the town. The Mafia wins!',
+
+    'err.nameRequired': 'Name is required',
+    'err.gameInProgress': 'Game already in progress',
+    'err.roomFull': 'Room is full ({max} players max)',
+    'err.nameTaken': 'Name already taken',
+    'err.hostOnly': 'Only the host can do that',
+    'err.kickLobbyOnly': 'Players can only be removed in the lobby',
+    'err.kickSelf': 'You cannot remove yourself',
+    'err.settingsLobbyOnly': 'Settings can only change in the lobby',
+    'err.speechRange': 'Speech time must be {min}–{max} seconds',
+    'err.invalidCount': p => `Invalid count for ${t('role.' + p.role)}`,
+    'err.singleRoles': 'Cop, Doctor and Hooker are limited to one each',
+    'err.needMafia': 'Need at least one Mafia',
+    'err.tooManyRoles': 'More roles than players',
+    'err.mafiaTooMany': 'Mafia must be fewer than half of the players',
+    'err.gameStarted': 'Game already started',
+    'err.needPlayers': 'Need at least {min} players',
+    'err.gameRunning': 'Game is still running',
+    'err.notNight': 'It is not night',
+    'err.deadCannotAct': 'Dead players cannot act',
+    'err.noActionTonight': 'You have no action tonight',
+    'err.invalidTarget': 'Invalid target',
+    'err.noSpeech': 'No speech in progress',
+    'err.speakerOrHost': 'Only the speaker or host can end this speech',
+    'err.noDiscussion': 'No discussion in progress',
+    'err.votingClosed': 'Voting is not open',
+    'err.deadCannotVote': 'Dead players cannot vote',
+    'err.invalidVoteTarget': 'Invalid vote target',
+    'err.notInRoom': 'You are not in a room',
+    'err.roomNotFound': 'Room not found',
+    'err.sessionExpired': 'Session expired',
+    'err.server': 'Server error',
+  },
+
+  ru: {
+    'role.citizen': 'Мирный житель',
+    'role.mafia': 'Мафия',
+    'role.cop': 'Комиссар',
+    'role.doctor': 'Доктор',
+    'role.hooker': 'Путана',
+    'blurb.citizen': 'Вычислите мафию и изгоните её днём на голосовании.',
+    'blurb.mafia': 'Каждую ночь договаривайтесь с другими мафиози, кого убить. Вы победите, когда вас станет не меньше, чем мирных.',
+    'blurb.cop': 'Каждую ночь проверяйте одного игрока и узнавайте, мафия ли он.',
+    'blurb.doctor': 'Каждую ночь защищайте одного игрока от убийства. Себя можно лечить только один раз за игру, и нельзя лечить одного и того же игрока две ночи подряд.',
+    'blurb.hooker': 'Каждую ночь навещайте одного игрока. Его ночное действие отменяется.',
+
+    'ui.language': 'Язык',
+    'ui.tagline': '4–12 игроков. Каждый заходит со своего устройства.',
+    'ui.yourName': 'Ваше имя',
+    'ui.createRoom': 'Создать комнату',
+    'ui.orJoin': 'или присоединиться к существующей',
+    'ui.roomCode': 'Код комнаты',
+    'ui.join': 'Войти',
+    'ui.room': 'Комната',
+    'ui.leaveRoom': 'Выйти из комнаты',
+    'ui.playingAs': 'Вы играете как {name}',
+    'ui.playingAsHost': 'Вы играете как {name} (организатор)',
+    'ui.players': 'Игроки',
+    'ui.lobbyCount': '{count}/{max} · минимум {min}',
+    'ui.shareCode': 'Отправьте код комнаты {code}, чтобы другие могли войти.',
+    'ui.gameSetup': 'Настройки игры',
+    'ui.resetAuto': 'Подобрать роли автоматически по числу игроков',
+    'ui.speechTime': 'Время на речь (секунды)',
+    'ui.firstNightKill': 'Мафия убивает в первую ночь',
+    'ui.revealRole': 'Раскрывать роль после смерти',
+    'ui.startGame': 'Начать игру…',
+    'ui.waitHost': 'Ждём, пока организатор начнёт игру…',
+    'ui.yourRole': 'Ваша роль',
+    'ui.show': 'Показать',
+    'ui.hide': 'Скрыть',
+    'ui.roleHidden': 'Скрыто. Нажмите «Показать», когда никто не смотрит на ваш экран.',
+    'ui.fellowMafia': 'Ваша мафия: {names}',
+    'ui.privateNotes': 'Ваши личные заметки',
+    'ui.townLog': 'Журнал города',
+    'ui.hostControls': 'Управление игрой',
+    'ui.hostHint': 'Эти действия влияют на всех. Каждое требует подтверждения и удержания кнопки.',
+    'ui.cancel': 'Отмена',
+    'ui.hold': 'Нажмите и удерживайте для подтверждения',
+    'ui.remove': 'Удалить',
+    'ui.nightNote': 'Ночь {n}: {text}',
+
+    'tag.host': 'организатор',
+    'tag.you': 'вы',
+    'tag.offline': 'не в сети',
+    'tag.dead': 'вне игры',
+
+    'phase.lobby': 'Лобби',
+    'phase.night': 'Ночь {n}',
+    'phase.speech': 'День {n} · Обсуждение',
+    'phase.vote': 'День {n} · Голосование',
+    'phase.ended': 'Игра окончена',
+
+    'sum.roles': p => `Роли${p.auto ? ' (авто)' : ''}: мафия — ${p.mafia}, комиссар — ${p.cop}, доктор — ${p.doctor}, путана — ${p.hooker}, мирные — ${p.citizen}`,
+    'sum.speech': p => `${p.s} ${ruPlural(p.s, 'секунда', 'секунды', 'секунд')} на речь`,
+    'sum.firstNightKill': 'Мафия убивает в первую ночь',
+    'sum.noFirstNightKill': 'В первую ночь убийства нет (мафия только знакомится)',
+    'sum.reveal': 'Роль раскрывается после смерти',
+    'sum.noReveal': 'Роль остаётся скрытой после смерти',
+
+    'night.sleeps': 'Город засыпает…',
+    'night.prompt.mafia': 'Выберите, кого убить. Ваша команда видит ваш выбор — договоритесь об одной цели (при равенстве голосов никто не умирает).',
+    'night.prompt.cop': 'Выберите, кого проверить.',
+    'night.prompt.doctor': 'Выберите, кого защитить этой ночью.',
+    'night.prompt.hooker': 'Выберите, кого навестить. Его ночное действие будет отменено.',
+    'night.prompt.citizen': 'Вы спите всю ночь. Дождитесь утра.',
+    'night.mafiaNoKill': 'Этой ночью убийства нет. Познакомьтесь со своей командой.',
+    'night.dead': 'Вы мертвы. Не мешайте остальным, пока идёт ночь.',
+    'night.yourChoice': 'Ваш выбор: {name}',
+    'night.canChange': 'Выбор можно изменить, пока все не сделали ход.',
+    'night.waiting': p => `Ожидаем ${p.n} ${ruPlural(p.n, 'ночное действие', 'ночных действия', 'ночных действий')}.`,
+    'action.mafia': 'Убить',
+    'action.cop': 'Проверить',
+    'action.doctor': 'Лечить',
+    'action.hooker': 'Навестить',
+    'seat.mafiaPick': 'Выбор мафии: {names}',
+
+    'speech.now': 'Сейчас говорит',
+    'speech.you': '(вы)',
+    'speech.finish': 'Закончить речь',
+
+    'vote.title': 'Кто покинет город?',
+    'vote.status': 'Проголосовали: {voted}/{total}. Игрок выбывает, только если у него строго больше голосов, чем у любого другого и чем за «пропуск».',
+    'vote.yours': 'Ваш голос: {choice}',
+    'vote.skip': 'Пропуск',
+    'vote.skipBtn': 'Голосовать за пропуск',
+    'vote.dead': 'Вы мертвы и не можете голосовать.',
+    'vote.btn': 'Голосовать',
+    'seat.votes': p => `${p.n} ${ruPlural(p.n, 'голос', 'голоса', 'голосов')}: ${p.names}`,
+
+    'end.town': 'Победа мирных!',
+    'end.mafia': 'Победа мафии!',
+    'end.revealed': 'Все роли раскрыты за столом.',
+
+    'host.start.title': 'Начать игру?',
+    'host.start.text': p => `Роли будут розданы всем ${p.n} ${ruPlural(p.n, 'игроку', 'игрокам', 'игрокам')}. После этого никто не сможет присоединиться.`,
+    'host.kick.title': 'Удалить игрока {name}?',
+    'host.kick.text': 'Игрок будет удалён из комнаты, и ему придётся войти заново.',
+    'host.endNight.label': 'Завершить ночь',
+    'host.endNight.title': 'Завершить ночь сейчас?',
+    'host.endNight.text': p => `Ещё не сделали ход: ${p.n}. Их действия будут пропущены, и ночь сразу завершится.`,
+    'host.endSpeech.label': 'Прервать речь: {name}',
+    'host.endSpeech.title': 'Прервать игрока {name}?',
+    'host.endSpeech.text': 'Речь игрока {name} закончится, и слово перейдёт к следующему.',
+    'host.skipVote.label': 'К голосованию',
+    'host.skipVote.title': 'Пропустить оставшееся обсуждение?',
+    'host.skipVote.text': 'Все, кто ещё не выступил, потеряют свою очередь, и сразу начнётся голосование.',
+    'host.closeVote.label': 'Закрыть голосование',
+    'host.closeVote.title': 'Закрыть голосование сейчас?',
+    'host.closeVote.text': p => `Ещё не проголосовали: ${p.n}. Голоса будут подсчитаны как есть.`,
+    'host.lobby.label': 'Вернуться в лобби',
+    'host.lobby.title': 'Вернуть всех в лобби?',
+    'host.lobby.text': 'Стол будет подготовлен к новой игре. Игроки не в сети будут удалены.',
+
+    'toast.kicked': 'Вас удалили из комнаты',
+    'toast.hostCancelled': 'Игра продвинулась дальше, поэтому действие организатора отменено.',
+    'confirm.leave': 'Выйти из игры? Вернуться в неё будет нельзя.',
+
+    'log.gameBegun': 'Игра началась. Роли розданы.',
+    'log.nightFalls': 'Наступает ночь {n}. Город засыпает.',
+    'log.nightFallsNoKill': 'Наступает ночь {n}. Мафия знакомится — этой ночью убийства нет.',
+    'log.hookerVisited': 'Прошлой ночью вас навестила Путана. Ваше ночное действие не сработало.',
+    'log.copResult': p => `Результат проверки: ${p.name} — ${p.mafia ? 'МАФИЯ' : 'НЕ мафия'}.`,
+    'log.morningKilled': p => `Утро ${p.n}: ночью убит игрок ${p.name}${p.role ? ` — роль: ${t('role.' + p.role)}` : ''}.`,
+    'log.morningNobody': 'Утро {n}: этой ночью никто не погиб.',
+    'log.discussionOpens': 'День {n}: обсуждение начинает {name}.',
+    'log.votingOpen': 'День {n}: голосование открыто.',
+    'log.votedOut': p => `Город изгнал игрока ${p.name}${p.role ? ` — роль: ${t('role.' + p.role)}` : ''}. (${tally(p)})`,
+    'log.noneVotedOut': p => `Никто не изгнан. (${tally(p)})`,
+    'log.tallySkip': 'пропуск {n}',
+    'log.noVotes': 'нет голосов',
+    'log.townWins': 'Вся мафия устранена. Победа мирных!',
+    'log.mafiaWins': 'Мафия захватила город. Победа мафии!',
+
+    'err.nameRequired': 'Введите имя',
+    'err.gameInProgress': 'Игра уже идёт',
+    'err.roomFull': 'Комната заполнена (максимум {max} игроков)',
+    'err.nameTaken': 'Это имя уже занято',
+    'err.hostOnly': 'Это может сделать только организатор',
+    'err.kickLobbyOnly': 'Удалять игроков можно только в лобби',
+    'err.kickSelf': 'Нельзя удалить себя',
+    'err.settingsLobbyOnly': 'Настройки можно менять только в лобби',
+    'err.speechRange': 'Время на речь — от {min} до {max} секунд',
+    'err.invalidCount': p => `Неверное количество: ${t('role.' + p.role)}`,
+    'err.singleRoles': 'Комиссар, доктор и путана — не больше одного каждого',
+    'err.needMafia': 'Нужна хотя бы одна мафия',
+    'err.tooManyRoles': 'Ролей больше, чем игроков',
+    'err.mafiaTooMany': 'Мафии должно быть меньше половины игроков',
+    'err.gameStarted': 'Игра уже началась',
+    'err.needPlayers': p => `Нужно минимум ${p.min} ${ruPlural(p.min, 'игрок', 'игрока', 'игроков')}`,
+    'err.gameRunning': 'Игра ещё идёт',
+    'err.notNight': 'Сейчас не ночь',
+    'err.deadCannotAct': 'Мёртвые игроки не могут действовать',
+    'err.noActionTonight': 'У вас нет действия этой ночью',
+    'err.invalidTarget': 'Недопустимая цель',
+    'err.noSpeech': 'Сейчас никто не выступает',
+    'err.speakerOrHost': 'Закончить речь может только выступающий или организатор',
+    'err.noDiscussion': 'Обсуждение не идёт',
+    'err.votingClosed': 'Голосование не открыто',
+    'err.deadCannotVote': 'Мёртвые игроки не голосуют',
+    'err.invalidVoteTarget': 'Недопустимый выбор',
+    'err.notInRoom': 'Вы не в комнате',
+    'err.roomNotFound': 'Комната не найдена',
+    'err.sessionExpired': 'Сессия истекла',
+    'err.server': 'Ошибка сервера',
+  },
+};
+
+const LANG_KEY = 'mafia.lang';
+let lang = (() => {
+  try {
+    const saved = localStorage.getItem(LANG_KEY);
+    if (saved && DICT[saved]) return saved;
+  } catch {}
+  return (navigator.language || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+})();
+
+function setLang(l) {
+  if (!DICT[l]) return;
+  lang = l;
+  try { localStorage.setItem(LANG_KEY, l); } catch {}
+  document.documentElement.lang = l;
+}
+
+function t(key, params = {}) {
+  const v = DICT[lang][key] ?? DICT.en[key];
+  if (v === undefined) return key;
+  if (typeof v === 'function') return v(params);
+  return v.replace(/\{(\w+)\}/g, (m, k) => (k in params ? params[k] : m));
+}
+
+function tally(p) {
+  const parts = p.tally.map(([name, c]) => `${name} ${c}`);
+  if (p.skips) parts.push(t('log.tallySkip', { n: p.skips }));
+  return parts.join(', ') || t('log.noVotes');
+}
+
+// Fill static markup: data-i18n (text), data-i18n-placeholder
+function applyStaticTranslations(root = document) {
+  for (const el of root.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of root.querySelectorAll('[data-i18n-placeholder]')) el.placeholder = t(el.dataset.i18nPlaceholder);
+}
+
+document.documentElement.lang = lang;

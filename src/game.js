@@ -10,12 +10,13 @@ const ROLES = {
   HOOKER: 'hooker',
 };
 
+// Display names and descriptions live in the client's translations (public/i18n.js).
 const ROLE_INFO = {
-  citizen: { name: 'Citizen', team: 'town', blurb: 'Find the Mafia and vote them out during the day.' },
-  mafia: { name: 'Mafia', team: 'mafia', blurb: 'Each night, agree with your fellow Mafia on someone to kill. Outnumber the town to win.' },
-  cop: { name: 'Cop', team: 'town', blurb: 'Each night, check one player and learn whether they are Mafia.' },
-  doctor: { name: 'Doctor', team: 'town', blurb: 'Each night, protect one player from being killed. You can protect yourself only once per game, and never the same player two nights in a row.' },
-  hooker: { name: 'Hooker', team: 'town', blurb: 'Each night, visit one player. Their night action is blocked.' },
+  citizen: { team: 'town' },
+  mafia: { team: 'mafia' },
+  cop: { team: 'town' },
+  doctor: { team: 'town' },
+  hooker: { team: 'town' },
 };
 
 const PHASES = {
@@ -49,19 +50,27 @@ function defaultRoleCounts(n) {
   };
 }
 
+// Returns null when valid, otherwise an error { key, params } for the client to translate.
 function validateRoleCounts(counts, n) {
   for (const k of ['mafia', 'cop', 'doctor', 'hooker']) {
-    if (!Number.isInteger(counts[k]) || counts[k] < 0) return `Invalid count for ${k}`;
+    if (!Number.isInteger(counts[k]) || counts[k] < 0) return { key: 'err.invalidCount', params: { role: k } };
   }
-  if (counts.cop > 1 || counts.doctor > 1 || counts.hooker > 1) return 'Cop, Doctor and Hooker are limited to one each';
-  if (counts.mafia < 1) return 'Need at least one Mafia';
+  if (counts.cop > 1 || counts.doctor > 1 || counts.hooker > 1) return { key: 'err.singleRoles', params: {} };
+  if (counts.mafia < 1) return { key: 'err.needMafia', params: {} };
   const special = counts.mafia + counts.cop + counts.doctor + counts.hooker;
-  if (special > n) return 'More roles than players';
-  if (counts.mafia * 2 >= n) return 'Mafia must be fewer than half of the players';
+  if (special > n) return { key: 'err.tooManyRoles', params: {} };
+  if (counts.mafia * 2 >= n) return { key: 'err.mafiaTooMany', params: {} };
   return null;
 }
 
-class GameError extends Error {}
+// Errors carry a translation key (also used as the message) and its parameters.
+class GameError extends Error {
+  constructor(key, params = {}) {
+    super(key);
+    this.key = key;
+    this.params = params;
+  }
+}
 
 class Room {
   constructor({ code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
@@ -116,16 +125,17 @@ class Room {
     return this.players.filter(p => p.alive).sort((a, b) => a.seat - b.seat);
   }
 
-  assert(cond, msg) {
-    if (!cond) throw new GameError(msg);
+  assert(cond, key, params) {
+    if (!cond) throw new GameError(key, params);
   }
 
-  addPublic(text) {
-    this.log.push({ day: this.day, phase: this.phase, text });
+  // Log entries are { key, params }; the client renders them in the viewer's language.
+  addPublic(key, params = {}) {
+    this.log.push({ day: this.day, phase: this.phase, key, params });
   }
 
-  addPrivate(pid, text) {
-    (this.privateLog[pid] ||= []).push({ day: this.day, text });
+  addPrivate(pid, key, params = {}) {
+    (this.privateLog[pid] ||= []).push({ day: this.day, key, params });
   }
 
   effectiveRoleCounts() {
@@ -135,10 +145,10 @@ class Room {
   // ---------- lobby ----------
   join(name) {
     name = String(name || '').trim().slice(0, 20);
-    this.assert(name, 'Name is required');
-    this.assert(this.phase === PHASES.LOBBY, 'Game already in progress');
-    this.assert(this.players.length < MAX_PLAYERS, `Room is full (${MAX_PLAYERS} players max)`);
-    this.assert(!this.players.some(p => p.name.toLowerCase() === name.toLowerCase()), 'Name already taken');
+    this.assert(name, 'err.nameRequired');
+    this.assert(this.phase === PHASES.LOBBY, 'err.gameInProgress');
+    this.assert(this.players.length < MAX_PLAYERS, 'err.roomFull', { max: MAX_PLAYERS });
+    this.assert(!this.players.some(p => p.name.toLowerCase() === name.toLowerCase()), 'err.nameTaken');
     const p = { id: id(), token: id(16), name, seat: this.players.length, connected: true, alive: true, role: null };
     this.players.push(p);
     if (!this.hostId) this.hostId = p.id;
@@ -175,22 +185,22 @@ class Room {
   }
 
   requireHost(pid) {
-    this.assert(pid === this.hostId, 'Only the host can do that');
+    this.assert(pid === this.hostId, 'err.hostOnly');
   }
 
   kick(pid, targetId) {
     this.requireHost(pid);
-    this.assert(this.phase === PHASES.LOBBY, 'Can only kick in the lobby');
-    this.assert(targetId !== pid, 'You cannot kick yourself');
+    this.assert(this.phase === PHASES.LOBBY, 'err.kickLobbyOnly');
+    this.assert(targetId !== pid, 'err.kickSelf');
     this.leave(targetId);
   }
 
   updateSettings(pid, s) {
     this.requireHost(pid);
-    this.assert(this.phase === PHASES.LOBBY, 'Settings can only change in the lobby');
+    this.assert(this.phase === PHASES.LOBBY, 'err.settingsLobbyOnly');
     if (s.speechSeconds !== undefined) {
       const v = Number(s.speechSeconds);
-      this.assert(Number.isInteger(v) && v >= 10 && v <= 600, 'Speech time must be 10–600 seconds');
+      this.assert(Number.isInteger(v) && v >= 10 && v <= 600, 'err.speechRange', { min: 10, max: 600 });
       this.settings.speechSeconds = v;
     }
     if (s.revealRoleOnDeath !== undefined) this.settings.revealRoleOnDeath = !!s.revealRoleOnDeath;
@@ -204,7 +214,7 @@ class Room {
           doctor: Number(s.roleCounts.doctor), hooker: Number(s.roleCounts.hooker),
         };
         // only validate player-count-dependent rules at start; here check shape
-        for (const k of Object.keys(c)) this.assert(Number.isInteger(c[k]) && c[k] >= 0 && c[k] <= MAX_PLAYERS, `Invalid count for ${k}`);
+        for (const k of Object.keys(c)) this.assert(Number.isInteger(c[k]) && c[k] >= 0 && c[k] <= MAX_PLAYERS, 'err.invalidCount', { role: k });
         this.settings.roleCounts = c;
       }
     }
@@ -213,12 +223,12 @@ class Room {
 
   start(pid) {
     this.requireHost(pid);
-    this.assert(this.phase === PHASES.LOBBY, 'Game already started');
+    this.assert(this.phase === PHASES.LOBBY, 'err.gameStarted');
     const n = this.players.length;
-    this.assert(n >= MIN_PLAYERS, `Need at least ${MIN_PLAYERS} players`);
+    this.assert(n >= MIN_PLAYERS, 'err.needPlayers', { min: MIN_PLAYERS });
     const counts = this.effectiveRoleCounts();
     const err = validateRoleCounts(counts, n);
-    this.assert(!err, err);
+    this.assert(!err, err?.key, err?.params);
 
     const deck = [];
     for (const [role, c] of Object.entries(counts)) for (let i = 0; i < c; i++) deck.push(role);
@@ -227,13 +237,13 @@ class Room {
     this.players.forEach((p, i) => { p.role = shuffled[i]; p.alive = true; });
 
     this.lastStarterSeat = null;
-    this.addPublic('The game has begun. Roles have been dealt.');
+    this.addPublic('log.gameBegun');
     this.beginNight();
   }
 
   restart(pid) {
     this.requireHost(pid);
-    this.assert(this.phase === PHASES.ENDED, 'Game is still running');
+    this.assert(this.phase === PHASES.ENDED, 'err.gameRunning');
     this.players = this.players.filter(p => p.connected);
     this.players.forEach((p, i) => { p.seat = i; p.alive = true; p.role = null; });
     if (!this.player(this.hostId)) this.hostId = this.players[0]?.id || null;
@@ -262,9 +272,7 @@ class Room {
     this.nightActions = {};
     this.votes = {};
     this.speech = null;
-    this.addPublic(this.mafiaKillsTonight()
-      ? `Night ${this.day} falls. The town sleeps.`
-      : `Night ${this.day} falls. The Mafia meet each other — there is no kill tonight.`);
+    this.addPublic(this.mafiaKillsTonight() ? 'log.nightFalls' : 'log.nightFallsNoKill', { n: this.day });
     this.touch();
   }
 
@@ -282,11 +290,11 @@ class Room {
   }
 
   nightAction(pid, targetId) {
-    this.assert(this.phase === PHASES.NIGHT, 'It is not night');
+    this.assert(this.phase === PHASES.NIGHT, 'err.notNight');
     const p = this.player(pid);
-    this.assert(p && p.alive, 'Dead players cannot act');
-    this.assert(this.hasNightAction(p), 'You have no action tonight');
-    this.assert(this.validNightTargets(p).includes(targetId), 'Invalid target');
+    this.assert(p && p.alive, 'err.deadCannotAct');
+    this.assert(this.hasNightAction(p), 'err.noActionTonight');
+    this.assert(this.validNightTargets(p).includes(targetId), 'err.invalidTarget');
     this.nightActions[pid] = targetId;
     const pending = this.actorsForNight().filter(a => !(a.id in this.nightActions));
     if (pending.length === 0) this.resolveNight();
@@ -295,7 +303,7 @@ class Room {
 
   forceEndNight(pid) {
     this.requireHost(pid);
-    this.assert(this.phase === PHASES.NIGHT, 'It is not night');
+    this.assert(this.phase === PHASES.NIGHT, 'err.notNight');
     this.resolveNight();
   }
 
@@ -308,7 +316,7 @@ class Room {
     for (const h of actionOf(ROLES.HOOKER)) {
       const t = this.nightActions[h.id];
       blocked.add(t);
-      this.addPrivate(t, 'You were visited by the Hooker last night. Any night action you took had no effect.');
+      this.addPrivate(t, 'log.hookerVisited');
     }
 
     // 2. Mafia kill: plurality of unblocked mafia votes, tie = no kill
@@ -336,24 +344,24 @@ class Room {
     for (const c of actionOf(ROLES.COP)) {
       if (blocked.has(c.id)) continue;
       const t = this.player(this.nightActions[c.id]);
-      this.addPrivate(c.id, `Your investigation: ${t.name} is ${t.role === ROLES.MAFIA ? 'MAFIA' : 'NOT Mafia'}.`);
+      this.addPrivate(c.id, 'log.copResult', { name: t.name, mafia: t.role === ROLES.MAFIA });
     }
 
     // 5. Apply
     const killed = killTarget && killTarget !== healed ? this.player(killTarget) : null;
     if (killed) {
       killed.alive = false;
-      this.addPublic(`Morning ${this.day}: ${killed.name} was killed during the night${this.roleSuffix(killed)}.`);
+      this.addPublic('log.morningKilled', { n: this.day, name: killed.name, role: this.revealedRole(killed) });
     } else {
-      this.addPublic(`Morning ${this.day}: nobody died last night.`);
+      this.addPublic('log.morningNobody', { n: this.day });
     }
 
     if (this.checkWin()) return;
     this.beginSpeeches();
   }
 
-  roleSuffix(p) {
-    return this.settings.revealRoleOnDeath ? ` — they were ${ROLE_INFO[p.role].name}` : '';
+  revealedRole(p) {
+    return this.settings.revealRoleOnDeath ? p.role : null;
   }
 
   // ---------- day: speeches ----------
@@ -371,7 +379,7 @@ class Room {
     this.lastStarterSeat = this.player(order[0]).seat;
     this.phase = PHASES.SPEECH;
     this.speech = { order, index: -1, endsAt: null };
-    this.addPublic(`Day ${this.day}: discussion opens with ${this.player(order[0]).name}.`);
+    this.addPublic('log.discussionOpens', { n: this.day, name: this.player(order[0]).name });
     this.nextSpeaker();
   }
 
@@ -397,15 +405,15 @@ class Room {
   }
 
   endSpeech(pid) {
-    this.assert(this.phase === PHASES.SPEECH, 'No speech in progress');
+    this.assert(this.phase === PHASES.SPEECH, 'err.noSpeech');
     const current = this.speech.order[this.speech.index];
-    this.assert(pid === current || pid === this.hostId, 'Only the speaker or host can end this speech');
+    this.assert(pid === current || pid === this.hostId, 'err.speakerOrHost');
     this.nextSpeaker();
   }
 
   skipToVote(pid) {
     this.requireHost(pid);
-    this.assert(this.phase === PHASES.SPEECH, 'No discussion in progress');
+    this.assert(this.phase === PHASES.SPEECH, 'err.noDiscussion');
     this.speech.index = this.speech.order.length - 1;
     this.nextSpeaker();
   }
@@ -415,17 +423,17 @@ class Room {
     this.phase = PHASES.VOTE;
     this.votes = {};
     if (this.speech) this.speech.endsAt = null;
-    this.addPublic(`Day ${this.day}: voting is open.`);
+    this.addPublic('log.votingOpen', { n: this.day });
     this.touch();
   }
 
   vote(pid, targetId) {
-    this.assert(this.phase === PHASES.VOTE, 'Voting is not open');
+    this.assert(this.phase === PHASES.VOTE, 'err.votingClosed');
     const p = this.player(pid);
-    this.assert(p && p.alive, 'Dead players cannot vote');
+    this.assert(p && p.alive, 'err.deadCannotVote');
     if (targetId !== 'skip') {
       const t = this.player(targetId);
-      this.assert(t && t.alive && t.id !== pid, 'Invalid vote target');
+      this.assert(t && t.alive && t.id !== pid, 'err.invalidVoteTarget');
     }
     this.votes[pid] = targetId;
     if (this.alive().every(a => a.id in this.votes)) this.resolveVote();
@@ -434,7 +442,7 @@ class Room {
 
   forceEndVote(pid) {
     this.requireHost(pid);
-    this.assert(this.phase === PHASES.VOTE, 'Voting is not open');
+    this.assert(this.phase === PHASES.VOTE, 'err.votingClosed');
     this.resolveVote();
   }
 
@@ -446,15 +454,15 @@ class Room {
       else tally[t] = (tally[t] || 0) + 1;
     }
     const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-    const summary = ranked.map(([t, c]) => `${this.player(t).name} ${c}`).concat(skips ? [`skip ${skips}`] : []).join(', ') || 'no votes';
+    const tallyParam = ranked.map(([t, c]) => [this.player(t).name, c]);
     const top = ranked[0];
     const clear = top && top[1] > skips && (ranked.length === 1 || top[1] > ranked[1][1]);
     if (clear) {
       const out = this.player(top[0]);
       out.alive = false;
-      this.addPublic(`The town voted out ${out.name}${this.roleSuffix(out)}. (${summary})`);
+      this.addPublic('log.votedOut', { name: out.name, role: this.revealedRole(out), tally: tallyParam, skips });
     } else {
-      this.addPublic(`No one was voted out. (${summary})`);
+      this.addPublic('log.noneVotedOut', { tally: tallyParam, skips });
     }
     if (this.checkWin()) return;
     this.beginNight();
@@ -474,7 +482,7 @@ class Room {
     this.winner = winner;
     this.phase = PHASES.ENDED;
     this.speech = null;
-    this.addPublic(winner === 'town' ? 'All Mafia are gone. The Town wins!' : 'The Mafia have taken over the town. The Mafia wins!');
+    this.addPublic(winner === 'town' ? 'log.townWins' : 'log.mafiaWins');
     this.touch();
     return true;
   }

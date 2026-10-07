@@ -25,7 +25,7 @@ function toast(msg) {
 function send(event, payload = {}) {
   return new Promise(resolve => {
     socket.emit(event, payload, res => {
-      if (res && !res.ok) toast(res.error);
+      if (res && !res.ok) toast(t(res.error.key, res.error.params));
       resolve(res);
     });
   });
@@ -45,7 +45,8 @@ function show(screen) {
 const playerById = id => state.players.find(p => p.id === id);
 const nameOf = id => (playerById(id) || {}).name || '?';
 const isHost = () => !!(state && state.me && state.hostId === state.me.id);
-const roleName = r => state.roleInfo[r].name;
+const roleName = r => t('role.' + r);
+const tagHtml = key => `<span class="tag">${esc(t(key))}</span>`;
 const roleTag = r => r ? `<span class="tag ${state.roleInfo[r].team}">${esc(roleName(r))}</span>` : '';
 // identifies "the moment" a host action was requested for; if it changes, the action is stale
 const momentKey = () => state ? `${state.phase}:${state.day}:${state.speech ? state.speech.index : ''}` : '';
@@ -54,11 +55,10 @@ const momentKey = () => state ? `${state.phase}:${state.day}:${state.speech ? st
 let pending = null;
 let hold = null;
 
-function confirmHost({ title, text, event, payload = {}, label = 'Press and hold to confirm' }) {
+function confirmHost({ title, text, event, payload = {} }) {
   pending = { event, payload, key: momentKey() };
   $('#modalTitle').textContent = title;
   $('#modalText').textContent = text;
-  $('.hold-label').textContent = label;
   resetHold();
   $('#modal').classList.remove('hidden');
   $('#modalCancel').focus(); // Enter/Space on a stray keypress cancels rather than confirms
@@ -125,7 +125,7 @@ socket.on('kicked', () => {
   saveSession(null);
   state = null;
   render();
-  toast('You were removed from the room');
+  toast(t('toast.kicked'));
 });
 
 // ---------- home ----------
@@ -142,7 +142,7 @@ $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joi
 // ---------- top bar ----------
 $('#leaveBtn').onclick = async () => {
   const inGame = state && state.phase !== 'lobby' && state.phase !== 'ended';
-  if (inGame && !confirm('Leave this game? You will not be able to rejoin it.')) return;
+  if (inGame && !confirm(t('confirm.leave'))) return;
   await send('leave');
   saveSession(null);
   state = null;
@@ -150,14 +150,7 @@ $('#leaveBtn').onclick = async () => {
 };
 
 function phaseTitle() {
-  switch (state.phase) {
-    case 'lobby': return 'Lobby';
-    case 'night': return `Night ${state.day}`;
-    case 'speech': return `Day ${state.day} · Discussion`;
-    case 'vote': return `Day ${state.day} · Vote`;
-    case 'ended': return 'Game over';
-    default: return '';
-  }
+  return t('phase.' + state.phase, { n: state.day });
 }
 
 function renderTopbar() {
@@ -165,14 +158,14 @@ function renderTopbar() {
   $('#topRoom').classList.toggle('hidden', !inRoom);
   $('#leaveBtn').classList.toggle('hidden', !inRoom);
   $('#topPhase').textContent = inRoom ? phaseTitle() : '';
-  $('#topMe').textContent = inRoom ? `Playing as ${state.me.name}${isHost() ? ' (host)' : ''}` : '';
+  $('#topMe').textContent = inRoom ? t(isHost() ? 'ui.playingAsHost' : 'ui.playingAs', { name: state.me.name }) : '';
   if (inRoom) $('#topCode').textContent = state.code;
 }
 
 // ---------- lobby ----------
 $('#startBtn').onclick = () => confirmHost({
-  title: 'Start the game?',
-  text: `Roles will be dealt to all ${state.players.length} players. Nobody can join after this.`,
+  title: t('host.start.title'),
+  text: t('host.start.text', { n: state.players.length }),
   event: 'start',
 });
 $('#autoRoles').onclick = () => send('settings', { roleCounts: null });
@@ -192,17 +185,17 @@ function setIfNotFocused(el, prop, value) {
 }
 
 function renderLobby() {
-  $('#lobbyCode').textContent = state.code;
-  $('#lobbyCount').textContent = `${state.players.length}/${state.maxPlayers} · minimum ${state.minPlayers}`;
+  $('#shareCode').innerHTML = esc(t('ui.shareCode', { code: '\u0000' })).replace('\u0000', `<strong class="code">${esc(state.code)}</strong>`);
+  $('#lobbyCount').textContent = t('ui.lobbyCount', { count: state.players.length, max: state.maxPlayers, min: state.minPlayers });
   $('#lobbyPlayers').innerHTML = state.players.map(p => `
     <li>
-      <span>${esc(p.name)}${p.id === state.hostId ? '<span class="tag">host</span>' : ''}${p.id === state.me.id ? '<span class="tag">you</span>' : ''}${p.connected ? '' : '<span class="tag">offline</span>'}</span>
-      ${isHost() && p.id !== state.me.id ? `<button class="ghost small" data-kick="${p.id}">Remove</button>` : ''}
+      <span>${esc(p.name)}${p.id === state.hostId ? tagHtml('tag.host') : ''}${p.id === state.me.id ? tagHtml('tag.you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
+      ${isHost() && p.id !== state.me.id ? `<button class="ghost small" data-kick="${p.id}">${esc(t('ui.remove'))}</button>` : ''}
     </li>`).join('');
   for (const b of $$('[data-kick]')) {
     b.onclick = () => confirmHost({
-      title: `Remove ${nameOf(b.dataset.kick)}?`,
-      text: 'They will be taken out of the room and will need to join again.',
+      title: t('host.kick.title', { name: nameOf(b.dataset.kick) }),
+      text: t('host.kick.text'),
       event: 'kick',
       payload: { playerId: b.dataset.kick },
     });
@@ -212,12 +205,13 @@ function renderLobby() {
   const s = state.settings;
   const citizens = Math.max(0, state.players.length - rc.mafia - rc.cop - rc.doctor - rc.hooker);
   $('#setupSummary').innerHTML = [
-    `Roles${s.roleCounts ? '' : ' (auto)'}: ${rc.mafia} Mafia, ${rc.cop} Cop, ${rc.doctor} Doctor, ${rc.hooker} Hooker, ${citizens} Citizen`,
-    `${s.speechSeconds} seconds per speech`,
-    s.firstNightKill ? 'Mafia kill on the first night' : 'No kill on the first night (Mafia only meet)',
-    s.revealRoleOnDeath ? 'Roles are revealed on death' : 'Roles stay hidden on death',
+    t('sum.roles', { ...rc, citizen: citizens, auto: !s.roleCounts }),
+    t('sum.speech', { s: s.speechSeconds }),
+    t(s.firstNightKill ? 'sum.firstNightKill' : 'sum.noFirstNightKill'),
+    t(s.revealRoleOnDeath ? 'sum.reveal' : 'sum.noReveal'),
   ].map(t => `<li>${esc(t)}</li>`).join('');
-  $('#roleError').textContent = state.players.length >= state.minPlayers ? (state.roleCountsError || '') : '';
+  const rce = state.roleCountsError;
+  $('#roleError').textContent = state.players.length >= state.minPlayers && rce ? t(rce.key, rce.params) : '';
 
   $('#hostSettings').classList.toggle('hidden', !isHost());
   $('#startBtn').classList.toggle('hidden', !isHost());
@@ -232,23 +226,15 @@ function renderLobby() {
 }
 
 // ---------- game ----------
-const ACTION_VERB = { mafia: 'Kill', cop: 'Check', doctor: 'Heal', hooker: 'Visit' };
-const NIGHT_PROMPT = {
-  mafia: 'Pick someone to kill. Your team sees your picks — agree on one target (a tie means no kill).',
-  cop: 'Pick someone to investigate.',
-  doctor: 'Pick someone to protect tonight.',
-  hooker: 'Pick someone to visit. Their night action will be cancelled.',
-  citizen: 'You sleep through the night. Wait for morning.',
-};
 
 $('#roleToggle').onclick = () => { roleShown = !roleShown; renderGame(); };
 
 function nightPrompt() {
   const me = state.me;
   if (me.role === 'mafia' && !state.night.mafiaKills) {
-    return 'There is no kill tonight. Use this night to learn who your fellow Mafia are.';
+    return t('night.mafiaNoKill');
   }
-  return NIGHT_PROMPT[me.role];
+  return t('night.prompt.' + me.role);
 }
 
 function renderPhasePanel() {
@@ -258,18 +244,18 @@ function renderPhasePanel() {
   if (state.phase === 'night') {
     const picked = state.night.myTarget;
     panel.innerHTML = `
-      <div class="big">The town sleeps…</div>
-      ${me.alive ? `<div class="prompt">${esc(nightPrompt())}</div>` : '<div class="prompt">You are dead. Stay quiet while the night plays out.</div>'}
-      ${picked ? `<div>Your choice: <strong>${esc(nameOf(picked))}</strong><div class="muted small-text">You can change it until everyone has acted.</div></div>` : ''}
-      <div class="muted small-text">Waiting on ${state.night.pendingCount} night action(s).</div>`;
+      <div class="big">${esc(t('night.sleeps'))}</div>
+      <div class="prompt">${esc(me.alive ? nightPrompt() : t('night.dead'))}</div>
+      ${picked ? `<div>${esc(t('night.yourChoice', { name: nameOf(picked) }))}<div class="muted small-text">${esc(t('night.canChange'))}</div></div>` : ''}
+      <div class="muted small-text">${esc(t('night.waiting', { n: state.night.pendingCount }))}</div>`;
   } else if (state.phase === 'speech') {
     const sp = state.speech;
     const mine = sp.current === me.id;
     panel.innerHTML = `
-      <div class="muted">Speaking now</div>
-      <div class="big">${esc(nameOf(sp.current))}${mine ? ' (you)' : ''}</div>
+      <div class="muted">${esc(t('speech.now'))}</div>
+      <div class="big">${esc(nameOf(sp.current))}${mine ? ' ' + esc(t('speech.you')) : ''}</div>
       <div class="timer" id="timer"></div>
-      ${mine ? '<button id="endSpeech" class="primary">Finish my speech</button>' : ''}
+      ${mine ? `<button id="endSpeech" class="primary">${esc(t('speech.finish'))}</button>` : ''}
       <div class="order">${sp.order.map((pid, i) => `<span class="${i < sp.index ? 'done' : i === sp.index ? 'now' : ''}">${i + 1}. ${esc(nameOf(pid))}</span>`).join('')}</div>`;
     if (mine) $('#endSpeech').onclick = () => send('endSpeech');
     tickTimer();
@@ -278,15 +264,15 @@ function renderPhasePanel() {
     const voted = Object.keys(state.votes).length;
     const myVote = state.votes[me.id];
     panel.innerHTML = `
-      <div class="big">Who should leave the town?</div>
-      <div class="muted small-text">${voted}/${alive.length} voted. The top vote-getter leaves only with strictly more votes than anyone else and than “skip”.</div>
-      ${me.alive ? `<div>Your vote: <strong>${myVote ? (myVote === 'skip' ? 'Skip' : esc(nameOf(myVote))) : '—'}</strong></div>
-        <button id="skipVote" ${myVote === 'skip' ? 'disabled' : ''}>Vote to skip</button>` : '<div class="muted">You are dead and cannot vote.</div>'}`;
+      <div class="big">${esc(t('vote.title'))}</div>
+      <div class="muted small-text">${esc(t('vote.status', { voted, total: alive.length }))}</div>
+      ${me.alive ? `<div>${esc(t('vote.yours', { choice: myVote ? (myVote === 'skip' ? t('vote.skip') : nameOf(myVote)) : '—' }))}</div>
+        <button id="skipVote" ${myVote === 'skip' ? 'disabled' : ''}>${esc(t('vote.skipBtn'))}</button>` : `<div class="muted">${esc(t('vote.dead'))}</div>`}`;
     if (me.alive) $('#skipVote').onclick = () => send('vote', { targetId: 'skip' });
   } else if (state.phase === 'ended') {
     panel.innerHTML = `
-      <div class="winner">${state.winner === 'town' ? 'Town wins!' : 'Mafia wins!'}</div>
-      <div class="muted">All roles are revealed around the table.</div>`;
+      <div class="winner">${esc(t('end.' + state.winner))}</div>
+      <div class="muted">${esc(t('end.revealed'))}</div>`;
   }
 }
 
@@ -313,30 +299,30 @@ function renderSeats() {
     ].join(' ');
 
     const meta = [];
-    if (!p.connected) meta.push('offline');
-    if (p.id === state.hostId) meta.push('host');
-    if (!p.alive) meta.push('dead');
+    if (!p.connected) meta.push(t('tag.offline'));
+    if (p.id === state.hostId) meta.push(t('tag.host'));
+    if (!p.alive) meta.push(t('tag.dead'));
     let extra = '';
     if (night && night.mafiaVotes) {
       const pickers = Object.entries(night.mafiaVotes).filter(([, t]) => t === p.id).map(([m]) => nameOf(m));
-      if (pickers.length) extra = `Mafia pick: ${pickers.join(', ')}`;
+      if (pickers.length) extra = t('seat.mafiaPick', { names: pickers.join(', ') });
     }
     if (state.phase === 'vote') {
       const voters = Object.entries(state.votes).filter(([, t]) => t === p.id).map(([v]) => nameOf(v));
-      if (voters.length) extra = `${voters.length} vote${voters.length > 1 ? 's' : ''}: ${voters.join(', ')}`;
+      if (voters.length) extra = t('seat.votes', { n: voters.length, names: voters.join(', ') });
     }
 
     let btn = '';
     if (night && night.validTargets.includes(p.id)) {
-      btn = `<button data-night="${p.id}">${ACTION_VERB[me.role]}</button>`;
+      btn = `<button data-night="${p.id}">${esc(t('action.' + me.role))}</button>`;
     } else if (voting && p.alive && p.id !== me.id) {
-      btn = `<button data-vote="${p.id}">Vote</button>`;
+      btn = `<button data-vote="${p.id}">${esc(t('vote.btn'))}</button>`;
     }
 
     const showRole = p.id !== me.id || roleShown || state.phase === 'ended';
     const pos = seatPosition(i, n);
     return `<div class="${cls}" style="left:${pos.left}%;top:${pos.top}%">
-      <div class="name"><span class="num">${p.seat + 1}</span>${esc(p.name)}${p.id === me.id ? '<span class="tag">you</span>' : ''}</div>
+      <div class="name"><span class="num">${p.seat + 1}</span>${esc(p.name)}${p.id === me.id ? tagHtml('tag.you') : ''}</div>
       ${(showRole && p.role) || meta.length ? `<div class="meta">${showRole ? roleTag(p.role) : ''} ${esc(meta.join(' · '))}</div>` : ''}
       ${extra ? `<div class="votes">${esc(extra)}</div>` : ''}
       ${btn}
@@ -348,44 +334,33 @@ function renderSeats() {
   for (const b of $$('[data-vote]')) b.onclick = () => send('vote', { targetId: b.dataset.vote });
 }
 
+function hostAction(key, event, params = {}) {
+  return {
+    label: t(`host.${key}.label`, params),
+    title: t(`host.${key}.title`, params),
+    text: t(`host.${key}.text`, params),
+    event,
+  };
+}
+
 function hostActions() {
   switch (state.phase) {
-    case 'night': return [{
-      label: 'Force end night', title: 'End the night now?',
-      text: `${state.night.pendingCount} player(s) have not acted yet. Their actions will be skipped and the night will resolve immediately.`,
-      event: 'forceEndNight',
-    }];
+    case 'night': return [hostAction('endNight', 'forceEndNight', { n: state.night.pendingCount })];
     case 'speech': {
       const cur = state.speech.current;
       const list = [];
       if (cur !== state.me.id) {
-        list.push({
-          label: `End ${nameOf(cur)}'s speech`, title: `Cut off ${nameOf(cur)}?`,
-          text: `${nameOf(cur)}'s speech will end now and the next player will start speaking.`,
-          event: 'endSpeech',
-        });
+        list.push(hostAction('endSpeech', 'endSpeech', { name: nameOf(cur) }));
       }
-      list.push({
-        label: 'Skip to vote', title: 'Skip the rest of the discussion?',
-        text: 'Everyone who has not spoken yet will lose their turn and voting will open immediately.',
-        event: 'skipToVote',
-      });
+      list.push(hostAction('skipVote', 'skipToVote'));
       return list;
     }
     case 'vote': {
       const alive = state.players.filter(p => p.alive).length;
       const missing = alive - Object.keys(state.votes).length;
-      return [{
-        label: 'Close voting now', title: 'Close the vote now?',
-        text: `${missing} player(s) have not voted yet. The vote will be counted as it stands.`,
-        event: 'forceEndVote',
-      }];
+      return [hostAction('closeVote', 'forceEndVote', { n: missing })];
     }
-    case 'ended': return [{
-      label: 'Back to lobby', title: 'Return everyone to the lobby?',
-      text: 'The table resets for a new game. Offline players are removed.',
-      event: 'restart',
-    }];
+    case 'ended': return [hostAction('lobby', 'restart')];
     default: return [];
   }
 }
@@ -399,22 +374,21 @@ function renderHostPanel() {
 
 function renderRoleCard() {
   const me = state.me;
-  $('#roleToggle').textContent = roleShown ? 'Hide' : 'Show';
+  $('#roleToggle').textContent = t(roleShown ? 'ui.hide' : 'ui.show');
   const card = $('#roleCard');
   if (!roleShown) {
     card.className = 'muted small-text';
-    card.textContent = 'Hidden. Click “Show” when nobody is looking at your screen.';
+    card.textContent = t('ui.roleHidden');
     return;
   }
-  const info = state.roleInfo[me.role];
   const allies = me.role === 'mafia'
     ? state.players.filter(p => p.role === 'mafia' && p.id !== me.id).map(p => p.name)
     : [];
   card.className = '';
   card.innerHTML = `
-    <div class="role-name">${esc(info.name)} ${roleTag(me.role)}${me.alive ? '' : ' <span class="tag">dead</span>'}</div>
-    <p>${esc(info.blurb)}</p>
-    ${allies.length ? `<p>Fellow Mafia: <strong>${esc(allies.join(', '))}</strong></p>` : ''}`;
+    <div class="role-name">${esc(roleName(me.role))}${me.alive ? '' : tagHtml('tag.dead')}</div>
+    <p>${esc(t('blurb.' + me.role))}</p>
+    ${allies.length ? `<p>${esc(t('ui.fellowMafia', { names: allies.join(', ') }))}</p>` : ''}`;
 }
 
 function renderGame() {
@@ -422,9 +396,9 @@ function renderGame() {
   renderPhasePanel();
   renderSeats();
   renderHostPanel();
-  $('#log').innerHTML = state.log.slice().reverse().map(e => `<li>${esc(e.text)}</li>`).join('');
+  $('#log').innerHTML = state.log.slice().reverse().map(e => `<li>${esc(t(e.key, e.params))}</li>`).join('');
   $('#privateBox').classList.toggle('hidden', state.privateLog.length === 0);
-  $('#privateLog').innerHTML = state.privateLog.slice().reverse().map(e => `<li>Night ${e.day}: ${esc(e.text)}</li>`).join('');
+  $('#privateLog').innerHTML = state.privateLog.slice().reverse().map(e => `<li>${esc(t('ui.nightNote', { n: e.day, text: t(e.key, e.params) }))}</li>`).join('');
 }
 
 function tickTimer() {
@@ -440,7 +414,7 @@ function render() {
   // a pending host confirmation is void once the game has moved on or the user is no longer host
   if (pending && (!isHost() || pending.key !== momentKey())) {
     closeModal();
-    toast('The game moved on, so that host action was cancelled.');
+    toast(t('toast.hostCancelled'));
   }
   renderTopbar();
   if (!state || !state.me) return show('home');
@@ -449,4 +423,15 @@ function render() {
   renderGame();
 }
 
+// ---------- language ----------
+const langSelect = $('#langSelect');
+langSelect.innerHTML = Object.entries(LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+langSelect.value = lang;
+langSelect.onchange = () => {
+  setLang(langSelect.value);
+  applyStaticTranslations();
+  render();
+};
+
+applyStaticTranslations();
 render();

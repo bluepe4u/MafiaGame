@@ -51,7 +51,7 @@ io.on('connection', socket => {
 
   const ctx = () => {
     const room = rooms.get(socket.data.roomCode);
-    if (!room || !socket.data.playerId) throw new GameError('You are not in a room');
+    if (!room || !socket.data.playerId) throw new GameError('err.notInRoom');
     return { room, pid: socket.data.playerId };
   };
 
@@ -62,7 +62,8 @@ io.on('connection', socket => {
       if (typeof ack === 'function') ack({ ok: true });
     } catch (e) {
       if (!(e instanceof GameError)) console.error(e);
-      if (typeof ack === 'function') ack({ ok: false, error: e instanceof GameError ? e.message : 'Server error' });
+      const err = e instanceof GameError ? { key: e.key, params: e.params } : { key: 'err.server', params: {} };
+      if (typeof ack === 'function') ack({ ok: false, error: err });
     }
   });
 
@@ -78,14 +79,14 @@ io.on('connection', socket => {
 
   on('join', ({ code, name }) => {
     const room = rooms.get(String(code || '').toUpperCase().trim());
-    if (!room) throw new GameError('Room not found');
+    if (!room) throw new GameError('err.roomNotFound');
     attach(room, room.join(name));
   });
 
   on('resume', ({ code, token }) => {
     const room = rooms.get(String(code || '').toUpperCase());
     const player = room?.byToken(token);
-    if (!player) throw new GameError('Session expired');
+    if (!player) throw new GameError('err.sessionExpired');
     attach(room, player);
   });
 

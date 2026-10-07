@@ -28,10 +28,10 @@ test('default role counts are valid for 4..12 players', () => {
 test('lobby enforces max players and unique names', () => {
   const room = new Room({ code: 'X' });
   for (let i = 0; i < 12; i++) room.join('P' + i);
-  assert.throws(() => room.join('P99'), /full/);
+  assert.throws(() => room.join('P99'), /err\.roomFull/);
   const r2 = new Room({ code: 'Y' });
   r2.join('Bob');
-  assert.throws(() => r2.join('bob'), /taken/);
+  assert.throws(() => r2.join('bob'), /err\.nameTaken/);
 });
 
 test('start deals exactly the configured roles', () => {
@@ -52,7 +52,7 @@ test('mafia kill succeeds, then speeches start', () => {
   room.nightAction(by.D.id, by.F.id); // hooker visits F
   assert.strictEqual(by.E.alive, false);
   assert.strictEqual(room.phase, PHASES.SPEECH);
-  assert.match(room.privateLog[by.B.id][0].text, /A is MAFIA/);
+  assert.deepStrictEqual(room.privateLog[by.B.id][0].params, { name: 'A', mafia: true });
 });
 
 test('doctor save prevents the kill', () => {
@@ -62,7 +62,7 @@ test('doctor save prevents the kill', () => {
   room.nightAction(by.C.id, by.E.id);
   room.nightAction(by.D.id, by.F.id);
   assert.strictEqual(by.E.alive, true);
-  assert.match(room.log.at(-2).text, /nobody died/);
+  assert.strictEqual(room.log.at(-2).key, 'log.morningNobody');
 });
 
 test('hooker blocks the mafia kill', () => {
@@ -90,14 +90,14 @@ test('doctor cannot heal the same player twice in a row', () => {
   room.skipToVote(host.id);
   room.forceEndVote(host.id); // no votes -> nobody out
   assert.strictEqual(room.phase, PHASES.NIGHT);
-  assert.throws(() => room.nightAction(by.C.id, by.E.id), /Invalid target/);
+  assert.throws(() => room.nightAction(by.C.id, by.E.id), /err\.invalidTarget/);
   room.nightAction(by.C.id, by.C.id); // self-heal allowed
 });
 
 test('mafia cannot target fellow mafia; split mafia vote means no kill', () => {
   const names = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
   const { room, by, host } = setup(names, ['mafia', 'mafia', 'citizen', 'citizen', 'citizen', 'citizen', 'citizen']);
-  assert.throws(() => room.nightAction(by.A.id, by.B.id), /Invalid target/);
+  assert.throws(() => room.nightAction(by.A.id, by.B.id), /err\.invalidTarget/);
   room.nightAction(by.A.id, by.C.id);
   room.nightAction(by.B.id, by.D.id);
   assert.ok(by.C.alive && by.D.alive);
@@ -136,7 +136,7 @@ test('speaker can end own speech; others cannot', () => {
   room.forceEndNight(host.id);
   const [first, second] = room.speech.order;
   const other = room.speech.order.find(id => id !== first && id !== host.id);
-  assert.throws(() => room.endSpeech(other), /Only the speaker/);
+  assert.throws(() => room.endSpeech(other), /err\.speakerOrHost/);
   room.endSpeech(first);
   assert.strictEqual(room.speech.order[room.speech.index], second);
   void by;
@@ -216,7 +216,7 @@ test('doctor can self-heal only once per game', () => {
   room.forceEndNight(host.id);
   room.skipToVote(host.id);
   room.forceEndVote(host.id);
-  assert.throws(() => room.nightAction(by.C.id, by.C.id), /Invalid target/);
+  assert.throws(() => room.nightAction(by.C.id, by.C.id), /err\.invalidTarget/);
   assert.ok(!room.viewFor(by.C.id).night.validTargets.includes(by.C.id));
 });
 
@@ -235,15 +235,30 @@ test('first night without kill: mafia has no action, others still act', () => {
   room.start(ps[0].id);
   ps.forEach((p, i) => { p.role = SIX_ROLES[i]; });
   const [A, B, C, D, E] = ps;
-  assert.throws(() => room.nightAction(A.id, E.id), /no action tonight/);
+  assert.throws(() => room.nightAction(A.id, E.id), /err\.noActionTonight/);
   assert.deepStrictEqual(room.viewFor(A.id).night.validTargets, []);
   room.nightAction(B.id, A.id);
   room.nightAction(C.id, E.id);
   room.nightAction(D.id, E.id); // last actor -> night resolves without waiting for mafia
   assert.strictEqual(room.phase, PHASES.SPEECH);
   assert.ok(room.players.every(p => p.alive));
-  assert.match(room.privateLog[B.id][0].text, /MAFIA/);
+  assert.strictEqual(room.privateLog[B.id][0].params.mafia, true);
   room.skipToVote(A.id);
   room.forceEndVote(A.id);
   room.nightAction(A.id, E.id); // night 2: mafia kills again
+});
+
+test('log entries and errors are translation keys with params', () => {
+  const { room, by, host } = setup(SIX, SIX_ROLES);
+  room.nightAction(by.A.id, by.E.id);
+  room.forceEndNight(host.id);
+  assert.deepStrictEqual(room.log.find(e => e.key === 'log.morningKilled').params, { n: 1, name: 'E', role: 'citizen' });
+  room.skipToVote(host.id);
+  room.vote(by.B.id, by.A.id);
+  room.vote(by.C.id, by.A.id);
+  room.vote(by.D.id, 'skip');
+  room.forceEndVote(host.id);
+  assert.deepStrictEqual(room.log.find(e => e.key === 'log.noneVotedOut' || e.key === 'log.votedOut').params,
+    { name: 'A', role: 'mafia', tally: [['A', 2]], skips: 1 });
+  try { room.vote(by.B.id, by.A.id); assert.fail(); } catch (e) { assert.strictEqual(e.key, 'err.votingClosed'); }
 });

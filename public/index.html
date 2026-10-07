@@ -9,24 +9,25 @@
 <body>
   <header class="topbar">
     <div class="brand">MAFIA</div>
-    <div id="topRoom" class="hidden">Room <span id="topCode" class="code"></span></div>
+    <div id="topRoom" class="hidden"><span data-i18n="ui.room"></span> <span id="topCode" class="code"></span></div>
     <div id="topPhase" class="phase-title"></div>
     <div class="spacer"></div>
     <div id="topMe" class="muted"></div>
-    <button id="leaveBtn" class="ghost small hidden">Leave room</button>
+    <select id="langSelect" class="lang-select" aria-label="Language"></select>
+    <button id="leaveBtn" class="ghost small hidden" data-i18n="ui.leaveRoom"></button>
   </header>
 
   <main id="app">
     <section id="home" class="screen hidden">
       <div class="card home-card">
         <h1>Mafia</h1>
-        <p class="muted">4–12 players. Everyone joins from their own device.</p>
-        <label>Your name <input id="name" maxlength="20" autocomplete="nickname" autofocus></label>
-        <button id="createBtn" class="primary">Create a new room</button>
-        <div class="divider"><span>or join an existing one</span></div>
+        <p class="muted" data-i18n="ui.tagline"></p>
+        <label><span data-i18n="ui.yourName"></span> <input id="name" maxlength="20" autocomplete="nickname" autofocus></label>
+        <button id="createBtn" class="primary" data-i18n="ui.createRoom"></button>
+        <div class="divider"><span data-i18n="ui.orJoin"></span></div>
         <div class="row">
-          <input id="joinCode" placeholder="Room code" maxlength="4" autocapitalize="characters">
-          <button id="joinBtn">Join</button>
+          <input id="joinCode" data-i18n-placeholder="ui.roomCode" maxlength="4" autocapitalize="characters">
+          <button id="joinBtn" data-i18n="ui.join"></button>
         </div>
       </div>
     </section>
@@ -34,32 +35,32 @@
     <section id="lobby" class="screen hidden">
       <div class="lobby-grid">
         <div class="card">
-          <h2>Players <span id="lobbyCount" class="muted small-text"></span></h2>
+          <h2><span data-i18n="ui.players"></span> <span id="lobbyCount" class="muted small-text"></span></h2>
           <ul id="lobbyPlayers" class="list"></ul>
-          <p class="muted small-text">Share the room code <strong id="lobbyCode" class="code"></strong> so others can join.</p>
+          <p id="shareCode" class="muted small-text"></p>
         </div>
         <div class="card">
-          <h2>Game setup</h2>
+          <h2 data-i18n="ui.gameSetup"></h2>
           <div id="hostSettings" class="hidden">
             <div class="grid4">
-              <label>Mafia <input type="number" min="1" max="6" data-role="mafia"></label>
-              <label>Cop <input type="number" min="0" max="1" data-role="cop"></label>
-              <label>Doctor <input type="number" min="0" max="1" data-role="doctor"></label>
-              <label>Hooker <input type="number" min="0" max="1" data-role="hooker"></label>
+              <label><span data-i18n="role.mafia"></span> <input type="number" min="1" max="6" data-role="mafia"></label>
+              <label><span data-i18n="role.cop"></span> <input type="number" min="0" max="1" data-role="cop"></label>
+              <label><span data-i18n="role.doctor"></span> <input type="number" min="0" max="1" data-role="doctor"></label>
+              <label><span data-i18n="role.hooker"></span> <input type="number" min="0" max="1" data-role="hooker"></label>
             </div>
-            <button id="autoRoles" class="ghost small">Reset to auto roles for player count</button>
+            <button id="autoRoles" class="ghost small" data-i18n="ui.resetAuto"></button>
             <div class="grid2 settings-rest">
-              <label>Speech time (seconds) <input type="number" min="10" max="600" id="speechSeconds"></label>
+              <label><span data-i18n="ui.speechTime"></span> <input type="number" min="10" max="600" id="speechSeconds"></label>
               <div class="checks">
-                <label class="check"><input type="checkbox" id="firstNightKill"> Mafia kill on the first night</label>
-                <label class="check"><input type="checkbox" id="revealRole"> Reveal role on death</label>
+                <label class="check"><input type="checkbox" id="firstNightKill"> <span data-i18n="ui.firstNightKill"></span></label>
+                <label class="check"><input type="checkbox" id="revealRole"> <span data-i18n="ui.revealRole"></span></label>
               </div>
             </div>
           </div>
           <ul id="setupSummary" class="summary"></ul>
           <p id="roleError" class="error"></p>
-          <button id="startBtn" class="primary hidden">Start game…</button>
-          <p id="waitHost" class="muted hidden">Waiting for the host to start the game…</p>
+          <button id="startBtn" class="primary hidden" data-i18n="ui.startGame"></button>
+          <p id="waitHost" class="muted hidden" data-i18n="ui.waitHost"></p>
         </div>
       </div>
     </section>
@@ -75,16 +76,16 @@
         <aside class="sidebar">
           <div class="card">
             <div class="bar">
-              <h3>Your role</h3>
-              <button id="roleToggle" class="ghost small">Show</button>
+              <h3 data-i18n="ui.yourRole"></h3>
+              <button id="roleToggle" class="ghost small"></button>
             </div>
-            <div id="roleCard" class="muted small-text">Hidden. Click “Show” when nobody is looking at your screen.</div>
+            <div id="roleCard"></div>
           </div>
-          <div id="privateBox" class="card hidden"><h3>Your private notes</h3><ul id="privateLog" class="log"></ul></div>
-          <div class="card grow"><h3>Town log</h3><ul id="log" class="log"></ul></div>
+          <div id="privateBox" class="card hidden"><h3 data-i18n="ui.privateNotes"></h3><ul id="privateLog" class="log"></ul></div>
+          <div class="card grow"><h3 data-i18n="ui.townLog"></h3><ul id="log" class="log"></ul></div>
           <div id="hostPanel" class="card host-panel hidden">
-            <h3>Host controls</h3>
-            <p class="muted small-text">These affect everyone. Each one asks for confirmation and a press-and-hold.</p>
+            <h3 data-i18n="ui.hostControls"></h3>
+            <p class="muted small-text" data-i18n="ui.hostHint"></p>
             <div id="hostButtons" class="row"></div>
           </div>
         </aside>
@@ -97,13 +98,14 @@
       <h2 id="modalTitle"></h2>
       <p id="modalText"></p>
       <div class="row modal-actions">
-        <button id="modalCancel">Cancel</button>
-        <button id="modalHold" class="danger hold"><span class="hold-fill"></span><span class="hold-label">Press and hold to confirm</span></button>
+        <button id="modalCancel" data-i18n="ui.cancel"></button>
+        <button id="modalHold" class="danger hold"><span class="hold-fill"></span><span class="hold-label" data-i18n="ui.hold"></span></button>
       </div>
     </div>
   </div>
   <div id="toast" class="toast hidden"></div>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -123,3 +123,5 @@ button.danger { border-color: var(--accent); color: #ffb3ad; background: #2a1517
   .center-panel { position: static; transform: none; width: auto; grid-column: 1 / -1; order: -1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
   .seat { position: static; transform: none; width: auto; }
 }
+
+.lang-select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: .82rem; cursor: pointer; }
