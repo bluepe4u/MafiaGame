@@ -27,6 +27,11 @@ const DICT = {
     'blurb.hooker': 'Each night, visit one player. Their night action is cancelled.',
 
     'ui.language': 'Language',
+    'ui.eyebrow': 'A game of lies & deduction',
+    'ui.heroA': 'Trust',
+    'ui.heroB': 'no one.',
+    'ui.emptySeat': 'Empty seat',
+    'toast.copied': 'Room code copied',
     'ui.tagline': '4–12 players. Everyone joins from their own device.',
     'ui.yourName': 'Your name',
     'ui.createRoom': 'Create a new room',
@@ -199,6 +204,11 @@ const DICT = {
     'blurb.hooker': 'Каждую ночь навещайте одного игрока. Его ночное действие отменяется.',
 
     'ui.language': 'Язык',
+    'ui.eyebrow': 'Игра лжи и дедукции',
+    'ui.heroA': 'Не верь',
+    'ui.heroB': 'никому.',
+    'ui.emptySeat': 'Свободное место',
+    'toast.copied': 'Код комнаты скопирован',
     'ui.tagline': '4–12 игроков. Каждый заходит со своего устройства.',
     'ui.yourName': 'Ваше имя',
     'ui.createRoom': 'Создать комнату',

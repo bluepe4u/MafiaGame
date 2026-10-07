@@ -14,10 +14,10 @@ let roleShown = false;
 // ---------- utils ----------
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function toast(msg) {
+function toast(msg, kind = '') {
   const t = $('#toast');
   t.textContent = msg;
-  t.classList.remove('hidden');
+  t.className = `toast ${kind}`;
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => t.classList.add('hidden'), 3500);
 }
@@ -46,7 +46,24 @@ const playerById = id => state.players.find(p => p.id === id);
 const nameOf = id => (playerById(id) || {}).name || '?';
 const isHost = () => !!(state && state.me && state.hostId === state.me.id);
 const roleName = r => t('role.' + r);
-const tagHtml = key => `<span class="tag">${esc(t(key))}</span>`;
+const tagHtml = (key, cls = '') => `<span class="tag ${cls}">${esc(t(key))}</span>`;
+// initials on a colour derived from the name, so each player is recognisable at a glance
+function avatar(name) {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
+  const parts = name.trim().split(/\s+/);
+  const initials = (parts.length > 1 ? parts[0][0] + parts[1][0] : [...name].slice(0, 2).join('')).toUpperCase();
+  return `<span class="avatar" style="--h:${h}">${esc(initials)}</span>`;
+}
+const icon = paths => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
+const ICONS = {
+  night: icon('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
+  speech: icon('<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/>'),
+  vote: icon('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>'),
+  ended: icon('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>'),
+  eye: icon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>'),
+};
+const progress = (done, total) => `<div class="bar-track"><div class="bar-fill" style="width:${total ? (100 * done / total) : 0}%"></div></div>`;
 const roleTag = r => r ? `<span class="tag ${state.roleInfo[r].team}">${esc(roleName(r))}</span>` : '';
 // identifies "the moment" a host action was requested for; if it changes, the action is stale
 const momentKey = () => state ? `${state.phase}:${state.day}:${state.speech ? state.speech.index : ''}` : '';
@@ -140,6 +157,9 @@ $('#joinBtn').onclick = () => send('join', { name: myName(), code: $('#joinCode'
 $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joinBtn').click(); });
 
 // ---------- top bar ----------
+$('#topRoom').onclick = async () => {
+  try { await navigator.clipboard.writeText(state.code); toast(t('toast.copied'), 'info'); } catch {}
+};
 $('#leaveBtn').onclick = async () => {
   const inGame = state && state.phase !== 'lobby' && state.phase !== 'ended';
   if (inGame && !confirm(t('confirm.leave'))) return;
@@ -187,11 +207,13 @@ function setIfNotFocused(el, prop, value) {
 function renderLobby() {
   $('#shareCode').innerHTML = esc(t('ui.shareCode', { code: '\u0000' })).replace('\u0000', `<strong class="code">${esc(state.code)}</strong>`);
   $('#lobbyCount').textContent = t('ui.lobbyCount', { count: state.players.length, max: state.maxPlayers, min: state.minPlayers });
+  const empty = Math.max(0, state.minPlayers - state.players.length);
   $('#lobbyPlayers').innerHTML = state.players.map(p => `
-    <li>
-      <span>${esc(p.name)}${p.id === state.hostId ? tagHtml('tag.host') : ''}${p.id === state.me.id ? tagHtml('tag.you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
+    <li class="${p.connected ? '' : 'offline'}">
+      ${avatar(p.name)}
+      <span class="pname"><b>${esc(p.name)}</b>${p.id === state.hostId ? tagHtml('tag.host', 'host') : ''}${p.id === state.me.id ? tagHtml('tag.you', 'you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
       ${isHost() && p.id !== state.me.id ? `<button class="ghost small" data-kick="${p.id}">${esc(t('ui.remove'))}</button>` : ''}
-    </li>`).join('');
+    </li>`).join('') + `<li class="empty">${esc(t('ui.emptySeat'))}</li>`.repeat(empty);
   for (const b of $$('[data-kick]')) {
     b.onclick = () => confirmHost({
       title: t('host.kick.title', { name: nameOf(b.dataset.kick) }),
@@ -244,17 +266,18 @@ function renderPhasePanel() {
   if (state.phase === 'night') {
     const picked = state.night.myTarget;
     panel.innerHTML = `
+      <div class="phase-icon">${ICONS.night}</div>
       <div class="big">${esc(t('night.sleeps'))}</div>
       <div class="prompt">${esc(me.alive ? nightPrompt() : t('night.dead'))}</div>
-      ${picked ? `<div>${esc(t('night.yourChoice', { name: nameOf(picked) }))}<div class="muted small-text">${esc(t('night.canChange'))}</div></div>` : ''}
-      <div class="muted small-text">${esc(t('night.waiting', { n: state.night.pendingCount }))}</div>`;
+      ${picked ? `<div class="choice">${esc(t('night.yourChoice', { name: nameOf(picked) }))}<div class="muted small-text">${esc(t('night.canChange'))}</div></div>` : ''}
+      <div class="progress">${esc(t('night.waiting', { n: state.night.pendingCount }))}</div>`;
   } else if (state.phase === 'speech') {
     const sp = state.speech;
     const mine = sp.current === me.id;
     panel.innerHTML = `
-      <div class="muted">${esc(t('speech.now'))}</div>
+      <div class="muted small-text">${esc(t('speech.now'))}</div>
       <div class="big">${esc(nameOf(sp.current))}${mine ? ' ' + esc(t('speech.you')) : ''}</div>
-      <div class="timer" id="timer"></div>
+      <div class="timer-wrap" id="timerWrap"><div class="timer-ring"></div><div class="timer" id="timer"></div></div>
       ${mine ? `<button id="endSpeech" class="primary">${esc(t('speech.finish'))}</button>` : ''}
       <div class="order">${sp.order.map((pid, i) => `<span class="${i < sp.index ? 'done' : i === sp.index ? 'now' : ''}">${i + 1}. ${esc(nameOf(pid))}</span>`).join('')}</div>`;
     if (mine) $('#endSpeech').onclick = () => send('endSpeech');
@@ -264,13 +287,16 @@ function renderPhasePanel() {
     const voted = Object.keys(state.votes).length;
     const myVote = state.votes[me.id];
     panel.innerHTML = `
+      <div class="phase-icon">${ICONS.vote}</div>
       <div class="big">${esc(t('vote.title'))}</div>
+      ${progress(voted, alive.length)}
       <div class="muted small-text">${esc(t('vote.status', { voted, total: alive.length }))}</div>
-      ${me.alive ? `<div>${esc(t('vote.yours', { choice: myVote ? (myVote === 'skip' ? t('vote.skip') : nameOf(myVote)) : '—' }))}</div>
+      ${me.alive ? `<div class="choice">${esc(t('vote.yours', { choice: myVote ? (myVote === 'skip' ? t('vote.skip') : nameOf(myVote)) : '—' }))}</div>
         <button id="skipVote" ${myVote === 'skip' ? 'disabled' : ''}>${esc(t('vote.skipBtn'))}</button>` : `<div class="muted">${esc(t('vote.dead'))}</div>`}`;
     if (me.alive) $('#skipVote').onclick = () => send('vote', { targetId: 'skip' });
   } else if (state.phase === 'ended') {
     panel.innerHTML = `
+      <div class="phase-icon">${ICONS.ended}</div>
       <div class="winner">${esc(t('end.' + state.winner))}</div>
       <div class="muted">${esc(t('end.revealed'))}</div>`;
   }
@@ -322,8 +348,10 @@ function renderSeats() {
     const showRole = p.id !== me.id || roleShown || state.phase === 'ended';
     const pos = seatPosition(i, n);
     return `<div class="${cls}" style="left:${pos.left}%;top:${pos.top}%">
-      <div class="name"><span class="num">${p.seat + 1}</span>${esc(p.name)}${p.id === me.id ? tagHtml('tag.you') : ''}</div>
-      ${(showRole && p.role) || meta.length ? `<div class="meta">${showRole ? roleTag(p.role) : ''} ${esc(meta.join(' · '))}</div>` : ''}
+      <span class="num">${p.seat + 1}</span>
+      ${avatar(p.name)}
+      <div class="name">${esc(p.name)}</div>
+      ${(showRole && p.role) || meta.length || p.id === me.id ? `<div class="meta">${p.id === me.id ? tagHtml('tag.you', 'you') : ''}${showRole ? roleTag(p.role) : ''} ${esc(meta.join(' · '))}</div>` : ''}
       ${extra ? `<div class="votes">${esc(extra)}</div>` : ''}
       ${btn}
     </div>`;
@@ -376,9 +404,11 @@ function renderRoleCard() {
   const me = state.me;
   $('#roleToggle').textContent = t(roleShown ? 'ui.hide' : 'ui.show');
   const card = $('#roleCard');
+  const box = card.closest('.role-box');
+  box.className = 'card role-box' + (roleShown ? ` revealed ${state.roleInfo[me.role].team}` : '');
   if (!roleShown) {
-    card.className = 'muted small-text';
-    card.textContent = t('ui.roleHidden');
+    card.className = '';
+    card.innerHTML = `<div class="role-hidden">${ICONS.eye}<span>${esc(t('ui.roleHidden'))}</span></div>`;
     return;
   }
   const allies = me.role === 'mafia'
@@ -407,6 +437,9 @@ function tickTimer() {
   const left = Math.max(0, Math.ceil((state.speech.endsAt - (Date.now() + clockOffset)) / 1000));
   el.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
   el.classList.toggle('low', left <= 10);
+  const wrap = $('#timerWrap');
+  wrap.classList.toggle('low', left <= 10);
+  wrap.style.setProperty('--p', Math.min(1, left / state.settings.speechSeconds));
 }
 setInterval(tickTimer, 250);
 
@@ -417,6 +450,8 @@ function render() {
     toast(t('toast.hostCancelled'));
   }
   renderTopbar();
+  document.body.dataset.phase = state && state.me ? state.phase : 'home';
+  document.body.dataset.winner = (state && state.winner) || '';
   if (!state || !state.me) return show('home');
   if (state.phase === 'lobby') { show('lobby'); renderLobby(); return; }
   show('game');
