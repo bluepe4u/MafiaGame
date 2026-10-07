@@ -585,11 +585,19 @@ function renderPhasePanel() {
 
   if (state.phase === 'night') {
     const picked = state.night.myTarget;
+    // the Mafia and the Doctor may also choose nobody
+    const canPickNobody = state.night.hasAction && (me.role === 'mafia' || me.role === 'doctor');
+    const nobodyPickers = state.night.mafiaVotes
+      ? Object.entries(state.night.mafiaVotes).filter(([m, tgt]) => tgt === 'none' && m !== me.id).map(([m]) => nameOf(m))
+      : [];
     panel.innerHTML = `
       <div class="phase-icon">${ICONS.night}</div>
       <div class="big">${esc(t('night.sleeps'))}</div>
       <div class="prompt">${esc(me.alive ? nightPrompt() : t('night.dead'))}</div>
-      ${picked ? `<div class="choice">${esc(t('night.yourChoice', { name: nameOf(picked) }))}<div class="muted small-text">${esc(t('night.canChange'))}</div></div>` : ''}`;
+      ${picked ? `<div class="choice">${esc(picked === 'none' ? t('night.choseNobody') : t('night.yourChoice', { name: nameOf(picked) }))}<div class="muted small-text">${esc(t('night.canChange'))}</div></div>` : ''}
+      ${canPickNobody ? `<button id="nightNobody" ${picked === 'none' ? 'disabled' : ''}>${esc(t('night.nobody.' + me.role))}</button>` : ''}
+      ${nobodyPickers.length ? `<div class="muted small-text">${esc(t('night.mafiaNobody', { names: nobodyPickers.join(', ') }))}</div>` : ''}`;
+    if (canPickNobody) $('#nightNobody').onclick = () => send('nightAction', { targetId: 'none' });
   } else if (state.phase === 'speech') {
     const sp = state.speech;
     const mine = sp.current === me.id;
@@ -989,9 +997,10 @@ function openRecap() {
       for (const a of mafia) (byTarget[a.target] ||= []).push(a);
       for (const [target, acts] of Object.entries(byTarget)) {
         const names = acts.map(a => nameOf(a.actor) + (a.blocked ? ` (${t('recap.blocked')})` : '')).join(', ');
-        lines.push(['mafia', t('recap.mafia', { names, target: nameOf(target) })]);
+        lines.push(['mafia', target === 'none' ? t('recap.mafiaNobody', { names }) : t('recap.mafia', { names, target: nameOf(target) })]);
       }
       for (const a of h.actions.filter(x => x.role !== 'mafia')) {
+        if (a.target === 'none') { lines.push([a.role, t('recap.doctorNobody', { actor: nameOf(a.actor) })]); continue; }
         const params = { actor: nameOf(a.actor), target: nameOf(a.target) };
         if (a.role === 'cop') params.result = t(roleOf(a.target) === 'mafia' ? 'cop.mafia' : 'cop.town');
         lines.push([a.role, t('recap.' + a.role, params) + (a.blocked ? ` (${t('recap.blocked')})` : '')]);

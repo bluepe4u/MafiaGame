@@ -30,13 +30,15 @@ const PHASES = {
 const MIN_PLAYERS = 4;
 const MAX_PLAYERS = 12;
 const EXTEND_MS = 30 * 1000;
+const NOBODY = 'none'; // night choice for the Mafia (kill nobody) and the Doctor (heal nobody)
+const CAN_PICK_NOBODY = ['mafia', 'doctor'];
 const CHAT_MAX_LEN = 300;
 const CHAT_KEEP = 150; // messages kept per channel
 const CHAT_MIN_GAP_MS = 400; // per player, against accidental floods
 
 // Everything that makes up a room's state, for saving to disk and restoring after a restart.
 const SAVED_FIELDS = [
-  'code', 'players', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions', 'lastDoctorTarget',
+  'code', 'players', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions',
   'doctorSelfHealUsed', 'speech', 'lastStarterSeat', 'votes', 'voteEndsAt', 'log', 'privateLog', 'history', 'chat',
   'revealedRoles', 'ratings', 'winner', 'lastActivity',
 ];
@@ -109,7 +111,6 @@ class Room {
     this.day = 0;
     this.gameId = null;
     this.nightActions = {}; // playerId -> targetId
-    this.lastDoctorTarget = null;
     this.doctorSelfHealUsed = false;
     this.speech = null; // { order: [ids], index, endsAt }
     this.lastStarterSeat = null;
@@ -345,7 +346,7 @@ class Room {
       case ROLES.COP: return alive.filter(t => t.id !== p.id).map(t => t.id);
       case ROLES.HOOKER: return alive.filter(t => t.id !== p.id).map(t => t.id);
       case ROLES.DOCTOR: return alive
-        .filter(t => t.id !== this.lastDoctorTarget && !(t.id === p.id && this.doctorSelfHealUsed))
+        .filter(t => !(t.id === p.id && this.doctorSelfHealUsed))
         .map(t => t.id);
       default: return [];
     }
@@ -356,7 +357,8 @@ class Room {
     const p = this.player(pid);
     this.assert(p && p.alive, 'err.deadCannotAct');
     this.assert(this.hasNightAction(p), 'err.noActionTonight');
-    this.assert(this.validNightTargets(p).includes(targetId), 'err.invalidTarget');
+    const nobody = targetId === NOBODY && CAN_PICK_NOBODY.includes(p.role);
+    this.assert(nobody || this.validNightTargets(p).includes(targetId), 'err.invalidTarget');
     this.nightActions[pid] = targetId;
     const pending = this.actorsForNight().filter(a => !(a.id in this.nightActions));
     if (pending.length === 0) this.resolveNight();
@@ -393,15 +395,15 @@ class Room {
     let killTarget = null;
     const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]);
     if (ranked.length && (ranked.length === 1 || ranked[0][1] > ranked[1][1])) killTarget = ranked[0][0];
+    if (killTarget === NOBODY) killTarget = null; // most Mafia chose to kill nobody
 
     // 3. Doctor heals
     let healed = null;
     const docs = actionOf(ROLES.DOCTOR);
     for (const d of docs) {
-      if (!blocked.has(d.id)) healed = this.nightActions[d.id];
+      if (!blocked.has(d.id) && this.nightActions[d.id] !== NOBODY) healed = this.nightActions[d.id];
     }
-    // restrictions track who the doctor chose, even if blocked
-    this.lastDoctorTarget = docs.length ? this.nightActions[docs[0].id] : null;
+    // a self-heal is used up even if the Hooker blocked it
     if (docs.some(d => this.nightActions[d.id] === d.id)) this.doctorSelfHealUsed = true;
 
     // 4. Cop checks
@@ -731,4 +733,4 @@ class Room {
   }
 }
 
-module.exports = { Room, GameError, ROLES, ROLE_INFO, PHASES, defaultRoleCounts, validateRoleCounts, MIN_PLAYERS, MAX_PLAYERS, EXTEND_MS };
+module.exports = { NOBODY, Room, GameError, ROLES, ROLE_INFO, PHASES, defaultRoleCounts, validateRoleCounts, MIN_PLAYERS, MAX_PLAYERS, EXTEND_MS };

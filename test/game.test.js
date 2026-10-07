@@ -83,14 +83,14 @@ test('hooker blocks the doctor so the kill goes through', () => {
   assert.strictEqual(by.E.alive, false);
 });
 
-test('doctor cannot heal the same player twice in a row', () => {
+test('doctor can heal the same player night after night', () => {
   const { room, by, host } = setup(SIX, SIX_ROLES);
   room.nightAction(by.C.id, by.E.id);
   room.forceEndNight(host.id);
   room.skipToVote(host.id);
   room.forceEndVote(host.id); // no votes -> nobody out
   assert.strictEqual(room.phase, PHASES.NIGHT);
-  assert.throws(() => room.nightAction(by.C.id, by.E.id), /err\.invalidTarget/);
+  room.nightAction(by.C.id, by.E.id); // same player again: allowed
   room.nightAction(by.C.id, by.C.id); // self-heal allowed
 });
 
@@ -473,4 +473,24 @@ test('hooker visiting one of two mafia cancels the whole kill', () => {
   r2.room.nightAction(r2.by.B.id, r2.by.D.id);
   r2.room.nightAction(r2.by.C.id, r2.by.E.id); // hooker visits a citizen: kill goes through
   assert.strictEqual(r2.by.D.alive, false);
+});
+
+test('mafia can choose to kill nobody; doctor can choose to heal nobody', () => {
+  const { room, by } = setup(SIX, SIX_ROLES);
+  assert.throws(() => room.nightAction(by.B.id, 'none'), /err\.invalidTarget/, 'the cop must check someone');
+  room.nightAction(by.A.id, 'none');
+  room.nightAction(by.B.id, by.A.id);
+  room.nightAction(by.C.id, 'none');
+  room.nightAction(by.D.id, by.F.id);
+  assert.strictEqual(room.phase, PHASES.SPEECH);
+  assert.ok(room.alive().length === 6, 'nobody died');
+  assert.strictEqual(room.history[0].actions.find(a => a.role === 'doctor').target, 'none');
+
+  // two mafia: one picks a target, the other nobody -> tie, no kill
+  const roles = ['mafia', 'mafia', 'doctor', 'citizen', 'citizen', 'citizen', 'citizen'];
+  const r2 = setup(['A', 'B', 'C', 'D', 'E', 'F', 'G'], roles);
+  r2.room.nightAction(r2.by.A.id, r2.by.D.id);
+  r2.room.nightAction(r2.by.B.id, 'none');
+  r2.room.nightAction(r2.by.C.id, 'none');
+  assert.strictEqual(r2.by.D.alive, true);
 });
