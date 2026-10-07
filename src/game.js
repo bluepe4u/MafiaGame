@@ -35,11 +35,15 @@ const CAN_PICK_NOBODY = ['mafia', 'doctor'];
 const CHAT_MAX_LEN = 300;
 const CHAT_KEEP = 150; // messages kept per channel
 const CHAT_MIN_GAP_MS = 400; // per player, against accidental floods
+const MAX_SPECTATORS = 20;
+const COUNTDOWN_MS = 5000;
+const REACTIONS = ['👍', '👎', '😂', '🤔', '😱', '🤥', '🔥', '💀', '❤️', '👀'];
+const REACT_MIN_GAP_MS = 600;
 
 // Everything that makes up a room's state, for saving to disk and restoring after a restart.
 const SAVED_FIELDS = [
-  'code', 'players', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions', 'lastDoctorTarget',
-  'doctorSelfHealUsed', 'speech', 'lastStarterSeat', 'votes', 'voteEndsAt', 'log', 'privateLog', 'history', 'chat',
+  'code', 'players', 'spectators', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions', 'lastDoctorTarget',
+  'doctorSelfHealUsed', 'speech', 'lastStarterSeat', 'votes', 'voteEndsAt', 'nightEndsAt', 'log', 'privateLog', 'history', 'chat',
   'revealedRoles', 'ratings', 'winner', 'lastActivity',
 ];
 
@@ -89,19 +93,24 @@ class Room {
   // profileOf(userId) -> { avatar, score } for display; onRate(targetUserId, oldValue, newValue) records ratings
   constructor({
     code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout,
-    profileOf = () => null, onRate = () => {},
+    profileOf = () => null, onRate = () => {}, onGameEnd = () => {},
   } = {}) {
     this.code = code;
     this.profileOf = profileOf;
     this.onRate = onRate;
+    this.onGameEnd = onGameEnd; // ([{ userId, role, team, won, survived }]) for profile stats
     this.rng = rng;
     this.onChange = onChange;
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;
-    this.players = []; // { id, token, userId, name, seat, connected, alive, role }
+    this.players = []; // { id, token, userId, name, seat, connected, alive, role, ready }
+    this.spectators = []; // { id, token, userId, name, connected }: watch the game, see only public info
+    this.lastReactAt = {};
     this.hostId = null;
-    // voteSeconds: 0 means no time limit
-    this.settings = { speechSeconds: 60, voteSeconds: 360, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null };
+    // voteSeconds / nightSeconds: 0 means no time limit
+    this.settings = {
+      speechSeconds: 60, voteSeconds: 360, nightSeconds: 240, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null,
+    };
     this.resetGameState();
     this.lastActivity = Date.now();
   }
@@ -117,6 +126,8 @@ class Room {
     this.lastStarterSeat = null;
     this.votes = {}; // voterId -> targetId | 'skip'
     this.voteEndsAt = null;
+    this.nightEndsAt = null;
+    this.countdownEndsAt = null; // the host pressed Start: the game begins unless someone cancels
     // town: everyone (lobby, day, after the game); mafia: the Mafia, at night; dead: players who are out
     this.chat = { town: [], mafia: [], dead: [] };
     this.lastChatAt = {};
@@ -148,7 +159,7 @@ class Room {
     for (const k of SAVED_FIELDS) if (data[k] !== undefined) room[k] = data[k];
     room.settings = { ...defaults, ...room.settings }; // settings added since the room was saved
     room.chat = { town: [], mafia: [], dead: [], ...room.chat };
-    for (const p of room.players) p.connected = false;
+    for (const p of [...room.players, ...room.spectators]) p.connected = false;
     // the server was down for a while: give the current speaker / the vote at least a few seconds back
     const atLeast = Date.now() + 15 * 1000;
     if (room.phase === PHASES.SPEECH && room.speech?.endsAt) {
@@ -157,6 +168,9 @@ class Room {
     } else if (room.phase === PHASES.VOTE && room.voteEndsAt) {
       room.voteEndsAt = Math.max(room.voteEndsAt, atLeast);
       room.scheduleVoteTimer();
+    } else if (room.phase === PHASES.NIGHT && room.nightEndsAt) {
+      room.nightEndsAt = Math.max(room.nightEndsAt, atLeast);
+      room.scheduleNightTimer();
     }
     return room;
   }
@@ -171,12 +185,21 @@ class Room {
     return this.players.find(p => p.id === pid);
   }
 
+  spectator(pid) {
+    return this.spectators.find(p => p.id === pid);
+  }
+
+  // a player or a spectator
+  member(pid) {
+    return this.player(pid) || this.spectator(pid);
+  }
+
   byToken(token) {
-    return this.players.find(p => p.token === token);
+    return [...this.players, ...this.spectators].find(p => p.token === token);
   }
 
   byUser(userId) {
-    return userId ? this.players.find(p => p.userId === userId) : null;
+    return userId ? [...this.players, ...this.spectators].find(p => p.userId === userId) : null;
   }
 
   alive() {
@@ -201,42 +224,118 @@ class Room {
   }
 
   // ---------- lobby ----------
-  join(name, { userId = null } = {}) {
+  // Join to play, or to watch: anyone arriving while a game is running (or a full room) watches.
+  join(name, { userId = null, spectate = false } = {}) {
     name = String(name || '').trim().slice(0, 20);
     this.assert(name, 'err.nameRequired');
-    this.assert(this.phase === PHASES.LOBBY, 'err.gameInProgress');
-    this.assert(this.players.length < MAX_PLAYERS, 'err.roomFull', { max: MAX_PLAYERS });
-    this.assert(!this.players.some(p => p.name.toLowerCase() === name.toLowerCase()), 'err.nameTaken');
-    const p = { id: id(), token: id(16), userId, name, seat: this.players.length, connected: true, alive: true, role: null };
+    this.assert(![...this.players, ...this.spectators].some(p => p.name.toLowerCase() === name.toLowerCase()), 'err.nameTaken');
+    const watch = spectate || this.phase !== PHASES.LOBBY || this.players.length >= MAX_PLAYERS;
+    if (watch) {
+      this.assert(this.spectators.length < MAX_SPECTATORS, 'err.roomFull', { max: MAX_SPECTATORS });
+      const sp = { id: id(), token: id(16), userId, name, connected: true };
+      this.spectators.push(sp);
+      if (!this.hostId) this.hostId = sp.id;
+      this.touch();
+      return sp;
+    }
+    const p = { id: id(), token: id(16), userId, name, seat: this.players.length, connected: true, alive: true, role: null, ready: false };
     this.players.push(p);
     if (!this.hostId) this.hostId = p.id;
+    this.cancelCountdown();
     this.touch();
     return p;
   }
 
-  leave(pid) {
-    const p = this.player(pid);
-    if (!p) return;
-    if (this.phase === PHASES.LOBBY) {
-      this.players = this.players.filter(x => x.id !== pid);
-      this.players.forEach((x, i) => { x.seat = i; });
-      if (this.hostId === pid) this.hostId = this.players[0]?.id || null;
-      // a role setup made for a different player count is likely invalid now
-      if (this.settings.roleCounts && validateRoleCounts(this.settings.roleCounts, this.players.length)) {
-        this.settings.roleCounts = null;
-      }
-    } else {
-      p.connected = false;
+  // In the lobby, move between playing and watching.
+  setSpectating(pid, watch) {
+    this.assert(this.phase === PHASES.LOBBY, 'err.settingsLobbyOnly');
+    const p = this.member(pid);
+    this.assert(p, 'err.notInRoom');
+    if (watch && this.player(pid)) {
+      this.assert(this.spectators.length < MAX_SPECTATORS, 'err.roomFull', { max: MAX_SPECTATORS });
+      this.removePlayer(pid);
+      this.spectators.push({ id: p.id, token: p.token, userId: p.userId, name: p.name, connected: p.connected });
+    } else if (!watch && this.spectator(pid)) {
+      this.assert(this.players.length < MAX_PLAYERS, 'err.roomFull', { max: MAX_PLAYERS });
+      this.spectators = this.spectators.filter(x => x.id !== pid);
+      this.players.push({ ...p, seat: this.players.length, alive: true, role: null, ready: false });
     }
+    this.cancelCountdown();
+    this.touch();
+  }
+
+  // lobby only: take a player out and close up the seats
+  removePlayer(pid) {
+    this.players = this.players.filter(x => x.id !== pid);
+    this.players.forEach((x, i) => { x.seat = i; });
+    // a role setup made for a different player count is likely invalid now
+    if (this.settings.roleCounts && validateRoleCounts(this.settings.roleCounts, this.players.length)) {
+      this.settings.roleCounts = null;
+    }
+  }
+
+  setReady(pid, ready) {
+    this.assert(this.phase === PHASES.LOBBY, 'err.settingsLobbyOnly');
+    const p = this.player(pid);
+    this.assert(p, 'err.notInRoom');
+    p.ready = !!ready;
+    this.touch();
+  }
+
+  // ---------- start countdown ----------
+  startCountdown(pid) {
+    this.requireHost(pid);
+    this.assert(this.phase === PHASES.LOBBY, 'err.gameStarted');
+    this.assert(this.players.length >= MIN_PLAYERS, 'err.needPlayers', { min: MIN_PLAYERS });
+    const err = validateRoleCounts(this.effectiveRoleCounts(), this.players.length);
+    this.assert(!err, err?.key, err?.params);
+    this.countdownEndsAt = Date.now() + COUNTDOWN_MS;
+    this.scheduleTimer(PHASES.LOBBY, this.countdownEndsAt, () => {
+      this.countdownEndsAt = null;
+      try {
+        this.start(this.hostId);
+      } catch {
+        this.touch(); // e.g. someone left at the last second: just stay in the lobby
+      }
+    });
+    this.touch();
+  }
+
+  // anyone in the room can call "wait!"; joining, leaving and settings changes cancel it too
+  cancelCountdown(pid) {
+    if (pid !== undefined) this.assert(this.member(pid), 'err.notInRoom');
+    if (!this.countdownEndsAt) return;
+    this.countdownEndsAt = null;
+    this.cancelTimer();
+    if (pid !== undefined) {
+      this.addPublic('log.countdownCancelled', { name: this.member(pid).name });
+      this.touch();
+    }
+  }
+
+  leave(pid) {
+    if (this.spectator(pid)) {
+      this.spectators = this.spectators.filter(x => x.id !== pid);
+    } else {
+      const p = this.player(pid);
+      if (!p) return;
+      if (this.phase === PHASES.LOBBY) {
+        this.removePlayer(pid);
+        this.cancelCountdown();
+      } else {
+        p.connected = false;
+      }
+    }
+    if (this.hostId === pid && !this.member(pid)) this.hostId = (this.players[0] || this.spectators[0])?.id || null;
     this.touch();
   }
 
   setConnected(pid, connected) {
-    const p = this.player(pid);
+    const p = this.member(pid);
     if (!p) return;
     p.connected = connected;
     if (!connected && this.phase === PHASES.LOBBY && this.hostId === pid) {
-      const next = this.players.find(x => x.connected);
+      const next = [...this.players, ...this.spectators].find(x => x.connected);
       if (next) this.hostId = next.id;
     }
     this.touch();
@@ -250,12 +349,14 @@ class Room {
     this.requireHost(pid);
     this.assert(this.phase === PHASES.LOBBY, 'err.kickLobbyOnly');
     this.assert(targetId !== pid, 'err.kickSelf');
+    this.assert(this.member(targetId), 'err.invalidTarget');
     this.leave(targetId);
   }
 
   updateSettings(pid, s) {
     this.requireHost(pid);
     this.assert(this.phase === PHASES.LOBBY, 'err.settingsLobbyOnly');
+    this.cancelCountdown();
     if (s.speechSeconds !== undefined) {
       const v = Number(s.speechSeconds);
       this.assert(Number.isInteger(v) && v >= 10 && v <= 600, 'err.speechRange', { min: 10, max: 600 });
@@ -265,6 +366,11 @@ class Room {
       const v = Number(s.voteSeconds);
       this.assert(Number.isInteger(v) && (v === 0 || (v >= 30 && v <= 900)), 'err.voteRange', { min: 30, max: 900 });
       this.settings.voteSeconds = v;
+    }
+    if (s.nightSeconds !== undefined) {
+      const v = Number(s.nightSeconds);
+      this.assert(Number.isInteger(v) && (v === 0 || (v >= 30 && v <= 900)), 'err.nightRange', { min: 30, max: 900 });
+      this.settings.nightSeconds = v;
     }
     if (s.revealRoleOnDeath !== undefined) this.settings.revealRoleOnDeath = !!s.revealRoleOnDeath;
     if (s.firstNightKill !== undefined) this.settings.firstNightKill = !!s.firstNightKill;
@@ -299,6 +405,7 @@ class Room {
     const shuffled = shuffle(deck, this.rng);
     this.players.forEach((p, i) => { p.role = shuffled[i]; p.alive = true; });
 
+    this.cancelCountdown();
     this.gameId = id();
     this.lastStarterSeat = null;
     this.addPublic('log.gameBegun');
@@ -309,8 +416,9 @@ class Room {
     this.requireHost(pid);
     this.assert(this.phase === PHASES.ENDED, 'err.gameRunning');
     this.players = this.players.filter(p => p.connected);
-    this.players.forEach((p, i) => { p.seat = i; p.alive = true; p.role = null; });
-    if (!this.player(this.hostId)) this.hostId = this.players[0]?.id || null;
+    this.spectators = this.spectators.filter(p => p.connected);
+    this.players.forEach((p, i) => { p.seat = i; p.alive = true; p.role = null; p.ready = false; });
+    if (!this.member(this.hostId)) this.hostId = (this.players[0] || this.spectators[0])?.id || null;
     this.resetGameState();
     this.touch();
   }
@@ -336,8 +444,18 @@ class Room {
     this.nightActions = {};
     this.votes = {};
     this.speech = null;
+    this.cancelTimer();
+    this.nightEndsAt = this.settings.nightSeconds ? Date.now() + this.settings.nightSeconds * 1000 : null;
+    if (this.nightEndsAt) this.scheduleNightTimer();
     this.addPublic(this.mafiaKillsTonight() ? 'log.nightFalls' : 'log.nightFallsNoKill', { n: this.day });
     this.touch();
+  }
+
+  scheduleNightTimer() {
+    this.scheduleTimer(PHASES.NIGHT, this.nightEndsAt, () => {
+      this.addPublic('log.nightTimeUp');
+      this.resolveNight();
+    });
   }
 
   validNightTargets(p) {
@@ -373,6 +491,8 @@ class Room {
   }
 
   resolveNight() {
+    this.cancelTimer();
+    this.nightEndsAt = null;
     const actors = this.actorsForNight();
     const actionOf = role => actors.filter(a => a.role === role && a.id in this.nightActions);
 
@@ -597,6 +717,7 @@ class Room {
   canChat(p, channel) {
     if (!p) return false;
     if (channel === 'mafia') return p.role === ROLES.MAFIA && p.alive && this.phase === PHASES.NIGHT;
+    // the graveyard: dead players and spectators, who can't influence the living
     if (channel === 'dead') return !p.alive && this.inGame();
     if (channel !== 'town') return false;
     if (this.phase === PHASES.LOBBY || this.phase === PHASES.ENDED) return true;
@@ -604,7 +725,7 @@ class Room {
   }
 
   sendChat(pid, channel, text) {
-    const p = this.player(pid);
+    const p = this.member(pid); // spectators talk in the lobby, after the game, and in the graveyard
     this.assert(this.canChat(p, channel), 'err.chatClosed');
     text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX_LEN);
     this.assert(text, 'err.chatEmpty');
@@ -644,6 +765,21 @@ class Room {
     this.touch();
   }
 
+  // ---------- emoji reactions ----------
+  // Not stored: the server just relays them. Dead players and spectators can't react during
+  // a game (they could hint at roles), and nobody reacts at night.
+  react(pid, emoji) {
+    const p = this.member(pid);
+    this.assert(p && REACTIONS.includes(emoji), 'err.invalidTarget');
+    const open = this.phase === PHASES.LOBBY || this.phase === PHASES.ENDED
+      || ((this.phase === PHASES.SPEECH || this.phase === PHASES.VOTE) && p.alive === true);
+    this.assert(open, 'err.reactClosed');
+    const now = Date.now();
+    this.assert(now - (this.lastReactAt[pid] || 0) >= REACT_MIN_GAP_MS, 'err.chatTooFast');
+    this.lastReactAt[pid] = now;
+    return { from: pid, emoji, id: id(4) };
+  }
+
   // ---------- win ----------
   checkWin() {
     const alive = this.alive();
@@ -659,13 +795,17 @@ class Room {
     this.phase = PHASES.ENDED;
     this.speech = null;
     this.addPublic(winner === 'town' ? 'log.townWins' : 'log.mafiaWins');
+    this.onGameEnd(this.players.filter(p => p.userId && p.role).map(p => ({
+      userId: p.userId, role: p.role, team: ROLE_INFO[p.role].team, won: ROLE_INFO[p.role].team === winner, survived: p.alive,
+    })));
     this.touch();
     return true;
   }
 
   // ---------- per-player view ----------
   viewFor(pid) {
-    const me = this.player(pid);
+    const me = this.member(pid);
+    const watching = !!this.spectator(pid);
     const ended = this.phase === PHASES.ENDED;
     const iAmMafia = me?.role === ROLES.MAFIA;
     const roleVisible = p =>
@@ -693,9 +833,19 @@ class Room {
           avatar: profile?.avatar || null,
           score: profile ? profile.score : null,
           rateable: !!p.userId,
+          ready: !!p.ready,
         };
       }),
-      me: me ? { id: me.id, name: me.name, role: me.role, alive: me.alive, revealed: !!this.revealedRoles[pid], rateable: !!me.userId } : null,
+      spectators: this.spectators.map(p => {
+        const profile = p.userId ? this.profileOf(p.userId) : null;
+        return { id: p.id, name: p.name, connected: p.connected, avatar: profile?.avatar || null, score: profile ? profile.score : null };
+      }),
+      countdownEndsAt: this.countdownEndsAt,
+      nightEndsAt: this.phase === PHASES.NIGHT ? this.nightEndsAt : null,
+      me: me ? {
+        id: me.id, name: me.name, role: watching ? null : me.role, alive: watching ? false : me.alive, spectator: watching,
+        revealed: !!this.revealedRoles[pid], rateable: !watching && !!me.userId,
+      } : null,
       myRatings: (me && this.ratings[pid]) || {},
       roleInfo: ROLE_INFO,
       log: this.log,
@@ -711,7 +861,7 @@ class Room {
       },
     };
 
-    if (this.phase === PHASES.NIGHT && me) {
+    if (this.phase === PHASES.NIGHT && me && !watching) {
       view.night = {
         myTarget: this.nightActions[pid] || null,
         validTargets: me.alive && this.hasNightAction(me) ? this.validNightTargets(me) : [],
@@ -736,4 +886,4 @@ class Room {
   }
 }
 
-module.exports = { NOBODY, Room, GameError, ROLES, ROLE_INFO, PHASES, defaultRoleCounts, validateRoleCounts, MIN_PLAYERS, MAX_PLAYERS, EXTEND_MS };
+module.exports = { REACTIONS, NOBODY, Room, GameError, ROLES, ROLE_INFO, PHASES, defaultRoleCounts, validateRoleCounts, MIN_PLAYERS, MAX_PLAYERS, EXTEND_MS };

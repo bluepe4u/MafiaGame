@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { Room, PHASES, defaultRoleCounts, validateRoleCounts, EXTEND_MS } = require('../src/game');
+const { Room, PHASES, defaultRoleCounts, validateRoleCounts, EXTEND_MS, REACTIONS } = require('../src/game');
 
 // Deterministic room: no real timers, roles dealt in a known order.
 function setup(names, roles) {
@@ -28,7 +28,9 @@ test('default role counts are valid for 4..12 players', () => {
 test('lobby enforces max players and unique names', () => {
   const room = new Room({ code: 'X' });
   for (let i = 0; i < 12; i++) room.join('P' + i);
-  assert.throws(() => room.join('P99'), /err\.roomFull/);
+  room.join('P99'); // a full room: the 13th watches instead
+  assert.strictEqual(room.players.length, 12);
+  assert.strictEqual(room.spectators[0].name, 'P99');
   const r2 = new Room({ code: 'Y' });
   r2.join('Bob');
   assert.throws(() => r2.join('bob'), /err\.nameTaken/);
@@ -498,4 +500,100 @@ test('mafia can choose to kill nobody; doctor can choose to heal nobody', () => 
   r2.room.nightAction(r2.by.B.id, 'none');
   r2.room.nightAction(r2.by.C.id, 'none');
   assert.strictEqual(r2.by.D.alive, true);
+});
+
+test('spectators: join any time, see only public info, chat in the graveyard', () => {
+  const { room, by } = setup(SIX, SIX_ROLES);
+  const sp = room.join('Watcher');
+  assert.ok(room.spectator(sp.id), 'joining mid-game means watching');
+  const view = room.viewFor(sp.id);
+  assert.strictEqual(view.me.spectator, true);
+  assert.ok(view.players.every(p => p.role === null), 'no roles for spectators');
+  assert.strictEqual(view.night, undefined);
+  assert.strictEqual(view.chat.mafia, null);
+  assert.deepStrictEqual(view.chat.canPost, { town: false, mafia: false, dead: true });
+  room.sendChat(sp.id, 'dead', 'popcorn time');
+  assert.throws(() => room.sendChat(sp.id, 'town', 'psst'), /err\.chatClosed/);
+  assert.throws(() => room.revealRole(sp.id), /err\.chatClosed/);
+  assert.throws(() => room.nightAction(sp.id, by.A.id), /err\.deadCannotAct/);
+  assert.strictEqual(room.byToken(sp.token).id, sp.id, 'can resume after a refresh');
+});
+
+test('lobby: switch between playing and watching, ready marks', () => {
+  const room = new Room({ code: 'L', setTimer: () => 0, clearTimer: () => {} });
+  const [a, b] = ['A', 'B'].map(n => room.join(n));
+  const w = room.join('W', { spectate: true });
+  assert.strictEqual(room.players.length, 2);
+  room.setReady(b.id, true);
+  assert.strictEqual(room.viewFor(a.id).players.find(p => p.id === b.id).ready, true);
+  room.setSpectating(b.id, true);
+  assert.deepStrictEqual(room.players.map(p => p.name), ['A']);
+  room.setSpectating(w.id, false);
+  assert.deepStrictEqual(room.players.map(p => [p.name, p.seat]), [['A', 0], ['W', 1]]);
+  assert.throws(() => room.setReady(b.id, true), /err\.notInRoom/, 'spectators are not players');
+});
+
+test('start countdown: starts the game unless someone cancels; changes cancel it', () => {
+  const timers = [];
+  const room = new Room({ code: 'C', setTimer: (fn, ms) => timers.push({ fn, ms }), clearTimer: () => {}, rng: () => 0 });
+  const ps = SIX.map(n => room.join(n));
+  assert.throws(() => room.startCountdown(ps[1].id), /err\.hostOnly/);
+  room.startCountdown(ps[0].id);
+  assert.ok(room.countdownEndsAt);
+  room.cancelCountdown(ps[3].id);
+  assert.strictEqual(room.countdownEndsAt, null);
+  timers.at(-1).fn(); // the cancelled countdown's timer does nothing
+  assert.strictEqual(room.phase, PHASES.LOBBY);
+  room.startCountdown(ps[0].id);
+  room.updateSettings(ps[0].id, { speechSeconds: 45 });
+  assert.strictEqual(room.countdownEndsAt, null, 'settings change cancels');
+  room.startCountdown(ps[0].id);
+  timers.at(-1).fn();
+  assert.strictEqual(room.phase, PHASES.NIGHT);
+});
+
+test('night timer resolves the night when it runs out', () => {
+  const timers = [];
+  const room = new Room({ code: 'N', setTimer: (fn, ms) => timers.push({ fn, ms }), clearTimer: () => {}, rng: () => 0 });
+  const ps = SIX.map(n => room.join(n));
+  assert.strictEqual(room.settings.nightSeconds, 240);
+  assert.throws(() => room.updateSettings(ps[0].id, { nightSeconds: 10 }), /err\.nightRange/);
+  room.start(ps[0].id);
+  assert.ok(timers.at(-1).ms > 239000);
+  timers.at(-1).fn();
+  assert.strictEqual(room.phase, PHASES.SPEECH);
+  assert.ok(room.log.some(e => e.key === 'log.nightTimeUp'));
+});
+
+test('reactions: living players by day, everyone in the lobby; never at night', () => {
+  const { room, by, host } = setup(SIX, SIX_ROLES);
+  const sp = room.join('Watcher');
+  assert.throws(() => room.react(by.A.id, '😂'), /err\.reactClosed/, 'not at night');
+  room.nightAction(by.A.id, by.E.id);
+  room.nightAction(by.B.id, by.A.id);
+  room.nightAction(by.C.id, by.F.id);
+  room.nightAction(by.D.id, by.F.id);
+  assert.strictEqual(room.react(by.B.id, REACTIONS[0]).emoji, REACTIONS[0]);
+  assert.throws(() => room.react(by.B.id, REACTIONS[1]), /err\.chatTooFast/);
+  assert.throws(() => room.react(by.E.id, '😂'), /err\.reactClosed/, 'the dead cannot react');
+  assert.throws(() => room.react(sp.id, '😂'), /err\.reactClosed/, 'spectators cannot react mid-game');
+  assert.throws(() => room.react(by.C.id, 'lol'), /err\.invalidTarget/);
+  assert.ok(host);
+});
+
+test('the end of a game is reported for profile stats', () => {
+  const results = [];
+  const room = new Room({ code: 'S', setTimer: () => 0, clearTimer: () => {}, rng: () => 0, onGameEnd: r => results.push(...r) });
+  const ps = SIX.map(n => room.join(n, { userId: 'u' + n }));
+  room.updateSettings(ps[0].id, { roleCounts: { mafia: 1, cop: 0, doctor: 0, hooker: 0 } });
+  room.start(ps[0].id);
+  const mafia = room.players.find(p => p.role === 'mafia');
+  room.forceEndNight(ps[0].id);
+  room.skipToVote(ps[0].id);
+  for (const p of room.alive()) if (p.id !== mafia.id) room.vote(p.id, mafia.id);
+  room.forceEndVote(ps[0].id);
+  assert.strictEqual(results.length, 6);
+  const m = results.find(r => r.userId === mafia.userId);
+  assert.deepStrictEqual(m, { userId: mafia.userId, role: 'mafia', team: 'mafia', won: false, survived: false });
+  assert.ok(results.filter(r => r.team === 'town').every(r => r.won));
 });

@@ -78,6 +78,7 @@ const ICONS = {
   speech: icon('<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/>'),
   vote: icon('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>'),
   ended: icon('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>'),
+  eyeOpen: icon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   eye: icon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>'),
   bell: icon('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
   bellOff: icon('<path d="M8.7 3A6 6 0 0 1 18 8c0 2.9.5 5 1.2 6.5M17 17H3s3-2 3-9c0-.8.1-1.5.4-2.2"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0M3 3l18 18"/>'),
@@ -190,6 +191,7 @@ function leftRoom() {
 if (urlRoom) $('#joinCode').value = urlRoom;
 $('#createBtn').onclick = () => send('create');
 $('#joinBtn').onclick = () => send('join', { code: $('#joinCode').value });
+$('#watchBtn').onclick = () => send('join', { code: $('#joinCode').value, spectate: true });
 $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joinBtn').click(); });
 
 // ---------- accounts ----------
@@ -252,6 +254,19 @@ function renderAccount() {
   $('#profileLikes').innerHTML = `${ICONS.up}${esc(t('profile.likes', { n: account.likes }))}`;
   $('#profileDislikes').innerHTML = `${ICONS.down}${esc(t('profile.dislikes', { n: account.dislikes }))}`;
   const current = tierOf(account.score);
+  const st = account.stats || {};
+  const pct = (w, g) => g ? `${Math.round((100 * w) / g)}%` : '—';
+  $('#profileStats').innerHTML = !st.games ? `<p class="muted small-text">${esc(t('stats.none'))}</p>` : `
+    <div class="stat-grid">
+      <div class="stat"><b>${st.games}</b><span>${esc(t('stats.games'))}</span></div>
+      <div class="stat"><b>${pct(st.wins, st.games)}</b><span>${esc(t('stats.winRate'))}</span></div>
+      <div class="stat"><b>${pct(st.survived, st.games)}</b><span>${esc(t('stats.survived'))}</span></div>
+      <div class="stat mafia"><b>${pct(st.mafiaWins, st.mafiaGames)}</b><span>${esc(t('stats.asMafia'))} · ${esc(t('stats.record', { w: st.mafiaWins, g: st.mafiaGames }))}</span></div>
+      <div class="stat town"><b>${pct(st.townWins, st.townGames)}</b><span>${esc(t('stats.asTown'))} · ${esc(t('stats.record', { w: st.townWins, g: st.townGames }))}</span></div>
+    </div>
+    <div class="stat-roles"><span class="muted small-text">${esc(t('stats.roles'))}</span>
+      ${Object.entries(st.roles).sort((a, b) => b[1] - a[1]).map(([r, n]) => `<span class="tag ${r === 'mafia' ? 'mafia' : 'town'}">${esc(roleName(r))} ×${n}</span>`).join('')}
+    </div>`;
   $('#tierLadder').innerHTML = TIER_MIN.map((min, i) => `<span class="status t${i} ${i === current ? 'current' : ''}">${esc(t('tier.' + i))}</span>`).join('');
 }
 
@@ -335,6 +350,10 @@ function renderTopbar() {
   $('#topPhase').textContent = inRoom ? phaseTitle() : '';
   $('#topMe').textContent = inRoom ? t(isHost() ? 'ui.playingAsHost' : 'ui.playingAs', { name: state.me.name }) : '';
   if (inRoom) $('#topCode').textContent = state.code;
+  const watchers = inRoom ? state.spectators : [];
+  $('#topWatchers').classList.toggle('hidden', !watchers.length);
+  $('#topWatchers').innerHTML = `${ICONS.eyeOpen}<span>${watchers.length}</span>`;
+  $('#topWatchers').title = t('ui.watchersTitle', { names: watchers.map(w => w.name).join(', ') });
   renderAlertsBtn();
 }
 
@@ -421,11 +440,34 @@ function updateAlerts() {
 }
 
 // ---------- lobby ----------
-$('#startBtn').onclick = () => confirmHost({
-  title: t('host.start.title'),
-  text: t('host.start.text', { n: state.players.length }),
-  event: 'start',
-});
+$('#startBtn').onclick = () => send('startCountdown');
+$('#readyBtn').onclick = () => {
+  const mine = state.players.find(p => p.id === state.me.id);
+  send('ready', { ready: !(mine && mine.ready) });
+};
+$('#watchToggle').onclick = () => send('watch', { on: !state.me.spectator });
+$('#nightSeconds').addEventListener('change', e => send('settings', { nightSeconds: parseInt(e.target.value, 10) || 0 }));
+
+// ---------- start countdown (anyone can call "wait!") ----------
+$('#countdownCancel').onclick = () => send('cancelCountdown');
+let countdownLast = null;
+function renderCountdown() {
+  const box = $('#countdown');
+  const endsAt = state && state.me && state.phase === 'lobby' && state.countdownEndsAt;
+  if (!endsAt) { box.classList.add('hidden'); countdownLast = null; return; }
+  const left = Math.max(1, Math.ceil((endsAt - (Date.now() + clockOffset)) / 1000));
+  box.classList.remove('hidden');
+  if (left !== countdownLast) {
+    countdownLast = left;
+    const num = $('#countdownNum');
+    num.textContent = left;
+    num.classList.remove('tick');
+    void num.offsetWidth;
+    num.classList.add('tick');
+    if (alertsOn && audioCtx) tone({ f: left === 1 ? 880 : 587, dur: 0.18, vol: 0.08, type: 'triangle' });
+  }
+}
+setInterval(renderCountdown, 200);
 $('#autoRoles').onclick = () => send('settings', { roleCounts: null });
 for (const input of $$('[data-role]')) {
   input.addEventListener('change', () => {
@@ -450,8 +492,8 @@ function renderLobby() {
   $('#lobbyCount').textContent = t('ui.lobbyCount', { count: state.players.length, max: state.maxPlayers, min: state.minPlayers });
   const empty = Math.max(0, state.minPlayers - state.players.length);
   $('#lobbyPlayers').innerHTML = state.players.map(p => `
-    <li class="${p.connected ? '' : 'offline'}">
-      ${avatar(p.name, p.avatar)}
+    <li class="${p.connected ? '' : 'offline'} ${p.ready ? 'is-ready' : ''}" data-pid="${p.id}">
+      <span class="avatar-wrap">${avatar(p.name, p.avatar)}${p.ready ? `<span class="voted ready-mark">${ICONS.check}</span>` : ''}</span>
       <span class="pname"><b>${esc(p.name)}</b>${statusPill(p.score)}${p.id === state.hostId ? tagHtml('tag.host', 'host') : ''}${p.id === state.me.id ? tagHtml('tag.you', 'you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
       ${isHost() && p.id !== state.me.id ? `<button class="ghost small" data-kick="${p.id}">${esc(t('ui.remove'))}</button>` : ''}
     </li>`).join('') + `<li class="empty">${esc(t('ui.emptySeat'))}</li>`.repeat(empty);
@@ -471,6 +513,7 @@ function renderLobby() {
     t('sum.roles', { ...rc, citizen: citizens, auto: !s.roleCounts }),
     t('sum.speech', { s: s.speechSeconds }),
     s.voteSeconds ? t('sum.vote', { s: s.voteSeconds }) : t('sum.noVoteLimit'),
+    s.nightSeconds ? t('sum.night', { s: s.nightSeconds }) : t('sum.noNightLimit'),
     t(s.firstNightKill ? 'sum.firstNightKill' : 'sum.noFirstNightKill'),
     t(s.revealRoleOnDeath ? 'sum.reveal' : 'sum.noReveal'),
   ].map(t => `<li>${esc(t)}</li>`).join('');
@@ -480,11 +523,26 @@ function renderLobby() {
   $('#hostSettings').classList.toggle('hidden', !isHost());
   $('#startBtn').classList.toggle('hidden', !isHost());
   $('#waitHost').classList.toggle('hidden', isHost());
-  $('#startBtn').disabled = state.players.length < state.minPlayers || !!state.roleCountsError;
+  $('#startBtn').disabled = state.players.length < state.minPlayers || !!state.roleCountsError || !!state.countdownEndsAt;
+  const readyN = state.players.filter(p => p.ready).length;
+  const mine = state.players.find(p => p.id === state.me.id);
+  $('#readyCount').textContent = t('ui.readyCount', { n: readyN, total: state.players.length });
+  $('#readyBtn').classList.toggle('hidden', !mine);
+  $('#readyBtn').classList.toggle('on', !!(mine && mine.ready));
+  $('#readyBtn').innerHTML = `${ICONS.check}<span>${esc(t(mine && mine.ready ? 'ui.ready' : 'ui.unready'))}</span>`;
+  $('#watchToggle').textContent = t(state.me.spectator ? 'ui.playInstead' : 'ui.watchInstead');
+  $('#spectatorBox').classList.toggle('hidden', !state.spectators.length);
+  $('#spectatorList').innerHTML = state.spectators.map(w => `<span class="spectator ${w.connected ? '' : 'offline'}" data-pid="${w.id}">${avatar(w.name, w.avatar)}<b>${esc(w.name)}</b>${statusPill(w.score)}${
+    isHost() && w.id !== state.me.id ? `<button class="ghost small" data-kick="${w.id}">${esc(t('ui.remove'))}</button>` : ''}</span>`).join('');
+  for (const b of $$('#spectatorList [data-kick]')) {
+    b.onclick = () => confirmHost({ title: t('host.kick.title', { name: (state.spectators.find(w => w.id === b.dataset.kick) || {}).name }), text: t('host.kick.text'), event: 'kick', payload: { playerId: b.dataset.kick } });
+  }
+  $('#startBtn').textContent = `${t('ui.startGame')} · ${t('ui.readyCount', { n: readyN, total: state.players.length })}`;
   if (isHost()) {
     for (const i of $$('[data-role]')) setIfNotFocused(i, 'value', rc[i.dataset.role]);
     setIfNotFocused($('#speechSeconds'), 'value', s.speechSeconds);
     setIfNotFocused($('#voteSeconds'), 'value', s.voteSeconds);
+    setIfNotFocused($('#nightSeconds'), 'value', s.nightSeconds);
     $('#revealRole').checked = s.revealRoleOnDeath;
     $('#firstNightKill').checked = s.firstNightKill;
   }
@@ -560,7 +618,7 @@ window.addEventListener('resize', closeMarkMenu);
 // Your role is shown only while you press and hold the card.
 const roleCardEl = $('#roleCard');
 const peek = on => {
-  if (roleShown === on) return;
+  if (roleShown === on || (on && state && state.me && state.me.spectator)) return;
   roleShown = on;
   if (state && state.me && state.phase !== 'lobby') renderGame();
 };
@@ -591,13 +649,16 @@ function renderPhasePanel() {
       ? Object.entries(state.night.mafiaVotes).filter(([m, tgt]) => tgt === 'none' && m !== me.id).map(([m]) => nameOf(m))
       : [];
     panel.innerHTML = `
-      <div class="phase-icon">${ICONS.night}</div>
+      ${state.nightEndsAt
+        ? '<div class="timer-wrap small" id="timerWrap"><div class="timer-ring"></div><div class="timer" id="timer"></div></div>'
+        : `<div class="phase-icon">${ICONS.night}</div>`}
       <div class="big">${esc(t('night.sleeps'))}</div>
       <div class="prompt">${esc(me.alive ? nightPrompt() : t('night.dead'))}</div>
       ${picked ? `<div class="choice">${esc(picked === 'none' ? t('night.choseNobody') : t('night.yourChoice', { name: nameOf(picked) }))}<div class="muted small-text">${esc(t('night.canChange'))}</div></div>` : ''}
       ${canPickNobody ? `<button id="nightNobody" ${picked === 'none' ? 'disabled' : ''}>${esc(t('night.nobody.' + me.role))}</button>` : ''}
       ${nobodyPickers.length ? `<div class="muted small-text">${esc(t('night.mafiaNobody', { names: nobodyPickers.join(', ') }))}</div>` : ''}`;
     if (canPickNobody) $('#nightNobody').onclick = () => send('nightAction', { targetId: 'none' });
+    tickTimer();
   } else if (state.phase === 'speech') {
     const sp = state.speech;
     const mine = sp.current === me.id;
@@ -713,7 +774,7 @@ function renderSeats() {
       : '';
     const markTag = mark ? `<span class="tag mark-tag ${mark}">${esc(t('mark.short.' + mark))}</span>` : '';
     const pos = seatPosition(i, n);
-    return `<div class="${cls}" style="left:${pos.left}%;top:${pos.top}%;${fx.style}">
+    return `<div class="${cls}" data-pid="${p.id}" style="left:${pos.left}%;top:${pos.top}%;${fx.style}">
       <span class="num">${p.seat + 1}</span>
       ${markBtn}
       <span class="avatar-wrap" title="${p.score === null ? '' : esc(t('tier.' + tierOf(p.score)))}">${avatar(p.name, p.avatar)}${voted}</span>
@@ -795,6 +856,11 @@ function roleDetails() {
 function renderRoleCard() {
   const me = state.me;
   const box = roleCardEl.closest('.role-box');
+  if (me.spectator) {
+    box.className = 'card role-box';
+    roleCardEl.innerHTML = `<div class="role-hidden">${ICONS.eyeOpen}<span>${esc(t('ui.watchingNote'))}</span></div>`;
+    return;
+  }
   box.className = 'card role-box' + (roleShown ? ` revealed ${state.roleInfo[me.role].team}` : '');
   roleCardEl.innerHTML = roleShown
     ? roleDetails() + (me.alive ? '' : tagHtml('tag.dead'))
@@ -803,7 +869,7 @@ function renderRoleCard() {
 
 // ---------- role reveal at the start of a game ----------
 function maybeReveal() {
-  const show = state.phase !== 'lobby' && state.phase !== 'ended' && state.gameId && store.get(REVEALED_KEY) !== state.gameId;
+  const show = !state.me.spectator && state.phase !== 'lobby' && state.phase !== 'ended' && state.gameId && store.get(REVEALED_KEY) !== state.gameId;
   const overlay = $('#reveal');
   if (!show) { overlay.classList.add('hidden'); return; }
   if (!overlay.classList.contains('hidden')) return;
@@ -1055,9 +1121,9 @@ function tickTimer() {
   const el = $('#timer');
   if (!el || !state) return;
   const speech = state.phase === 'speech' && state.speech;
-  const endsAt = speech ? speech.endsAt : state.phase === 'vote' && state.voteEndsAt;
+  const endsAt = speech ? speech.endsAt : state.phase === 'vote' ? state.voteEndsAt : state.phase === 'night' && state.nightEndsAt;
   if (!endsAt) return;
-  const total = speech ? state.settings.speechSeconds : state.settings.voteSeconds;
+  const total = speech ? state.settings.speechSeconds : state.phase === 'vote' ? state.settings.voteSeconds : state.settings.nightSeconds;
   const left = Math.max(0, Math.ceil((endsAt - (Date.now() + clockOffset)) / 1000));
   el.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
   el.classList.toggle('low', left <= 10);
@@ -1085,8 +1151,9 @@ function render() {
   }
   if (!inRoom || state.phase === 'lobby' || state.phase === 'ended') $('#reveal').classList.add('hidden');
   if (!inRoom || state.phase !== 'ended') $('#recap').classList.add('hidden');
-  if (!inRoom) { closeMarkMenu(); return show('home'); }
+  if (!inRoom) { closeMarkMenu(); reactBar.classList.add('hidden'); return show('home'); }
   placeChat();
+  renderReactBar();
   if (state.phase === 'lobby') { show('lobby'); renderLobby(); renderChat(); return; }
   show('game');
   renderGame();
@@ -1274,6 +1341,45 @@ function seatFx(p, i) {
   if (sinceEnter < 600) { cls.push('entering'); style += `--fx-enter:${-sinceEnter}ms;`; }
   return { cls: cls.join(' '), style };
 }
+
+// ---------- emoji reactions: float up from the sender's seat ----------
+const REACTIONS = ['👍', '👎', '😂', '🤔', '😱', '🤥', '🔥', '💀', '❤️', '👀'];
+const reactBar = $('#reactBar');
+reactBar.innerHTML = REACTIONS.map(e => `<button class="react-btn" data-react="${e}" aria-label="${e}">${e}</button>`).join('');
+for (const b of $$('[data-react]')) b.onclick = () => send('react', { emoji: b.dataset.react });
+const reactLayer = document.createElement('div');
+reactLayer.className = 'react-layer';
+reactLayer.setAttribute('aria-hidden', 'true');
+document.body.append(reactLayer);
+
+// the same rule as the server: everyone in the lobby and after the game; living players by day
+function canReact() {
+  if (!state || !state.me) return false;
+  if (state.phase === 'lobby' || state.phase === 'ended') return true;
+  return (state.phase === 'speech' || state.phase === 'vote') && state.me.alive && !state.me.spectator;
+}
+
+function renderReactBar() {
+  const slot = state && state.phase === 'lobby' ? $('#lobbyReactSlot') : $('#gameReactSlot');
+  if (reactBar.parentElement !== slot) slot.append(reactBar);
+  reactBar.classList.toggle('hidden', !canReact());
+}
+
+socket.on('reaction', r => {
+  if (reducedMotion()) return;
+  const anchor = [...$$(`[data-pid="${r.from}"]`)].find(el => el.offsetParent);
+  const rect = anchor ? anchor.getBoundingClientRect() : { left: innerWidth / 2, width: 0, top: innerHeight / 2 };
+  const el = document.createElement('span');
+  el.className = 'reaction';
+  el.textContent = r.emoji;
+  el.style.left = `${rect.left + rect.width / 2}px`;
+  el.style.top = `${rect.top + 8}px`;
+  el.style.setProperty('--dx', `${Math.round(Math.random() * 50 - 25)}px`);
+  el.style.setProperty('--rot', `${Math.round(Math.random() * 30 - 15)}deg`);
+  reactLayer.append(el);
+  el.addEventListener('animationend', () => el.remove());
+  if (anchor) { anchor.classList.remove('reacted'); void anchor.offsetWidth; anchor.classList.add('reacted'); }
+});
 
 // ---------- language ----------
 const langSelect = $('#langSelect');

@@ -26,6 +26,7 @@
     </div>
     <button id="topRoom" class="room-pill hidden" type="button"><span data-i18n="ui.room"></span> <span id="topCode" class="code"></span></button>
     <div id="topPhase" class="phase-chip"></div>
+    <div id="topWatchers" class="watchers-chip hidden"></div>
     <div class="spacer"></div>
     <div id="topMe" class="muted top-me"></div>
     <button id="spookyBtn" class="icon-btn spooky-btn" type="button" aria-pressed="false"></button>
@@ -61,6 +62,7 @@
         <div class="row join-row">
           <input id="joinCode" class="code-input" data-i18n-placeholder="ui.roomCode" maxlength="4" autocapitalize="characters" spellcheck="false">
           <button id="joinBtn" data-i18n="ui.join"></button>
+          <button id="watchBtn" class="ghost" data-i18n="ui.watch"></button>
         </div>
       </div>
     </section>
@@ -74,6 +76,16 @@
             <span id="lobbyCount" class="count-pill"></span>
           </div>
           <ul id="lobbyPlayers" class="list"></ul>
+          <div class="row lobby-me">
+            <button id="readyBtn" class="ready-btn"></button>
+            <button id="watchToggle" class="ghost small"></button>
+            <span id="readyCount" class="count-pill"></span>
+          </div>
+          <div id="spectatorBox" class="spectator-box hidden">
+            <h3 data-i18n="ui.spectators"></h3>
+            <div id="spectatorList" class="spectator-list"></div>
+          </div>
+          <div id="lobbyReactSlot" class="react-slot"></div>
           <div class="invite">
             <img id="inviteQr" class="qr" alt="" width="104" height="104">
             <div class="invite-body">
@@ -105,6 +117,7 @@
               <div class="checks">
                 <label class="field"><span data-i18n="ui.speechTime"></span> <input type="number" min="10" max="600" id="speechSeconds"></label>
                 <label class="field"><span data-i18n="ui.voteTime"></span> <input type="number" min="0" max="900" step="10" id="voteSeconds"></label>
+                <label class="field"><span data-i18n="ui.nightTime"></span> <input type="number" min="0" max="900" step="10" id="nightSeconds"></label>
               </div>
               <div class="checks">
                 <label class="check"><input type="checkbox" class="switch" id="firstNightKill"> <span data-i18n="ui.firstNightKill"></span></label>
@@ -127,6 +140,7 @@
             <div class="felt"><div class="felt-inner"></div></div>
             <div id="phasePanel" class="center-panel"></div>
           </div>
+          <div id="gameReactSlot" class="react-slot game-react"></div>
         </div>
         <aside class="sidebar">
           <div class="card role-box">
@@ -215,6 +229,10 @@
             </div>
           </div>
         </div>
+        <div>
+          <h3 data-i18n="profile.stats"></h3>
+          <div id="profileStats" class="stats"></div>
+        </div>
         <p class="muted small-text" data-i18n="profile.decencyHint"></p>
         <div id="tierLadder" class="tier-ladder"></div>
         <form id="passwordForm" class="password-form" autocomplete="on">
@@ -258,6 +276,16 @@
       </form>
     </div>
   </template>
+
+  <div id="reactBar" class="react-bar hidden"></div>
+
+  <div id="countdown" class="countdown hidden" role="alertdialog">
+    <div class="countdown-inner">
+      <div class="countdown-title" data-i18n="countdown.title"></div>
+      <div id="countdownNum" class="countdown-num"></div>
+      <button id="countdownCancel" class="countdown-cancel" data-i18n="countdown.cancel"></button>
+    </div>
+  </div>
 
   <div id="phaseCard" class="phase-card hidden" aria-hidden="true">
     <div class="phase-card-inner">

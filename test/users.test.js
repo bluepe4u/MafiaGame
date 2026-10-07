@@ -77,3 +77,13 @@ test('ratings change likes, dislikes and score', () => {
   );
   assert.strictEqual(store.publicProfile(user).hash, undefined, 'no secrets in the public profile');
 });
+
+test('game results add up into profile stats', () => {
+  const store = new UserStore(tmp());
+  const { user } = store.register('Sonny', 'pass');
+  store.recordGame([{ userId: user.id, role: 'mafia', team: 'mafia', won: true, survived: true }, { userId: 'nobody', role: 'cop', team: 'town', won: false, survived: false }]);
+  store.recordGame([{ userId: user.id, role: 'cop', team: 'town', won: false, survived: false }]);
+  assert.deepStrictEqual(store.publicProfile(user).stats, {
+    games: 2, wins: 1, survived: 1, mafiaGames: 1, mafiaWins: 1, townGames: 1, townWins: 0, roles: { mafia: 1, cop: 1 },
+  });
+});

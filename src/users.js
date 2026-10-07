@@ -33,6 +33,8 @@ function imageType(buf) {
   return null;
 }
 
+const emptyStats = () => ({ games: 0, wins: 0, survived: 0, mafiaGames: 0, mafiaWins: 0, townGames: 0, townWins: 0, roles: {} });
+
 class UserStore {
   constructor(dir) {
     this.file = path.join(dir, 'users.json');
@@ -144,6 +146,22 @@ class UserStore {
     this.save();
   }
 
+  // One finished game: results from Room.onGameEnd.
+  recordGame(results) {
+    for (const r of results) {
+      const u = this.users[r.userId];
+      if (!u) continue;
+      const s = (u.stats ||= emptyStats());
+      s.games += 1;
+      s.wins += r.won ? 1 : 0;
+      s.survived += r.survived ? 1 : 0;
+      s[r.team + 'Games'] += 1;
+      s[r.team + 'Wins'] += r.won ? 1 : 0;
+      s.roles[r.role] = (s.roles[r.role] || 0) + 1;
+    }
+    this.save();
+  }
+
   // What other players (and the user) get to see.
   publicProfile(user) {
     if (!user) return null;
@@ -154,6 +172,7 @@ class UserStore {
       likes: user.likes,
       dislikes: user.dislikes,
       score: user.likes - user.dislikes,
+      stats: user.stats || emptyStats(),
     };
   }
 }

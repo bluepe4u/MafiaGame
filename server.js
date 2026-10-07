@@ -97,6 +97,7 @@ function refreshUser(userId) {
 const roomOptions = () => ({
   onChange: onRoomChange,
   profileOf: userId => users.publicProfile(users.users[userId]),
+  onGameEnd: results => users.recordGame(results),
   onRate: (targetUserId, oldValue, newValue) => {
     users.applyRating(targetUserId, oldValue, newValue);
     refreshUser(targetUserId);
@@ -210,12 +211,12 @@ io.on('connection', socket => {
     }
   });
 
-  on('join', ({ code }) => {
+  on('join', ({ code, spectate }) => {
     const user = me();
     const room = rooms.get(String(code || '').toUpperCase().trim());
     if (!room) throw new GameError('err.roomNotFound');
     // already in this room (another tab or device): take that seat back
-    attach(room, room.byUser(user.id) || room.join(user.username, { userId: user.id }));
+    attach(room, room.byUser(user.id) || room.join(user.username, { userId: user.id, spectate: !!spectate }));
   });
 
   on('resume', ({ code, token }) => {
@@ -253,6 +254,11 @@ io.on('connection', socket => {
   on('endSpeech', () => { const { room, pid } = ctx(); room.endSpeech(pid); });
   on('extendSpeech', () => { const { room, pid } = ctx(); room.extendSpeech(pid); });
   on('chat', ({ channel, text }) => { const { room, pid } = ctx(); room.sendChat(pid, channel, text); });
+  on('watch', ({ on: watch }) => { const { room, pid } = ctx(); room.setSpectating(pid, !!watch); });
+  on('ready', ({ ready }) => { const { room, pid } = ctx(); room.setReady(pid, !!ready); });
+  on('startCountdown', () => { const { room, pid } = ctx(); room.startCountdown(pid); });
+  on('cancelCountdown', () => { const { room, pid } = ctx(); room.cancelCountdown(pid); });
+  on('react', ({ emoji }) => { const { room, pid } = ctx(); io.to(room.code).emit('reaction', room.react(pid, emoji)); });
   on('revealRole', () => { const { room, pid } = ctx(); room.revealRole(pid); });
   on('rate', ({ targetId, value }) => { const { room, pid } = ctx(); room.rate(pid, targetId, Number(value)); });
   on('skipToVote', () => { const { room, pid } = ctx(); room.skipToVote(pid); });
