@@ -656,7 +656,6 @@ class Room {
       view.night = {
         myTarget: this.nightActions[pid] || null,
         validTargets: me.alive && this.hasNightAction(me) ? this.validNightTargets(me) : [],
-        pendingCount: this.actorsForNight().filter(a => !(a.id in this.nightActions)).length,
         hasAction: me.alive && this.hasNightAction(me),
         mafiaKills: this.mafiaKillsTonight(),
       };

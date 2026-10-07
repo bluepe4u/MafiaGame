@@ -466,8 +466,7 @@ function renderPhasePanel() {
       <div class="phase-icon">${ICONS.night}</div>
       <div class="big">${esc(t('night.sleeps'))}</div>
       <div class="prompt">${esc(me.alive ? nightPrompt() : t('night.dead'))}</div>
-      ${picked ? `<div class="choice">${esc(t('night.yourChoice', { name: nameOf(picked) }))}<div class="muted small-text">${esc(t('night.canChange'))}</div></div>` : ''}
-      <div class="progress">${esc(t('night.waiting', { n: state.night.pendingCount }))}</div>`;
+      ${picked ? `<div class="choice">${esc(t('night.yourChoice', { name: nameOf(picked) }))}<div class="muted small-text">${esc(t('night.canChange'))}</div></div>` : ''}`;
   } else if (state.phase === 'speech') {
     const sp = state.speech;
     const mine = sp.current === me.id;
@@ -608,7 +607,7 @@ function hostAction(key, event, params = {}) {
 
 function hostActions() {
   switch (state.phase) {
-    case 'night': return [hostAction('endNight', 'forceEndNight', { n: state.night.pendingCount })];
+    case 'night': return [hostAction('endNight', 'forceEndNight')];
     case 'speech': {
       const cur = state.speech.current;
       const list = [];
