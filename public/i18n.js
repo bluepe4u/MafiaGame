@@ -27,6 +27,9 @@ const DICT = {
     'blurb.hooker': 'Each night, visit one player. Their night action is cancelled — and if you visit any Mafia member, nobody is killed that night.',
 
     'ui.language': 'Language',
+    'fx.halloween': 'Halloween mode: spooky theme, animations and sounds',
+    'fx.morning': 'Morning {n}',
+    'fx.voteSub': 'Who leaves the town today?',
     'auth.login': 'Log in',
     'auth.register': 'Create account',
     'auth.username': 'Username',
@@ -330,6 +333,9 @@ const DICT = {
     'blurb.hooker': 'Каждую ночь навещайте одного игрока. Его ночное действие отменяется, а если это мафия — этой ночью никто не умрёт.',
 
     'ui.language': 'Язык',
+    'fx.halloween': 'Режим Хэллоуина: жуткая тема, анимации и звуки',
+    'fx.morning': 'Утро {n}',
+    'fx.voteSub': 'Кто сегодня покинет город?',
     'auth.login': 'Войти',
     'auth.register': 'Регистрация',
     'auth.username': 'Имя пользователя',

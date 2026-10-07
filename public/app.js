@@ -643,7 +643,7 @@ function renderPhasePanel() {
 }
 
 function seatPosition(i, n) {
-  // clockwise from the top of an ellipse
+  // clockwise from the top of the round table
   const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
   return { left: 50 + 40 * Math.cos(a), top: 50 + 40 * Math.sin(a) };
 }
@@ -663,8 +663,10 @@ function renderSeats() {
   const checks = copChecks();
 
   for (const el of $$('#table .seat')) el.remove();
+  $('#table').style.setProperty('--n', Math.max(4, n));
   const html = state.players.map((p, i) => {
     const mark = notes.marks[p.id];
+    const fx = seatFx(p, i);
     const note = notes.notes[p.id];
     const cls = [
       'seat',
@@ -673,6 +675,7 @@ function renderSeats() {
       state.speech && state.speech.current === p.id ? 'speaking' : '',
       (night && night.myTarget === p.id) || (voting && state.votes[me.id] === p.id) ? 'selected' : '',
       mark ? `marked-${mark}` : '',
+      fx.cls,
     ].join(' ');
 
     const meta = [];
@@ -710,7 +713,7 @@ function renderSeats() {
       : '';
     const markTag = mark ? `<span class="tag mark-tag ${mark}">${esc(t('mark.short.' + mark))}</span>` : '';
     const pos = seatPosition(i, n);
-    return `<div class="${cls}" style="left:${pos.left}%;top:${pos.top}%">
+    return `<div class="${cls}" style="left:${pos.left}%;top:${pos.top}%;${fx.style}">
       <span class="num">${p.seat + 1}</span>
       ${markBtn}
       <span class="avatar-wrap" title="${p.score === null ? '' : esc(t('tier.' + tierOf(p.score)))}">${avatar(p.name, p.avatar)}${voted}</span>
@@ -864,6 +867,7 @@ let chatChannel = 'town';
 let chatPhaseKey = null; // switch channel automatically when night falls / day breaks
 const chatSeen = { town: null, mafia: null, dead: null }; // messages read, per channel (null: not known yet)
 let chatRendered = '';
+const chatShown = {}; // channel -> ids already on screen, so only new messages animate in
 
 const chatMessages = ch => (state && state.chat && state.chat[ch]) || [];
 const chatVisible = () => !!state && (state.phase === 'lobby' || tab === 'chat');
@@ -946,18 +950,20 @@ function renderChat() {
   let html = '';
   let section = null;
   let prev = null;
+  const shown = chatShown[chatChannel];
+  const isNew = m => shown && !shown.has(m.id) ? 'pop' : '';
   for (const m of list) {
     const sec = chatSection(m);
     if (sec !== section) { html += `<div class="chat-sep"><span>${esc(sec)}</span></div>`; section = sec; prev = null; }
     if (m.kind === 'reveal') {
-      html += `<div class="msg-reveal">${avatar(m.name, (playerById(m.from) || {}).avatar)}<span><b>${esc(m.name)}</b> ${esc(t('chat.revealed'))}</span>${roleTag(m.role)}</div>`;
+      html += `<div class="msg-reveal ${isNew(m)}">${avatar(m.name, (playerById(m.from) || {}).avatar)}<span><b>${esc(m.name)}</b> ${esc(t('chat.revealed'))}</span>${roleTag(m.role)}</div>`;
       prev = null;
       continue;
     }
     const mine = m.from === me.id;
     const grouped = prev && prev.from === m.from && m.at - prev.at < 5 * 60 * 1000;
     const time = new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    html += `<div class="msg ${mine ? 'mine' : ''} ${grouped ? 'grouped' : ''}">
+    html += `<div class="msg ${mine ? 'mine' : ''} ${grouped ? 'grouped' : ''} ${isNew(m)}">
       ${mine || grouped ? '<span class="msg-gap"></span>' : avatar(m.name, (playerById(m.from) || {}).avatar)}
       <div class="msg-body">
         ${mine || grouped ? '' : `<div class="msg-name">${esc(m.name)}</div>`}
@@ -968,6 +974,7 @@ function renderChat() {
   }
   const empty = { town: 'chat.empty', mafia: 'chat.emptyMafia', dead: 'chat.emptyDead' }[chatChannel];
   box.innerHTML = html || `<p class="chat-empty">${esc(t(empty))}</p>`;
+  chatShown[chatChannel] = new Set(list.map(m => m.id));
   if (nearBottom || list.at(-1)?.from === me.id) box.scrollTop = box.scrollHeight;
 }
 
@@ -1066,6 +1073,7 @@ function render() {
     closeModal();
     toast(t('toast.hostCancelled'));
   }
+  fxOnState();
   renderTopbar();
   updateAlerts();
   const inRoom = !!(state && state.me);
@@ -1085,6 +1093,188 @@ function render() {
   renderChat();
 }
 
+// ---------- effects: phase cards, death and entrance animations, sounds, Halloween ----------
+const SPOOKY_KEY = 'mafia.spooky';
+const inSpookySeason = () => { const d = new Date(); return d.getMonth() === 9 || (d.getMonth() === 10 && d.getDate() <= 2); };
+let spooky = store.get(SPOOKY_KEY) ? store.get(SPOOKY_KEY) === 'on' : inSpookySeason();
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const PUMPKIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-1-.2-1.4-1.6-.6-3"/><path d="M12 6c4.9-1.6 9 1.4 9 6.5S17.4 21 12 21 3 17.6 3 12.5 7.1 4.4 12 6z"/><path d="M8.5 11l1.5 1.5L8.5 14M15.5 11 14 12.5l1.5 1.5M9 17c2 1 4 1 6 0"/></svg>';
+const BAT = '<svg viewBox="0 0 64 28"><path d="M32 9c1.5-3 2.5-4 3-6 .6 2 .4 3.5 0 5 4-3 9-5.5 15-6-2 2.5-2 5 0 8 2-2 6-3 10-2-3 2-4 6-4 10-3-2-7-3-10-1-1-3-4-5-8-5-2 0-4 2-6 6-2-4-4-6-6-6-4 0-7 2-8 5-3-2-7-1-10 1 0-4-1-8-4-10 4-1 8 0 10 2 2-3 2-5.5 0-8 6 .5 11 3 15 6-.4-1.5-.6-3 0-5 .5 2 1.5 3 3 6z"/></svg>';
+
+function renderSpookyBtn() {
+  const b = $('#spookyBtn');
+  b.innerHTML = PUMPKIN;
+  b.setAttribute('aria-pressed', String(spooky));
+  b.title = t('fx.halloween');
+  b.setAttribute('aria-label', t('fx.halloween'));
+}
+
+function applySpooky() {
+  document.body.classList.toggle('halloween', spooky);
+  renderSpookyBtn();
+  const bats = $('#bats');
+  bats.innerHTML = spooky && !reducedMotion()
+    ? Array.from({ length: 7 }, (_, i) => `<i class="bat" style="--y:${8 + Math.random() * 55}vh;--d:${14 + Math.random() * 14}s;--delay:${-Math.random() * 20}s;--s:${0.5 + Math.random() * 0.8};--dir:${i % 2 ? 1 : -1}">${BAT}</i>`).join('')
+    : '';
+}
+$('#spookyBtn').onclick = () => {
+  spooky = !spooky;
+  store.set(SPOOKY_KEY, spooky ? 'on' : 'off');
+  applySpooky();
+  if (spooky) sfx('night');
+};
+
+// --- sounds, synthesized on the fly (no files to load) ---
+function tone({ f, f2, at = 0, dur = 0.5, type = 'sine', vol = 0.12, attack = 0.02, vib = 0, lowpass }) {
+  const now = audioCtx.currentTime + at;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(f, now);
+  if (f2) osc.frequency.exponentialRampToValueAtTime(f2, now + dur);
+  if (vib) {
+    const lfo = audioCtx.createOscillator();
+    const depth = audioCtx.createGain();
+    lfo.frequency.value = 5.5;
+    depth.gain.value = vib;
+    lfo.connect(depth).connect(osc.frequency);
+    lfo.start(now);
+    lfo.stop(now + dur + 0.1);
+  }
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(vol, now + attack);
+  gain.gain.exponentialRampToValueAtTime(0.0008, now + dur);
+  let out = osc.connect(gain);
+  if (lowpass) {
+    const lp = audioCtx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = lowpass;
+    out = out.connect(lp);
+  }
+  out.connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now + dur + 0.05);
+}
+
+function noise({ at = 0, dur = 1, vol = 0.05, freq = 800 }) {
+  const now = audioCtx.currentTime + at;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const src = audioCtx.createBufferSource();
+  const bp = audioCtx.createBiquadFilter();
+  const gain = audioCtx.createGain();
+  src.buffer = buf;
+  bp.type = 'bandpass';
+  bp.frequency.value = freq;
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(vol, now + dur * 0.4);
+  gain.gain.linearRampToValueAtTime(0, now + dur);
+  src.connect(bp).connect(gain).connect(audioCtx.destination);
+  src.start(now);
+}
+
+const SOUNDS = {
+  normal: {
+    night: () => { tone({ f: 220, f2: 196, dur: 1.4, vol: 0.08 }); tone({ f: 330, f2: 294, dur: 1.4, vol: 0.05 }); },
+    morning: () => [523, 659, 784].forEach((f, i) => tone({ f, at: i * 0.12, dur: 0.6, vol: 0.07 })),
+    vote: () => [0, 0.16].forEach(at => tone({ f: 880, at, dur: 0.12, vol: 0.06, type: 'triangle' })),
+    death: () => { tone({ f: 130, f2: 55, dur: 0.9, vol: 0.18 }); noise({ dur: 0.5, vol: 0.04, freq: 300 }); },
+    win: () => [523, 659, 784, 1046].forEach((f, i) => tone({ f, at: i * 0.1, dur: 0.7, vol: 0.07, type: 'triangle' })),
+  },
+  spooky: {
+    // a wolf howl over the wind
+    night: () => {
+      noise({ dur: 2.6, vol: 0.05, freq: 500 });
+      tone({ f: 330, f2: 700, dur: 0.9, vol: 0.09, vib: 8, lowpass: 1800 });
+      tone({ f: 700, f2: 420, at: 0.85, dur: 1.4, vol: 0.09, vib: 10, lowpass: 1800 });
+    },
+    // a low church bell
+    morning: () => [[196, 0.16], [392 * 1.19, 0.06], [588, 0.05], [98, 0.1]].forEach(([f, vol]) => tone({ f, dur: 3, vol, attack: 0.005 })),
+    // heartbeat
+    vote: () => [0, 0.22, 0.9, 1.12].forEach((at, i) => tone({ f: i % 2 ? 50 : 62, f2: 40, at, dur: 0.2, vol: 0.35, attack: 0.005 })),
+    // a creepy organ stinger
+    death: () => {
+      [220, 261.6, 311.1, 370].forEach(f => tone({ f, dur: 1.8, vol: 0.035, type: 'square', lowpass: 1400 }));
+      tone({ f: 1400, f2: 500, at: 0.05, dur: 0.8, vol: 0.04, vib: 30 });
+    },
+    // a descending theremin
+    win: () => tone({ f: 950, f2: 260, dur: 2.4, vol: 0.09, vib: 14, lowpass: 2500 }),
+  },
+};
+function sfx(name) {
+  if (!alertsOn || !audioCtx) return;
+  try { SOUNDS[spooky ? 'spooky' : 'normal'][name](); } catch {}
+}
+
+// --- what changed since the last state: phase changes and deaths ---
+let fxPrev = null;
+const diedAt = {}; // playerId -> when we saw them die
+let seatsEnteredAt = 0;
+let seatsGame = null;
+
+function showPhaseCard(icon, title, sub) {
+  if (reducedMotion()) return;
+  const card = $('#phaseCard');
+  $('#phaseCardIcon').innerHTML = icon;
+  $('#phaseCardTitle').textContent = title;
+  $('#phaseCardSub').textContent = sub || '';
+  card.classList.remove('hidden', 'play');
+  void card.offsetWidth; // restart the animation
+  card.classList.add('play');
+  clearTimeout(showPhaseCard.timer);
+  showPhaseCard.timer = setTimeout(() => card.classList.add('hidden'), 2300);
+}
+
+function celebrate(winner) {
+  if (reducedMotion()) return;
+  const layer = $('#fxLayer');
+  const colors = winner === 'mafia' ? ['#e5484d', '#ff8a8e', '#7a1f2b', '#f1f1f4'] : ['#3dd68c', '#8b7cff', '#f5b546', '#f1f1f4'];
+  const pieces = spooky
+    ? Array.from({ length: 26 }, () => `<i class="swarm-bat" style="--x:${Math.random() * 100}vw;--y:${60 + Math.random() * 40}vh;--d:${1.6 + Math.random() * 1.4}s;--delay:${Math.random() * 0.8}s;--s:${0.4 + Math.random() * 0.9}">${BAT}</i>`)
+    : Array.from({ length: 90 }, () => `<i class="confetti" style="--x:${Math.random() * 100}vw;--r:${Math.random() * 720 - 360}deg;--d:${2 + Math.random() * 1.8}s;--delay:${Math.random() * 0.6}s;background:${colors[Math.floor(Math.random() * colors.length)]}"></i>`);
+  layer.innerHTML = pieces.join('');
+  clearTimeout(celebrate.timer);
+  celebrate.timer = setTimeout(() => { layer.innerHTML = ''; }, 4500);
+}
+
+function fxOnState() {
+  if (!state || !state.me) { fxPrev = null; return; }
+  const now = { gameId: state.gameId, phase: state.phase, day: state.day, alive: new Set(state.players.filter(p => p.alive).map(p => p.id)) };
+  const prev = fxPrev;
+  fxPrev = now;
+  if (!prev || prev.gameId !== now.gameId || !now.gameId) return; // first look (page load, new game): no replay
+  for (const id of prev.alive) {
+    if (!now.alive.has(id)) { diedAt[id] = Date.now(); sfx('death'); }
+  }
+  if (prev.phase === now.phase && prev.day === now.day) return;
+  const lastLog = state.log.at(-1);
+  if (now.phase === 'night') { showPhaseCard(ICONS.night, t('phase.night', { n: now.day }), t('night.sleeps')); sfx('night'); }
+  else if (now.phase === 'speech') {
+    const morning = [...state.log].reverse().find(e => e.key === 'log.morningKilled' || e.key === 'log.morningNobody');
+    showPhaseCard(ICONS.speech, t('fx.morning', { n: now.day }), morning ? t(morning.key, morning.params) : '');
+    sfx('morning');
+  } else if (now.phase === 'vote') { showPhaseCard(ICONS.vote, t('vote.title'), t('fx.voteSub')); sfx('vote'); }
+  else if (now.phase === 'ended') {
+    showPhaseCard(ICONS.ended, t('end.' + state.winner), lastLog && lastLog.key !== 'log.townWins' && lastLog.key !== 'log.mafiaWins' ? t(lastLog.key, lastLog.params) : '');
+    sfx('win');
+    celebrate(state.winner);
+  }
+}
+
+// CSS animations restart whenever seats are re-rendered, so each one is given a negative delay
+// matching how far into the animation it already is.
+function seatFx(p, i) {
+  const now = Date.now();
+  const cls = [];
+  let style = '';
+  if (diedAt[p.id] && now - diedAt[p.id] < 1800) { cls.push('dying'); style += `--fx-t:-${now - diedAt[p.id]}ms;`; }
+  if (seatsGame !== state.gameId) { seatsGame = state.gameId; seatsEnteredAt = now; }
+  const sinceEnter = now - seatsEnteredAt - i * 70;
+  if (sinceEnter < 600) { cls.push('entering'); style += `--fx-enter:${-sinceEnter}ms;`; }
+  return { cls: cls.join(' '), style };
+}
+
 // ---------- language ----------
 const langSelect = $('#langSelect');
 langSelect.innerHTML = Object.entries(LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
@@ -1094,10 +1284,12 @@ langSelect.onchange = () => {
   applyStaticTranslations();
   renderAuthMode();
   renderAccount();
+  renderSpookyBtn();
   render();
 };
 
 applyStaticTranslations();
+applySpooky();
 render();
 renderAuthMode();
 if (!store.get(AUTH_KEY)) $('#authUser').focus();
