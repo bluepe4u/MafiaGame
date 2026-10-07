@@ -49,7 +49,7 @@ Default counts by player count (host can override in the lobby):
 | 12 | 4 | 1 | 1 | 1 |
 
 **Night** (game starts with Night 1; the host can turn off the Mafia kill on Night 1 so the Mafia only meet — other roles still act). All night roles pick a target at the same time; the night resolves once all have picked (or the host forces it):
-1. **Hooker** visits a player — that player's night action is cancelled.
+1. **Hooker** visits a player — that player's night action is cancelled. Visiting any Mafia member cancels the Mafia kill for that night, even when several Mafia are alive.
 2. **Mafia** each pick a target (they see each other's picks). Most votes wins; a tie means no kill.
 3. **Doctor** protects a player: never the same player two nights in a row, and themself only once per game (a blocked attempt still counts).
 4. **Cop** learns whether their target is Mafia (private note).

@@ -458,3 +458,19 @@ test('ratings: only after the game, between account holders, changeable, reporte
   room.restart(ps[0].id);
   assert.deepStrictEqual(room.ratings, {});
 });
+
+test('hooker visiting one of two mafia cancels the whole kill', () => {
+  const roles = ['mafia', 'mafia', 'hooker', 'citizen', 'citizen', 'citizen', 'citizen'];
+  const { room, by } = setup(['A', 'B', 'C', 'D', 'E', 'F', 'G'], roles);
+  room.nightAction(by.A.id, by.D.id);
+  room.nightAction(by.B.id, by.D.id);
+  room.nightAction(by.C.id, by.B.id); // hooker visits the second mafia
+  assert.strictEqual(by.D.alive, true);
+  assert.strictEqual(room.history[0].killed, null);
+
+  const r2 = setup(['A', 'B', 'C', 'D', 'E', 'F', 'G'], roles);
+  r2.room.nightAction(r2.by.A.id, r2.by.D.id);
+  r2.room.nightAction(r2.by.B.id, r2.by.D.id);
+  r2.room.nightAction(r2.by.C.id, r2.by.E.id); // hooker visits a citizen: kill goes through
+  assert.strictEqual(r2.by.D.alive, false);
+});

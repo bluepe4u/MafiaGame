@@ -381,10 +381,12 @@ class Room {
       this.addPrivate(t, 'log.hookerVisited');
     }
 
-    // 2. Mafia kill: plurality of unblocked mafia votes, tie = no kill
+    // 2. Mafia kill: plurality of mafia votes, tie = no kill.
+    // The Hooker visiting any Mafia member cancels the whole kill, however many Mafia are alive.
     const tally = {};
+    const mafiaBlocked = this.alive().some(p => p.role === ROLES.MAFIA && blocked.has(p.id));
     for (const m of actionOf(ROLES.MAFIA)) {
-      if (blocked.has(m.id)) continue;
+      if (mafiaBlocked) break;
       const t = this.nightActions[m.id];
       tally[t] = (tally[t] || 0) + 1;
     }
