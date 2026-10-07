@@ -1,18 +1,32 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const express = require('express');
+const QRCode = require('qrcode');
 const { Server } = require('socket.io');
 const { Room, GameError } = require('./src/game');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const ROOM_IDLE_MS = 60 * 60 * 1000;
+// rooms are saved here so a restart or update doesn't end games in progress
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const STATE_FILE = path.join(DATA_DIR, 'rooms.json');
 
 const app = express();
+app.set('trust proxy', 'loopback'); // behind Caddy: use its X-Forwarded-Proto/Host for invite links
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/health', (_req, res) => res.send('ok'));
+
+// QR code of the invite link, for players in the same room to scan
+app.get('/qr.svg', async (req, res) => {
+  const code = String(req.query.room || '').toUpperCase();
+  if (!/^[A-Z]{4}$/.test(code)) return res.status(400).end();
+  const svg = await QRCode.toString(`${req.protocol}://${req.get('host')}/?room=${code}`, { type: 'svg', margin: 1 });
+  res.type('image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(svg);
+});
 
 const server = http.createServer(app);
 const io = new Server(server);
@@ -35,8 +49,52 @@ function broadcast(room) {
   }
 }
 
+// ---------- persistence ----------
+let saveTimer = null;
+let shuttingDown = false;
+
+function saveNow() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const tmp = `${STATE_FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify([...rooms.values()]));
+    fs.renameSync(tmp, STATE_FILE);
+  } catch (e) {
+    console.error('Saving rooms failed:', e.message);
+  }
+}
+
+function scheduleSave() {
+  if (!saveTimer && !shuttingDown) saveTimer = setTimeout(saveNow, 1000);
+}
+
+function onRoomChange(room) {
+  broadcast(room);
+  scheduleSave();
+}
+
+function loadRooms() {
+  let list;
+  try {
+    list = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+  } catch (e) {
+    if (e.code !== 'ENOENT') console.error('Could not read saved rooms:', e.message);
+    return;
+  }
+  for (const data of list) {
+    try {
+      rooms.set(data.code, Room.restore(data, { onChange: onRoomChange }));
+    } catch (e) {
+      console.error(`Could not restore room ${data.code}:`, e.message);
+    }
+  }
+  console.log(`Restored ${rooms.size} room(s)`);
+}
+
 function createRoom() {
-  const room = new Room({ code: newCode(), onChange: broadcast });
+  const room = new Room({ code: newCode(), onChange: onRoomChange });
   rooms.set(room.code, room);
   return room;
 }
@@ -117,6 +175,7 @@ io.on('connection', socket => {
   on('nightAction', ({ targetId }) => { const { room, pid } = ctx(); room.nightAction(pid, targetId); });
   on('forceEndNight', () => { const { room, pid } = ctx(); room.forceEndNight(pid); });
   on('endSpeech', () => { const { room, pid } = ctx(); room.endSpeech(pid); });
+  on('extendSpeech', () => { const { room, pid } = ctx(); room.extendSpeech(pid); });
   on('skipToVote', () => { const { room, pid } = ctx(); room.skipToVote(pid); });
   on('vote', ({ targetId }) => { const { room, pid } = ctx(); room.vote(pid, targetId); });
   on('forceEndVote', () => { const { room, pid } = ctx(); room.forceEndVote(pid); });
@@ -139,16 +198,20 @@ setInterval(() => {
     if (!anyone && now - room.lastActivity > ROOM_IDLE_MS) {
       room.dispose();
       rooms.delete(code);
+      scheduleSave();
     }
   }
 }, 5 * 60 * 1000).unref();
 
+loadRooms();
 server.listen(PORT, HOST, () => console.log(`Mafia server listening on http://${HOST}:${PORT}`));
 
-// Games live in memory, so a restart ends them; at least close sockets cleanly.
+// Save before closing sockets, so disconnects during shutdown don't change who is host.
 for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, () => {
     console.log(`${sig} received, shutting down`);
+    saveNow();
+    shuttingDown = true;
     io.close();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 3000).unref();

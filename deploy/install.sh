@@ -75,6 +75,8 @@ WorkingDirectory=$APP_DIR
 Environment=NODE_ENV=production
 Environment=PORT=$PORT
 Environment=HOST=$BIND
+Environment=DATA_DIR=/var/lib/$SERVICE
+StateDirectory=$SERVICE
 ExecStart=$NODE_BIN $APP_DIR/server.js
 Restart=on-failure
 RestartSec=2
@@ -150,7 +152,7 @@ for _ in $(seq 1 20); do
     fi
     log "Done. Mafia is running at $URL"
     echo "Logs:    journalctl -u $SERVICE -f"
-    echo "Restart: systemctl restart $SERVICE   (note: restarting ends games in progress)"
+    echo "Restart: systemctl restart $SERVICE   (games in progress are saved and resume)"
     exit 0
   fi
   sleep 0.5

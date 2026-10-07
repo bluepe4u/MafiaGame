@@ -30,7 +30,7 @@ The script installs Node.js 22 (if needed), copies the app to `/opt/mafia`, runs
 **Update:** `git pull && sudo ./deploy/install.sh <same args>`.
 **Logs:** `journalctl -u mafia -f` · **Restart:** `sudo systemctl restart mafia`
 
-Games live in memory, so restarting or updating ends games in progress. Run a single instance — the app can't be load-balanced across processes.
+Rooms are saved to disk (`/var/lib/mafia`, or `DATA_DIR`) about once a second and on shutdown, so a restart or update doesn't end games in progress: players' pages reconnect on their own and the game picks up where it was. Run a single instance — the app can't be load-balanced across processes.
 
 **Docker alternative:** `docker compose up -d --build` serves on port 3000 (put your own HTTPS proxy in front).
 

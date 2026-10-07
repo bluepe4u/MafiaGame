@@ -19,6 +19,7 @@
   "homepage": "https://github.com/bluepe4u/MafiaGame#readme",
   "dependencies": {
     "express": "^5.2.1",
+    "qrcode": "^1.5.4",
     "socket.io": "^4.8.4"
   },
   "private": true,

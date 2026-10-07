@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { Room, PHASES, defaultRoleCounts, validateRoleCounts } = require('../src/game');
+const { Room, PHASES, defaultRoleCounts, validateRoleCounts, EXTEND_MS } = require('../src/game');
 
 // Deterministic room: no real timers, roles dealt in a known order.
 function setup(names, roles) {
@@ -261,4 +261,80 @@ test('log entries and errors are translation keys with params', () => {
   assert.deepStrictEqual(room.log.find(e => e.key === 'log.noneVotedOut' || e.key === 'log.votedOut').params,
     { name: 'A', role: 'mafia', tally: [['A', 2]], skips: 1 });
   try { room.vote(by.B.id, by.A.id); assert.fail(); } catch (e) { assert.strictEqual(e.key, 'err.votingClosed'); }
+});
+
+test('speaker can extend once, host any number of times', () => {
+  const { room, host } = setup(SIX, SIX_ROLES);
+  room.forceEndNight(host.id);
+  const speaker = room.player(room.speech.order[room.speech.index]);
+  const other = room.players.find(p => p.id !== speaker.id && p.id !== host.id);
+  const before = room.speech.endsAt;
+  assert.throws(() => room.extendSpeech(other.id), /err\.speakerOrHost/);
+  if (speaker.id !== host.id) {
+    room.extendSpeech(speaker.id);
+    assert.throws(() => room.extendSpeech(speaker.id), /err\.alreadyExtended/);
+  }
+  room.extendSpeech(host.id);
+  room.extendSpeech(host.id);
+  assert.ok(room.speech.endsAt >= before + 2 * EXTEND_MS);
+  room.endSpeech(host.id);
+  assert.strictEqual(room.speech.extended, false, 'next speaker gets their own extension');
+});
+
+test('extending reschedules the timer and stale timers do nothing', () => {
+  const timers = [];
+  const room = new Room({ code: 'T', setTimer: fn => timers.push(fn), clearTimer: () => {}, rng: () => 0 });
+  const ps = SIX.map(n => room.join(n));
+  room.start(ps[0].id);
+  room.forceEndNight(ps[0].id);
+  room.extendSpeech(ps[0].id);
+  timers.at(-2)(); // the timer scheduled before the extension
+  assert.strictEqual(room.speech.index, 0);
+  timers.at(-1)();
+  assert.strictEqual(room.speech.index, 1);
+});
+
+test('history records nights and votes; night details stay hidden until the end', () => {
+  const { room, by } = setup(SIX, SIX_ROLES);
+  room.nightAction(by.A.id, by.E.id);
+  room.nightAction(by.B.id, by.A.id);
+  room.nightAction(by.C.id, by.E.id); // doctor saves E
+  room.nightAction(by.D.id, by.F.id);
+  const night = room.history[0];
+  assert.strictEqual(night.type, 'night');
+  assert.strictEqual(night.saved, by.E.id);
+  assert.strictEqual(night.killed, null);
+  assert.strictEqual(night.actions.length, 4);
+  room.skipToVote(by.A.id);
+  for (const p of room.alive()) room.vote(p.id, p.id === by.A.id ? by.B.id : by.A.id);
+  assert.strictEqual(room.phase, PHASES.ENDED);
+  assert.deepStrictEqual(room.history[1].out, by.A.id);
+  assert.strictEqual(room.viewFor(by.E.id).history.length, 2);
+
+  const r2 = setup(SIX, SIX_ROLES);
+  r2.room.forceEndNight(r2.host.id);
+  r2.room.skipToVote(r2.host.id);
+  r2.room.forceEndVote(r2.host.id);
+  const view = r2.room.viewFor(r2.by.E.id);
+  assert.deepStrictEqual(view.history.map(h => h.type), ['vote']);
+});
+
+test('a saved room restores mid-game with everyone offline', () => {
+  const { room, by } = setup(SIX, SIX_ROLES);
+  room.nightAction(by.A.id, by.E.id);
+  const saved = JSON.parse(JSON.stringify(room));
+  const timers = [];
+  const back = Room.restore(saved, { setTimer: (fn, ms) => timers.push(ms), clearTimer: () => {} });
+  assert.strictEqual(back.phase, PHASES.NIGHT);
+  assert.strictEqual(back.gameId, room.gameId);
+  assert.ok(back.players.every(p => !p.connected));
+  assert.strictEqual(back.byToken(by.A.token).role, 'mafia');
+  back.nightAction(back.player(by.B.id).id, by.A.id);
+  back.nightAction(by.C.id, by.F.id);
+  back.nightAction(by.D.id, by.F.id);
+  assert.strictEqual(back.phase, PHASES.SPEECH);
+
+  const mid = Room.restore(JSON.parse(JSON.stringify(back)), { setTimer: (fn, ms) => timers.push(ms), clearTimer: () => {} });
+  assert.strictEqual(mid.phase, PHASES.SPEECH);
+  assert.ok(timers.at(-1) >= 14000, 'speech timer resumes with time left');
 });
