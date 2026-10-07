@@ -3,11 +3,13 @@
 #
 #   sudo ./deploy/install.sh                  # serve on http://<server-ip>:3000
 #   sudo ./deploy/install.sh mafia.example.com  # serve on https://mafia.example.com (auto TLS via Caddy)
+#   sudo ./deploy/install.sh example.com www.example.com  # several domains: the first is the main one
 #
 # Run it from a checkout of the repo. Re-running after `git pull` updates the app in place.
 # Env overrides: PORT (default 3000), APP_DIR (default /opt/mafia), NODE_MAJOR (default 22).
 set -euo pipefail
 
+DOMAINS=("$@")
 DOMAIN="${1:-}"
 PORT="${PORT:-3000}"
 APP_DIR="${APP_DIR:-/opt/mafia}"
@@ -22,7 +24,8 @@ die() { printf '\033[1;31mError: %s\033[0m\n' "$*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die "run as root (sudo $0 $*)"
 [[ -f "$SRC_DIR/server.js" ]] || die "can't find server.js in $SRC_DIR — run this from the repo checkout"
 command -v apt-get >/dev/null || die "this script expects Ubuntu/Debian (apt-get)"
-if [[ -n "$DOMAIN" && ! "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]]; then die "invalid domain: $DOMAIN"; fi
+for d in "${DOMAINS[@]}"; do [[ "$d" =~ ^[A-Za-z0-9.-]+$ ]] || die "invalid domain: $d"; done
+SITE_ADDRESSES="$(IFS=,; echo "${DOMAINS[*]}" | sed 's/,/, /g')"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -108,10 +111,10 @@ if [[ -n "$DOMAIN" ]]; then
     apt-get update -qq
     apt-get install -y -qq caddy
   fi
-  log "Configuring Caddy for https://$DOMAIN"
+  log "Configuring Caddy for https://$SITE_ADDRESSES"
   install -d /etc/caddy/conf.d
   cat > /etc/caddy/conf.d/mafia.caddy <<EOF
-$DOMAIN {
+$SITE_ADDRESSES {
 	encode gzip
 	reverse_proxy 127.0.0.1:$PORT
 }
@@ -146,7 +149,7 @@ for _ in $(seq 1 20); do
   if curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
     if [[ -n "$DOMAIN" ]]; then
       URL="https://$DOMAIN"
-      echo "Make sure the DNS A record for $DOMAIN points to this server; Caddy fetches the certificate on first request."
+      echo "Make sure the DNS A records for $SITE_ADDRESSES point to this server; Caddy fetches certificates on first request."
     else
       URL="http://$(hostname -I | awk '{print $1}'):$PORT"
     fi

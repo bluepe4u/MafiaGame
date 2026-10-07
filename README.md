@@ -19,6 +19,7 @@ On a fresh Ubuntu 22.04/24.04 server:
 ```sh
 git clone https://github.com/bluepe4u/MafiaGame.git && cd MafiaGame
 sudo ./deploy/install.sh mafia.example.com   # with your domain: HTTPS via Caddy (auto Let's Encrypt)
+sudo ./deploy/install.sh example.com www.example.com   # several domains at once
 # or
 sudo ./deploy/install.sh                     # no domain: plain http://<server-ip>:3000
 ```
