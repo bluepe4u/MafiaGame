@@ -200,3 +200,50 @@ test('views hide other roles but show mafia teammates', () => {
   assert.deepStrictEqual(mafiaView.players.filter(p => p.role).map(p => p.name), ['A', 'B']);
   assert.strictEqual(townView.night.mafiaVotes, undefined);
 });
+
+test('hooker is only in the default setup above 8 players', () => {
+  assert.strictEqual(defaultRoleCounts(8).hooker, 0);
+  assert.strictEqual(defaultRoleCounts(9).hooker, 1);
+});
+
+test('doctor can self-heal only once per game', () => {
+  const { room, by, host } = setup(SIX, SIX_ROLES);
+  room.nightAction(by.C.id, by.C.id);
+  room.forceEndNight(host.id);
+  room.skipToVote(host.id);
+  room.forceEndVote(host.id);
+  room.nightAction(by.C.id, by.E.id);
+  room.forceEndNight(host.id);
+  room.skipToVote(host.id);
+  room.forceEndVote(host.id);
+  assert.throws(() => room.nightAction(by.C.id, by.C.id), /Invalid target/);
+  assert.ok(!room.viewFor(by.C.id).night.validTargets.includes(by.C.id));
+});
+
+test('self-heal blocked by hooker still uses it up', () => {
+  const { room, by, host } = setup(SIX, SIX_ROLES);
+  room.nightAction(by.C.id, by.C.id);
+  room.nightAction(by.D.id, by.C.id);
+  room.forceEndNight(host.id);
+  assert.strictEqual(room.doctorSelfHealUsed, true);
+});
+
+test('first night without kill: mafia has no action, others still act', () => {
+  const room = new Room({ code: 'N', setTimer: () => 0, clearTimer: () => {}, rng: () => 0 });
+  const ps = SIX.map(n => room.join(n));
+  room.updateSettings(ps[0].id, { firstNightKill: false, roleCounts: { mafia: 1, cop: 1, doctor: 1, hooker: 1 } });
+  room.start(ps[0].id);
+  ps.forEach((p, i) => { p.role = SIX_ROLES[i]; });
+  const [A, B, C, D, E] = ps;
+  assert.throws(() => room.nightAction(A.id, E.id), /no action tonight/);
+  assert.deepStrictEqual(room.viewFor(A.id).night.validTargets, []);
+  room.nightAction(B.id, A.id);
+  room.nightAction(C.id, E.id);
+  room.nightAction(D.id, E.id); // last actor -> night resolves without waiting for mafia
+  assert.strictEqual(room.phase, PHASES.SPEECH);
+  assert.ok(room.players.every(p => p.alive));
+  assert.match(room.privateLog[B.id][0].text, /MAFIA/);
+  room.skipToVote(A.id);
+  room.forceEndVote(A.id);
+  room.nightAction(A.id, E.id); // night 2: mafia kills again
+});

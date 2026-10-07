@@ -14,7 +14,7 @@ const ROLE_INFO = {
   citizen: { name: 'Citizen', team: 'town', blurb: 'Find the Mafia and vote them out during the day.' },
   mafia: { name: 'Mafia', team: 'mafia', blurb: 'Each night, agree with your fellow Mafia on someone to kill. Outnumber the town to win.' },
   cop: { name: 'Cop', team: 'town', blurb: 'Each night, check one player and learn whether they are Mafia.' },
-  doctor: { name: 'Doctor', team: 'town', blurb: 'Each night, protect one player from being killed. You can protect yourself, but not the same player two nights in a row.' },
+  doctor: { name: 'Doctor', team: 'town', blurb: 'Each night, protect one player from being killed. You can protect yourself only once per game, and never the same player two nights in a row.' },
   hooker: { name: 'Hooker', team: 'town', blurb: 'Each night, visit one player. Their night action is blocked.' },
 };
 
@@ -45,7 +45,7 @@ function defaultRoleCounts(n) {
     mafia: n >= 6 ? Math.floor(n / 3) : 1,
     cop: n >= 4 ? 1 : 0,
     doctor: n >= 5 ? 1 : 0,
-    hooker: n >= 7 ? 1 : 0,
+    hooker: n > 8 ? 1 : 0,
   };
 }
 
@@ -72,7 +72,7 @@ class Room {
     this.clearTimer = clearTimer;
     this.players = []; // { id, token, name, seat, connected, alive, role }
     this.hostId = null;
-    this.settings = { speechSeconds: 60, revealRoleOnDeath: true, roleCounts: null };
+    this.settings = { speechSeconds: 60, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null };
     this.resetGameState();
     this.lastActivity = Date.now();
   }
@@ -82,6 +82,7 @@ class Room {
     this.day = 0;
     this.nightActions = {}; // playerId -> targetId
     this.lastDoctorTarget = null;
+    this.doctorSelfHealUsed = false;
     this.speech = null; // { order: [ids], index, endsAt }
     this.lastStarterSeat = null;
     this.votes = {}; // voterId -> targetId | 'skip'
@@ -193,6 +194,7 @@ class Room {
       this.settings.speechSeconds = v;
     }
     if (s.revealRoleOnDeath !== undefined) this.settings.revealRoleOnDeath = !!s.revealRoleOnDeath;
+    if (s.firstNightKill !== undefined) this.settings.firstNightKill = !!s.firstNightKill;
     if (s.roleCounts !== undefined) {
       if (s.roleCounts === null) {
         this.settings.roleCounts = null;
@@ -240,8 +242,18 @@ class Room {
   }
 
   // ---------- night ----------
+  mafiaKillsTonight() {
+    return this.day > 1 || this.settings.firstNightKill;
+  }
+
+  hasNightAction(p) {
+    if (p.role === ROLES.CITIZEN) return false;
+    if (p.role === ROLES.MAFIA) return this.mafiaKillsTonight();
+    return true;
+  }
+
   actorsForNight() {
-    return this.alive().filter(p => p.role !== ROLES.CITIZEN);
+    return this.alive().filter(p => this.hasNightAction(p));
   }
 
   beginNight() {
@@ -250,7 +262,9 @@ class Room {
     this.nightActions = {};
     this.votes = {};
     this.speech = null;
-    this.addPublic(`Night ${this.day} falls. The town sleeps.`);
+    this.addPublic(this.mafiaKillsTonight()
+      ? `Night ${this.day} falls. The town sleeps.`
+      : `Night ${this.day} falls. The Mafia meet each other — there is no kill tonight.`);
     this.touch();
   }
 
@@ -260,7 +274,9 @@ class Room {
       case ROLES.MAFIA: return alive.filter(t => t.role !== ROLES.MAFIA).map(t => t.id);
       case ROLES.COP: return alive.filter(t => t.id !== p.id).map(t => t.id);
       case ROLES.HOOKER: return alive.filter(t => t.id !== p.id).map(t => t.id);
-      case ROLES.DOCTOR: return alive.filter(t => t.id !== this.lastDoctorTarget).map(t => t.id);
+      case ROLES.DOCTOR: return alive
+        .filter(t => t.id !== this.lastDoctorTarget && !(t.id === p.id && this.doctorSelfHealUsed))
+        .map(t => t.id);
       default: return [];
     }
   }
@@ -269,7 +285,7 @@ class Room {
     this.assert(this.phase === PHASES.NIGHT, 'It is not night');
     const p = this.player(pid);
     this.assert(p && p.alive, 'Dead players cannot act');
-    this.assert(p.role !== ROLES.CITIZEN, 'Citizens have no night action');
+    this.assert(this.hasNightAction(p), 'You have no action tonight');
     this.assert(this.validNightTargets(p).includes(targetId), 'Invalid target');
     this.nightActions[pid] = targetId;
     const pending = this.actorsForNight().filter(a => !(a.id in this.nightActions));
@@ -312,8 +328,9 @@ class Room {
     for (const d of docs) {
       if (!blocked.has(d.id)) healed = this.nightActions[d.id];
     }
-    // the restriction tracks who the doctor chose, even if blocked
+    // restrictions track who the doctor chose, even if blocked
     this.lastDoctorTarget = docs.length ? this.nightActions[docs[0].id] : null;
+    if (docs.some(d => this.nightActions[d.id] === d.id)) this.doctorSelfHealUsed = true;
 
     // 4. Cop checks
     for (const c of actionOf(ROLES.COP)) {
@@ -497,8 +514,10 @@ class Room {
     if (this.phase === PHASES.NIGHT && me) {
       view.night = {
         myTarget: this.nightActions[pid] || null,
-        validTargets: me.alive ? this.validNightTargets(me) : [],
+        validTargets: me.alive && this.hasNightAction(me) ? this.validNightTargets(me) : [],
         pendingCount: this.actorsForNight().filter(a => !(a.id in this.nightActions)).length,
+        hasAction: me.alive && this.hasNightAction(me),
+        mafiaKills: this.mafiaKillsTonight(),
       };
       if (iAmMafia) {
         view.night.mafiaVotes = Object.fromEntries(
