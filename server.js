@@ -6,7 +6,8 @@ const express = require('express');
 const { Server } = require('socket.io');
 const { Room, GameError } = require('./src/game');
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const ROOM_IDLE_MS = 60 * 60 * 1000;
 
 const app = express();
@@ -142,4 +143,14 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000).unref();
 
-server.listen(PORT, () => console.log(`Mafia server listening on http://localhost:${PORT}`));
+server.listen(PORT, HOST, () => console.log(`Mafia server listening on http://${HOST}:${PORT}`));
+
+// Games live in memory, so a restart ends them; at least close sockets cleanly.
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    console.log(`${sig} received, shutting down`);
+    io.close();
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000).unref();
+  });
+}

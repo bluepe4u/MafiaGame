@@ -6,11 +6,33 @@ A web app for playing Mafia (Werewolf) with 4–12 players, each on their own co
 
 ```sh
 npm install
-npm start        # http://localhost:3000  (PORT env var to change)
+npm start        # http://localhost:3000  (PORT / HOST env vars to change)
 npm test
 ```
 
 One player creates a room and shares the 4-letter code; others join with it. The creator is the host.
+
+## Deploy on an Ubuntu VPS
+
+On a fresh Ubuntu 22.04/24.04 server:
+
+```sh
+git clone https://github.com/bluepe4u/MafiaGame.git && cd MafiaGame
+sudo ./deploy/install.sh mafia.example.com   # with your domain: HTTPS via Caddy (auto Let's Encrypt)
+# or
+sudo ./deploy/install.sh                     # no domain: plain http://<server-ip>:3000
+```
+
+For the domain option, first point the domain's DNS A record at the server and make sure ports 80 and 443 are open.
+
+The script installs Node.js 22 (if needed), copies the app to `/opt/mafia`, runs it as an unprivileged `mafia` user under systemd (auto-start on boot, restart on crash), and with a domain sets up Caddy as an HTTPS reverse proxy (WebSockets included) while the app itself only listens on localhost. It opens the ports in `ufw` if the firewall is active.
+
+**Update:** `git pull && sudo ./deploy/install.sh <same args>`.
+**Logs:** `journalctl -u mafia -f` · **Restart:** `sudo systemctl restart mafia`
+
+Games live in memory, so restarting or updating ends games in progress. Run a single instance — the app can't be load-balanced across processes.
+
+**Docker alternative:** `docker compose up -d --build` serves on port 3000 (put your own HTTPS proxy in front).
 
 ## Rules as implemented
 
