@@ -7,6 +7,7 @@ const express = require('express');
 const QRCode = require('qrcode');
 const { Server } = require('socket.io');
 const { Room, GameError } = require('./src/game');
+const { UserStore } = require('./src/users');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -15,10 +16,56 @@ const ROOM_IDLE_MS = 60 * 60 * 1000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'rooms.json');
 
+const users = new UserStore(DATA_DIR);
+
 const app = express();
 app.set('trust proxy', 'loopback'); // behind Caddy: use its X-Forwarded-Proto/Host for invite links
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/avatars', express.static(users.avatarDir, { maxAge: '30d', immutable: true, index: false }));
 app.get('/health', (_req, res) => res.send('ok'));
+
+// ---------- accounts API ----------
+// Handlers throw GameError for anything the user should see; the client translates the key.
+const api = fn => (req, res) => {
+  try {
+    res.json({ ok: true, ...fn(req) });
+  } catch (e) {
+    if (!(e instanceof GameError)) console.error(e);
+    const error = e instanceof GameError ? { key: e.key, params: e.params } : { key: 'err.server', params: {} };
+    res.status(e instanceof GameError ? 400 : 500).json({ ok: false, error });
+  }
+};
+const bearer = req => (req.get('authorization') || '').replace(/^Bearer /, '');
+const currentUser = req => {
+  const user = users.byToken(bearer(req));
+  if (!user) throw new GameError('err.loginRequired');
+  return user;
+};
+
+app.use('/api', express.json({ limit: '2mb' }));
+app.post('/api/register', api(req => {
+  const { user, token } = users.register(req.body.username, req.body.password);
+  return { token, user: users.publicProfile(user) };
+}));
+app.post('/api/login', api(req => {
+  const { user, token } = users.login(req.body.username, req.body.password);
+  return { token, user: users.publicProfile(user) };
+}));
+app.post('/api/logout', api(req => { users.logout(bearer(req)); return {}; }));
+app.get('/api/me', api(req => ({ user: users.publicProfile(currentUser(req)) })));
+app.post('/api/password', api(req => {
+  const token = users.changePassword(currentUser(req), req.body.oldPassword, req.body.newPassword);
+  return { token };
+}));
+// avatar arrives as a data URL, already cropped and shrunk in the browser
+app.post('/api/avatar', api(req => {
+  const user = currentUser(req);
+  const m = /^data:image\/[a-z]+;base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body.image || ''));
+  if (!m) throw new GameError('err.avatarType');
+  users.setAvatar(user, Buffer.from(m[1], 'base64'));
+  refreshUser(user.id);
+  return { user: users.publicProfile(user) };
+}));
 
 // QR code of the invite link, for players in the same room to scan
 app.get('/qr.svg', async (req, res) => {
@@ -41,6 +88,20 @@ function newCode() {
   } while (rooms.has(code));
   return code;
 }
+
+// rooms show each player's avatar and decency status: re-send them when a profile changes
+function refreshUser(userId) {
+  for (const room of rooms.values()) if (room.byUser(userId)) broadcast(room);
+}
+
+const roomOptions = () => ({
+  onChange: onRoomChange,
+  profileOf: userId => users.publicProfile(users.users[userId]),
+  onRate: (targetUserId, oldValue, newValue) => {
+    users.applyRating(targetUserId, oldValue, newValue);
+    refreshUser(targetUserId);
+  },
+});
 
 function broadcast(room) {
   for (const s of io.sockets.adapter.rooms.get(room.code) || []) {
@@ -85,7 +146,7 @@ function loadRooms() {
   }
   for (const data of list) {
     try {
-      rooms.set(data.code, Room.restore(data, { onChange: onRoomChange }));
+      rooms.set(data.code, Room.restore(data, roomOptions()));
     } catch (e) {
       console.error(`Could not restore room ${data.code}:`, e.message);
     }
@@ -94,12 +155,24 @@ function loadRooms() {
 }
 
 function createRoom() {
-  const room = new Room({ code: newCode(), onChange: onRoomChange });
+  const room = new Room({ code: newCode(), ...roomOptions() });
   rooms.set(room.code, room);
   return room;
 }
 
+// the client sends its login token when connecting; it reconnects after logging in or out
+io.use((socket, next) => {
+  socket.data.userId = users.byToken(socket.handshake.auth?.token)?.id || null;
+  next();
+});
+
 io.on('connection', socket => {
+  const me = () => {
+    const user = users.users[socket.data.userId];
+    if (!user) throw new GameError('err.loginRequired');
+    return user;
+  };
+
   const attach = (room, player) => {
     socket.data.roomCode = room.code;
     socket.data.playerId = player.id;
@@ -126,20 +199,23 @@ io.on('connection', socket => {
     }
   });
 
-  on('create', ({ name }) => {
+  on('create', () => {
+    const user = me();
     const room = createRoom();
     try {
-      attach(room, room.join(name));
+      attach(room, room.join(user.username, { userId: user.id }));
     } catch (e) {
       rooms.delete(room.code);
       throw e;
     }
   });
 
-  on('join', ({ code, name }) => {
+  on('join', ({ code }) => {
+    const user = me();
     const room = rooms.get(String(code || '').toUpperCase().trim());
     if (!room) throw new GameError('err.roomNotFound');
-    attach(room, room.join(name));
+    // already in this room (another tab or device): take that seat back
+    attach(room, room.byUser(user.id) || room.join(user.username, { userId: user.id }));
   });
 
   on('resume', ({ code, token }) => {
@@ -177,6 +253,8 @@ io.on('connection', socket => {
   on('endSpeech', () => { const { room, pid } = ctx(); room.endSpeech(pid); });
   on('extendSpeech', () => { const { room, pid } = ctx(); room.extendSpeech(pid); });
   on('chat', ({ channel, text }) => { const { room, pid } = ctx(); room.sendChat(pid, channel, text); });
+  on('revealRole', () => { const { room, pid } = ctx(); room.revealRole(pid); });
+  on('rate', ({ targetId, value }) => { const { room, pid } = ctx(); room.rate(pid, targetId, Number(value)); });
   on('skipToVote', () => { const { room, pid } = ctx(); room.skipToVote(pid); });
   on('vote', ({ targetId }) => { const { room, pid } = ctx(); room.vote(pid, targetId); });
   on('forceEndVote', () => { const { room, pid } = ctx(); room.forceEndVote(pid); });
@@ -212,6 +290,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, () => {
     console.log(`${sig} received, shutting down`);
     saveNow();
+    users.saveNow();
     shuttingDown = true;
     io.close();
     server.close(() => process.exit(0));

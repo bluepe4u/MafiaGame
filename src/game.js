@@ -38,7 +38,7 @@ const CHAT_MIN_GAP_MS = 400; // per player, against accidental floods
 const SAVED_FIELDS = [
   'code', 'players', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions', 'lastDoctorTarget',
   'doctorSelfHealUsed', 'speech', 'lastStarterSeat', 'votes', 'voteEndsAt', 'log', 'privateLog', 'history', 'chat',
-  'winner', 'lastActivity',
+  'revealedRoles', 'ratings', 'winner', 'lastActivity',
 ];
 
 const id = (bytes = 6) => crypto.randomBytes(bytes).toString('hex');
@@ -84,13 +84,19 @@ class GameError extends Error {
 }
 
 class Room {
-  constructor({ code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+  // profileOf(userId) -> { avatar, score } for display; onRate(targetUserId, oldValue, newValue) records ratings
+  constructor({
+    code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout,
+    profileOf = () => null, onRate = () => {},
+  } = {}) {
     this.code = code;
+    this.profileOf = profileOf;
+    this.onRate = onRate;
     this.rng = rng;
     this.onChange = onChange;
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;
-    this.players = []; // { id, token, name, seat, connected, alive, role }
+    this.players = []; // { id, token, userId, name, seat, connected, alive, role }
     this.hostId = null;
     // voteSeconds: 0 means no time limit
     this.settings = { speechSeconds: 60, voteSeconds: 360, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null };
@@ -109,9 +115,11 @@ class Room {
     this.lastStarterSeat = null;
     this.votes = {}; // voterId -> targetId | 'skip'
     this.voteEndsAt = null;
-    // town: everyone (lobby, day, after the game); mafia: the Mafia, at night
-    this.chat = { town: [], mafia: [] };
+    // town: everyone (lobby, day, after the game); mafia: the Mafia, at night; dead: players who are out
+    this.chat = { town: [], mafia: [], dead: [] };
     this.lastChatAt = {};
+    this.revealedRoles = {}; // playerId -> true once they've shown their role in the graveyard chat
+    this.ratings = {}; // raterPlayerId -> { targetPlayerId: 1 | -1 }, after the game
     this.log = []; // public events { day, phase, text }
     this.privateLog = {}; // playerId -> [{ day, text }]
     // what happened each night and vote: [{ type: 'night', day, actions, killed, saved } | { type: 'vote', day, votes, out }]
@@ -137,6 +145,7 @@ class Room {
     const defaults = room.settings;
     for (const k of SAVED_FIELDS) if (data[k] !== undefined) room[k] = data[k];
     room.settings = { ...defaults, ...room.settings }; // settings added since the room was saved
+    room.chat = { town: [], mafia: [], dead: [], ...room.chat };
     for (const p of room.players) p.connected = false;
     // the server was down for a while: give the current speaker / the vote at least a few seconds back
     const atLeast = Date.now() + 15 * 1000;
@@ -164,6 +173,10 @@ class Room {
     return this.players.find(p => p.token === token);
   }
 
+  byUser(userId) {
+    return userId ? this.players.find(p => p.userId === userId) : null;
+  }
+
   alive() {
     return this.players.filter(p => p.alive).sort((a, b) => a.seat - b.seat);
   }
@@ -186,13 +199,13 @@ class Room {
   }
 
   // ---------- lobby ----------
-  join(name) {
+  join(name, { userId = null } = {}) {
     name = String(name || '').trim().slice(0, 20);
     this.assert(name, 'err.nameRequired');
     this.assert(this.phase === PHASES.LOBBY, 'err.gameInProgress');
     this.assert(this.players.length < MAX_PLAYERS, 'err.roomFull', { max: MAX_PLAYERS });
     this.assert(!this.players.some(p => p.name.toLowerCase() === name.toLowerCase()), 'err.nameTaken');
-    const p = { id: id(), token: id(16), name, seat: this.players.length, connected: true, alive: true, role: null };
+    const p = { id: id(), token: id(16), userId, name, seat: this.players.length, connected: true, alive: true, role: null };
     this.players.push(p);
     if (!this.hostId) this.hostId = p.id;
     this.touch();
@@ -570,9 +583,14 @@ class Room {
   }
 
   // ---------- chat ----------
+  inGame() {
+    return this.phase === PHASES.NIGHT || this.phase === PHASES.SPEECH || this.phase === PHASES.VOTE;
+  }
+
   canChat(p, channel) {
     if (!p) return false;
     if (channel === 'mafia') return p.role === ROLES.MAFIA && p.alive && this.phase === PHASES.NIGHT;
+    if (channel === 'dead') return !p.alive && this.inGame();
     if (channel !== 'town') return false;
     if (this.phase === PHASES.LOBBY || this.phase === PHASES.ENDED) return true;
     return this.phase !== PHASES.NIGHT && p.alive;
@@ -590,6 +608,32 @@ class Room {
     // names are stored too: lobby players can leave, and their messages should still read right
     list.push({ id: id(4), from: pid, name: p.name, text, at: now, day: this.day, phase: this.phase });
     if (list.length > CHAT_KEEP) list.splice(0, list.length - CHAT_KEEP);
+    this.touch();
+  }
+
+  // A player who is out shows their role to the others in the graveyard chat.
+  revealRole(pid) {
+    const p = this.player(pid);
+    this.assert(this.canChat(p, 'dead'), 'err.chatClosed');
+    this.assert(!this.revealedRoles[pid], 'err.alreadyRevealed');
+    this.revealedRoles[pid] = true;
+    this.chat.dead.push({ id: id(4), from: pid, name: p.name, kind: 'reveal', role: p.role, at: Date.now(), day: this.day, phase: this.phase });
+    this.touch();
+  }
+
+  // ---------- decency ratings, after the game ----------
+  rate(pid, targetId, value) {
+    this.assert(this.phase === PHASES.ENDED, 'err.rateAfterGame');
+    const p = this.player(pid);
+    const target = this.player(targetId);
+    this.assert(p && target && pid !== targetId && p.role && target.role, 'err.invalidTarget');
+    this.assert(p.userId && target.userId, 'err.rateAccounts');
+    this.assert([1, -1, 0].includes(value), 'err.invalidTarget');
+    const mine = (this.ratings[pid] ||= {});
+    const old = mine[targetId] || 0;
+    if (old === value) return;
+    if (value) mine[targetId] = value; else delete mine[targetId];
+    this.onRate(target.userId, old, value);
     this.touch();
   }
 
@@ -634,11 +678,18 @@ class Room {
       roleCountsError: this.phase === PHASES.LOBBY ? validateRoleCounts(this.effectiveRoleCounts(), this.players.length) : null,
       minPlayers: MIN_PLAYERS,
       maxPlayers: MAX_PLAYERS,
-      players: this.players.map(p => ({
-        id: p.id, name: p.name, seat: p.seat, alive: p.alive, connected: p.connected,
-        role: roleVisible(p) ? p.role : null,
-      })),
-      me: me ? { id: me.id, name: me.name, role: me.role, alive: me.alive } : null,
+      players: this.players.map(p => {
+        const profile = p.userId ? this.profileOf(p.userId) : null;
+        return {
+          id: p.id, name: p.name, seat: p.seat, alive: p.alive, connected: p.connected,
+          role: roleVisible(p) ? p.role : null,
+          avatar: profile?.avatar || null,
+          score: profile ? profile.score : null,
+          rateable: !!p.userId,
+        };
+      }),
+      me: me ? { id: me.id, name: me.name, role: me.role, alive: me.alive, revealed: !!this.revealedRoles[pid], rateable: !!me.userId } : null,
+      myRatings: (me && this.ratings[pid]) || {},
       roleInfo: ROLE_INFO,
       log: this.log,
       privateLog: this.privateLog[pid] || [],
@@ -648,7 +699,8 @@ class Room {
       chat: {
         town: this.chat.town,
         mafia: iAmMafia || ended ? this.chat.mafia : null,
-        canPost: { town: this.canChat(me, 'town'), mafia: this.canChat(me, 'mafia') },
+        dead: (me && !me.alive && this.phase !== PHASES.LOBBY) || ended ? this.chat.dead : null,
+        canPost: { town: this.canChat(me, 'town'), mafia: this.canChat(me, 'mafia'), dead: this.canChat(me, 'dead') },
       },
     };
 

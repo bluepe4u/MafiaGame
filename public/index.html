@@ -26,6 +26,7 @@
     <button id="alertsBtn" class="icon-btn" type="button" aria-pressed="true"></button>
     <select id="langSelect" class="lang-select" aria-label="Language"></select>
     <button id="leaveBtn" class="ghost small hidden" data-i18n="ui.leaveRoom"></button>
+    <button id="profileBtn" class="profile-btn hidden" type="button"></button>
   </header>
 
   <div id="offline" class="offline-banner hidden" role="status"><span class="spinner"></span><span data-i18n="ui.reconnecting"></span></div>
@@ -37,8 +38,18 @@
         <h1><span data-i18n="ui.heroA"></span> <em data-i18n="ui.heroB"></em></h1>
         <p class="muted hero-sub" data-i18n="ui.tagline"></p>
       </div>
-      <div class="card home-card">
-        <label class="field"><span data-i18n="ui.yourName"></span> <input id="name" maxlength="20" autocomplete="nickname" autofocus></label>
+      <form id="authCard" class="card home-card hidden" autocomplete="on">
+        <div class="tabs auth-tabs" role="tablist">
+          <button type="button" data-auth-mode="login" data-i18n="auth.login"></button>
+          <button type="button" data-auth-mode="register" data-i18n="auth.register"></button>
+        </div>
+        <label class="field"><span data-i18n="auth.username"></span> <input id="authUser" name="username" maxlength="20" autocomplete="username" spellcheck="false"></label>
+        <label class="field"><span data-i18n="auth.password"></span> <input id="authPass" name="password" type="password" autocomplete="current-password"></label>
+        <button id="authSubmit" type="submit" class="primary big-btn"></button>
+        <p class="muted small-text auth-hint" data-i18n="auth.hint"></p>
+      </form>
+      <div id="playCard" class="card home-card hidden">
+        <button id="homeProfile" class="me-row" type="button"></button>
         <button id="createBtn" class="primary big-btn" data-i18n="ui.createRoom"></button>
         <div class="divider"><span data-i18n="ui.orJoin"></span></div>
         <div class="row join-row">
@@ -176,6 +187,44 @@
     </div>
   </div>
 
+  <div id="profile" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet profile-sheet">
+      <div class="sheet-head">
+        <h2 data-i18n="profile.title"></h2>
+        <button id="profileClose" class="ghost small" data-i18n="ui.close"></button>
+      </div>
+      <div class="sheet-body">
+        <div class="profile-top">
+          <label class="avatar-upload">
+            <span id="profileAvatar"></span>
+            <span class="avatar-edit" data-i18n="profile.changePhoto"></span>
+            <input id="avatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/*" hidden>
+          </label>
+          <div class="profile-id">
+            <div id="profileName" class="profile-name"></div>
+            <div id="profileStatus"></div>
+            <div class="karma">
+              <span class="karma-up" id="profileLikes"></span>
+              <span class="karma-down" id="profileDislikes"></span>
+            </div>
+          </div>
+        </div>
+        <p class="muted small-text" data-i18n="profile.decencyHint"></p>
+        <div id="tierLadder" class="tier-ladder"></div>
+        <form id="passwordForm" class="password-form" autocomplete="on">
+          <h3 data-i18n="profile.changePassword"></h3>
+          <input type="text" name="username" autocomplete="username" hidden>
+          <div class="row">
+            <input id="oldPass" type="password" autocomplete="current-password" data-i18n-placeholder="profile.oldPassword">
+            <input id="newPass" type="password" autocomplete="new-password" data-i18n-placeholder="profile.newPassword">
+            <button type="submit" data-i18n="profile.save"></button>
+          </div>
+        </form>
+        <button id="logoutBtn" class="danger" data-i18n="profile.logout"></button>
+      </div>
+    </div>
+  </div>
+
   <div id="markMenu" class="mark-menu hidden" role="dialog">
     <div id="markTitle" class="mark-title"></div>
     <div class="mark-options">
@@ -192,8 +241,10 @@
       <div id="chatChannels" class="chat-channels hidden">
         <button data-channel="town"><span data-i18n="chat.town"></span><span class="badge hidden"></span></button>
         <button data-channel="mafia"><span data-i18n="chat.mafia"></span><span class="badge hidden"></span></button>
+        <button data-channel="dead"><span data-i18n="chat.dead"></span><span class="badge hidden"></span></button>
       </div>
       <div id="chatList" class="chat-list" aria-live="polite"></div>
+      <button id="revealBtn" class="reveal-btn hidden" type="button" data-i18n="chat.reveal"></button>
       <p id="chatClosed" class="chat-closed hidden"></p>
       <form id="chatForm" class="chat-form" autocomplete="off">
         <input id="chatInput" maxlength="300" data-i18n-placeholder="chat.placeholder">

@@ -382,7 +382,7 @@ test('vote timer can be turned off, and a stale vote timer does nothing', () => 
   assert.strictEqual(r2.voteEndsAt, null);
 });
 
-test('chat: town by day, mafia-only at night, dead can read but not write', () => {
+test('chat: town by day, mafia-only at night, dead can read town but not write there', () => {
   const { room, by } = setup(SIX, SIX_ROLES);
   // night: town closed, mafia open for mafia only
   assert.throws(() => room.sendChat(by.E.id, 'town', 'hi'), /err\.chatClosed/);
@@ -402,7 +402,7 @@ test('chat: town by day, mafia-only at night, dead can read but not write', () =
   assert.throws(() => room.sendChat(by.E.id, 'town', 'I am dead'), /err\.chatClosed/);
   assert.throws(() => room.sendChat(by.C.id, 'town', '   '), /err\.chatEmpty/);
   assert.strictEqual(room.viewFor(by.E.id).chat.town.length, 1);
-  assert.deepStrictEqual(room.viewFor(by.E.id).chat.canPost, { town: false, mafia: false });
+  assert.deepStrictEqual(room.viewFor(by.E.id).chat.canPost, { town: false, mafia: false, dead: true });
 });
 
 test('rooms saved by an older version restore with default settings and an empty chat', () => {
@@ -413,5 +413,48 @@ test('rooms saved by an older version restore with default settings and an empty
   delete old.voteEndsAt;
   const back = Room.restore(old, { setTimer: () => 0, clearTimer: () => {} });
   assert.strictEqual(back.settings.voteSeconds, 360);
-  assert.deepStrictEqual(back.chat, { town: [], mafia: [] });
+  assert.deepStrictEqual(back.chat, { town: [], mafia: [], dead: [] });
+});
+
+test('graveyard chat: only the dead write and read it; each can reveal their role once', () => {
+  const { room, by } = setup(SIX, SIX_ROLES);
+  room.nightAction(by.A.id, by.E.id); // E dies
+  room.nightAction(by.B.id, by.A.id);
+  room.nightAction(by.C.id, by.F.id);
+  room.nightAction(by.D.id, by.F.id);
+  assert.throws(() => room.sendChat(by.B.id, 'dead', 'hi'), /err\.chatClosed/);
+  room.sendChat(by.E.id, 'dead', 'so lonely here');
+  room.revealRole(by.E.id);
+  assert.throws(() => room.revealRole(by.E.id), /err\.alreadyRevealed/);
+  assert.throws(() => room.revealRole(by.B.id), /err\.chatClosed/);
+  assert.deepStrictEqual(room.chat.dead.at(-1), { ...room.chat.dead.at(-1), kind: 'reveal', role: 'citizen' });
+  assert.strictEqual(room.viewFor(by.B.id).chat.dead, null, 'the living cannot read it');
+  assert.strictEqual(room.viewFor(by.E.id).chat.dead.length, 2);
+  assert.strictEqual(room.viewFor(by.E.id).me.revealed, true);
+});
+
+test('ratings: only after the game, between account holders, changeable, reported to the store', () => {
+  const changes = [];
+  const room = new Room({ code: 'R', setTimer: () => 0, clearTimer: () => {}, rng: () => 0, onRate: (...a) => changes.push(a) });
+  const ps = SIX.map((n, i) => room.join(n, { userId: i < 5 ? 'u' + n : null }));
+  room.updateSettings(ps[0].id, { roleCounts: { mafia: 1, cop: 0, doctor: 0, hooker: 0 } });
+  room.start(ps[0].id);
+  assert.throws(() => room.rate(ps[0].id, ps[1].id, 1), /err\.rateAfterGame/);
+  const mafia = room.players.find(p => p.role === 'mafia');
+  room.forceEndNight(ps[0].id);
+  room.skipToVote(ps[0].id);
+  for (const p of room.alive()) if (p.id !== mafia.id) room.vote(p.id, mafia.id);
+  room.forceEndVote(ps[0].id);
+  assert.strictEqual(room.phase, PHASES.ENDED);
+  room.rate(ps[0].id, ps[1].id, 1);
+  room.rate(ps[0].id, ps[1].id, 1); // same again: no change
+  room.rate(ps[0].id, ps[1].id, -1);
+  room.rate(ps[0].id, ps[1].id, 0);
+  assert.deepStrictEqual(changes, [['uB', 0, 1], ['uB', 1, -1], ['uB', -1, 0]]);
+  assert.throws(() => room.rate(ps[0].id, ps[0].id, 1), /err\.invalidTarget/);
+  assert.throws(() => room.rate(ps[0].id, ps[5].id, 1), /err\.rateAccounts/);
+  room.rate(ps[2].id, ps[3].id, -1);
+  assert.deepStrictEqual(room.viewFor(ps[2].id).myRatings, { [ps[3].id]: -1 });
+  room.restart(ps[0].id);
+  assert.deepStrictEqual(room.ratings, {});
 });

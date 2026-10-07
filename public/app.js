@@ -1,10 +1,16 @@
 'use strict';
 
-const socket = io();
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
+};
+
+const AUTH_KEY = 'mafia.auth';
+// the login token travels with every (re)connection; after logging in or out we reconnect
+const socket = io({ auth: cb => cb({ token: store.get(AUTH_KEY) }) });
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
 const SESSION_KEY = 'mafia.session';
-const NAME_KEY = 'mafia.name';
 const ALERTS_KEY = 'mafia.alerts';
 const REVEALED_KEY = 'mafia.revealed';
 const TAB_KEY = 'mafia.tab';
@@ -19,10 +25,6 @@ let urlRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCa
 
 // ---------- utils ----------
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
-};
 
 function toast(msg, kind = '') {
   const t = $('#toast');
@@ -58,13 +60,18 @@ const isHost = () => !!(state && state.me && state.hostId === state.me.id);
 const roleName = r => t('role.' + r);
 const tagHtml = (key, cls = '') => `<span class="tag ${cls}">${esc(t(key))}</span>`;
 // initials on a colour derived from the name, so each player is recognisable at a glance
-function avatar(name) {
+function avatar(name, url) {
+  if (url) return `<img class="avatar" src="${esc(url)}" alt="" loading="lazy">`;
   let h = 0;
   for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
   const parts = name.trim().split(/\s+/);
   const initials = (parts.length > 1 ? parts[0][0] + parts[1][0] : [...name].slice(0, 2).join('')).toUpperCase();
   return `<span class="avatar" style="--h:${h}">${esc(initials)}</span>`;
 }
+// decency status from likes minus dislikes, lowest to highest
+const TIER_MIN = [-Infinity, -9, -4, -1, 2, 5, 10];
+const tierOf = score => TIER_MIN.findLastIndex(min => (score || 0) >= min);
+const statusPill = score => score === null || score === undefined ? '' : `<span class="status t${tierOf(score)}">${esc(t('tier.' + tierOf(score)))}</span>`;
 const icon = paths => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
 const ICONS = {
   night: icon('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
@@ -75,6 +82,8 @@ const ICONS = {
   bell: icon('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
   bellOff: icon('<path d="M8.7 3A6 6 0 0 1 18 8c0 2.9.5 5 1.2 6.5M17 17H3s3-2 3-9c0-.8.1-1.5.4-2.2"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0M3 3l18 18"/>'),
   check: icon('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
+  up: icon('<path d="M7 10v11H4V10zM7 10l4-7c1.7 0 2.6 1.2 2.2 2.8L12.5 9H19a2 2 0 0 1 2 2.3l-1.3 7.5A2.5 2.5 0 0 1 17.3 21H7"/>'),
+  down: icon('<path d="M17 14V3h3v11zM17 14l-4 7c-1.7 0-2.6-1.2-2.2-2.8L11.5 15H5a2 2 0 0 1-2-2.3l1.3-7.5A2.5 2.5 0 0 1 6.7 3H17"/>'),
 };
 const progress = (done, total) => `<div class="bar-track"><div class="bar-fill" style="width:${total ? (100 * done / total) : 0}%"></div></div>`;
 const roleTag = r => r ? `<span class="tag ${state.roleInfo[r].team}">${esc(roleName(r))}</span>` : '';
@@ -171,26 +180,140 @@ function leftRoom() {
   saveSession(null);
   state = null;
   urlRoom = '';
-  chatSeen.town = chatSeen.mafia = null;
+  chatSeen.town = chatSeen.mafia = chatSeen.dead = null;
   chatRendered = '';
   history.replaceState(null, '', '/');
   render();
 }
 
 // ---------- home ----------
-$('#name').value = store.get(NAME_KEY) || '';
 if (urlRoom) $('#joinCode').value = urlRoom;
-const myName = () => {
-  const n = $('#name').value.trim();
-  if (n) store.set(NAME_KEY, n);
-  return n;
-};
-$('#createBtn').onclick = () => send('create', { name: myName() });
-$('#joinBtn').onclick = () => send('join', { name: myName(), code: $('#joinCode').value });
+$('#createBtn').onclick = () => send('create');
+$('#joinBtn').onclick = () => send('join', { code: $('#joinCode').value });
 $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joinBtn').click(); });
-$('#name').addEventListener('keydown', e => {
-  if (e.key === 'Enter') (urlRoom || $('#joinCode').value ? $('#joinBtn') : $('#createBtn')).click();
+
+// ---------- accounts ----------
+let account = null; // { id, username, avatar, likes, dislikes, score } once logged in
+let authMode = 'login';
+
+async function api(path, body) {
+  const token = store.get(AUTH_KEY);
+  try {
+    const res = await fetch('/api/' + path, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.ok) toast(t(data.error.key, data.error.params));
+    return data;
+  } catch {
+    toast(t('err.server'));
+    return { ok: false };
+  }
+}
+
+function setAccount(user, token) {
+  if (token !== undefined) store.set(AUTH_KEY, token);
+  account = user;
+  // reconnect so the server knows who this socket belongs to
+  socket.disconnect().connect();
+  renderAccount();
+  render();
+}
+
+function renderAuthMode() {
+  for (const b of $$('[data-auth-mode]')) b.classList.toggle('active', b.dataset.authMode === authMode);
+  $('#authSubmit').textContent = t(authMode === 'login' ? 'auth.login' : 'auth.register');
+  $('#authPass').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+}
+for (const b of $$('[data-auth-mode]')) b.onclick = () => { authMode = b.dataset.authMode; renderAuthMode(); };
+$('#authCard').addEventListener('submit', async e => {
+  e.preventDefault();
+  const res = await api(authMode, { username: $('#authUser').value, password: $('#authPass').value });
+  if (!res.ok) return;
+  $('#authPass').value = '';
+  setAccount(res.user, res.token);
+  toast(t('toast.welcome', { name: res.user.username }), 'info');
 });
+
+function renderAccount() {
+  $('#authCard').classList.toggle('hidden', !!account);
+  $('#playCard').classList.toggle('hidden', !account);
+  $('#profileBtn').classList.toggle('hidden', !account);
+  if (!account) return;
+  $('#profileBtn').innerHTML = avatar(account.username, account.avatar);
+  $('#profileBtn').title = t('profile.open');
+  $('#homeProfile').innerHTML = `${avatar(account.username, account.avatar)}
+    <span class="me-text"><b>${esc(account.username)}</b>${statusPill(account.score)}</span>`;
+  $('#profileAvatar').innerHTML = avatar(account.username, account.avatar);
+  $('#profileName').textContent = account.username;
+  $('#profileStatus').innerHTML = statusPill(account.score);
+  $('#profileLikes').innerHTML = `${ICONS.up}${esc(t('profile.likes', { n: account.likes }))}`;
+  $('#profileDislikes').innerHTML = `${ICONS.down}${esc(t('profile.dislikes', { n: account.dislikes }))}`;
+  const current = tierOf(account.score);
+  $('#tierLadder').innerHTML = TIER_MIN.map((min, i) => `<span class="status t${i} ${i === current ? 'current' : ''}">${esc(t('tier.' + i))}</span>`).join('');
+}
+
+const openProfile = async () => {
+  const res = await api('me'); // fresh likes/dislikes
+  if (res.ok) { account = res.user; renderAccount(); }
+  $('#profile').classList.remove('hidden');
+};
+$('#profileBtn').onclick = openProfile;
+$('#homeProfile').onclick = openProfile;
+$('#profileClose').onclick = () => $('#profile').classList.add('hidden');
+$('#profile').addEventListener('pointerdown', e => { if (e.target.id === 'profile') $('#profile').classList.add('hidden'); });
+$('#logoutBtn').onclick = async () => {
+  await api('logout', {});
+  $('#profile').classList.add('hidden');
+  setAccount(null, null);
+};
+$('#passwordForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const res = await api('password', { oldPassword: $('#oldPass').value, newPassword: $('#newPass').value });
+  if (!res.ok) return;
+  store.set(AUTH_KEY, res.token);
+  $('#oldPass').value = $('#newPass').value = '';
+  toast(t('toast.passwordChanged'), 'info');
+});
+
+// Crop to a centred square and shrink to 256px before uploading, so photos stay small.
+function shrinkImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      canvas.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
+      URL.revokeObjectURL(img.src);
+      resolve(canvas.toDataURL('image/jpeg', 0.86));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+$('#avatarFile').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  let image;
+  try { image = await shrinkImage(file); } catch { toast(t('err.avatarType')); return; }
+  const res = await api('avatar', { image });
+  if (!res.ok) return;
+  account = res.user;
+  renderAccount();
+  toast(t('toast.photoUpdated'), 'info');
+});
+
+(async () => {
+  if (!store.get(AUTH_KEY)) { renderAccount(); return; }
+  const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${store.get(AUTH_KEY)}` } }).then(r => r.json()).catch(() => null);
+  if (res && res.ok) account = res.user;
+  else if (res) store.set(AUTH_KEY, null); // expired or logged out elsewhere
+  renderAccount();
+})();
 
 // ---------- top bar ----------
 $('#leaveBtn').onclick = async () => {
@@ -328,8 +451,8 @@ function renderLobby() {
   const empty = Math.max(0, state.minPlayers - state.players.length);
   $('#lobbyPlayers').innerHTML = state.players.map(p => `
     <li class="${p.connected ? '' : 'offline'}">
-      ${avatar(p.name)}
-      <span class="pname"><b>${esc(p.name)}</b>${p.id === state.hostId ? tagHtml('tag.host', 'host') : ''}${p.id === state.me.id ? tagHtml('tag.you', 'you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
+      ${avatar(p.name, p.avatar)}
+      <span class="pname"><b>${esc(p.name)}</b>${statusPill(p.score)}${p.id === state.hostId ? tagHtml('tag.host', 'host') : ''}${p.id === state.me.id ? tagHtml('tag.you', 'you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
       ${isHost() && p.id !== state.me.id ? `<button class="ghost small" data-kick="${p.id}">${esc(t('ui.remove'))}</button>` : ''}
     </li>`).join('') + `<li class="empty">${esc(t('ui.emptySeat'))}</li>`.repeat(empty);
   for (const b of $$('[data-kick]')) {
@@ -505,7 +628,8 @@ function renderPhasePanel() {
       <div class="phase-icon">${ICONS.ended}</div>
       <div class="winner">${esc(t('end.' + state.winner))}</div>
       <div class="muted">${esc(t('end.revealed'))}</div>
-      <button id="openRecap" class="primary">${esc(t('end.recap'))}</button>`;
+      <button id="openRecap" class="primary">${esc(t('end.recap'))}</button>
+      ${me.rateable ? `<div class="muted small-text rate-hint">${esc(t('end.rateHint'))}</div>` : ''}`;
     $('#openRecap').onclick = openRecap;
   }
 }
@@ -558,7 +682,13 @@ function renderSeats() {
     }
 
     let btn = '';
-    if (night && night.validTargets.includes(p.id)) {
+    if (state.phase === 'ended' && me.rateable && p.rateable && p.id !== me.id) {
+      const r = state.myRatings[p.id] || 0;
+      btn = `<div class="rate">
+        <button class="rate-up ${r === 1 ? 'on' : ''}" data-rate="${p.id}" data-value="1" aria-label="${esc(t('rate.like'))}" aria-pressed="${r === 1}">${ICONS.up}</button>
+        <button class="rate-down ${r === -1 ? 'on' : ''}" data-rate="${p.id}" data-value="-1" aria-label="${esc(t('rate.dislike'))}" aria-pressed="${r === -1}">${ICONS.down}</button>
+      </div>`;
+    } else if (night && night.validTargets.includes(p.id)) {
       btn = `<button data-night="${p.id}">${esc(t('action.' + me.role))}</button>`;
     } else if (voting && p.alive && p.id !== me.id) {
       btn = `<button data-vote="${p.id}">${esc(t('vote.btn'))}</button>`;
@@ -575,7 +705,7 @@ function renderSeats() {
     return `<div class="${cls}" style="left:${pos.left}%;top:${pos.top}%">
       <span class="num">${p.seat + 1}</span>
       ${markBtn}
-      <span class="avatar-wrap">${avatar(p.name)}${voted}</span>
+      <span class="avatar-wrap" title="${p.score === null ? '' : esc(t('tier.' + tierOf(p.score)))}">${avatar(p.name, p.avatar)}${voted}</span>
       <div class="name">${esc(p.name)}</div>
       ${(showRole && p.role) || meta.length || p.id === me.id || checked || markTag ? `<div class="meta">${p.id === me.id ? tagHtml('tag.you', 'you') : ''}${markTag}${showRole ? roleTag(p.role) : ''}${checked} ${esc(meta.join(' · '))}</div>` : ''}
       ${note ? `<div class="seat-note">${esc(note)}</div>` : ''}
@@ -587,6 +717,12 @@ function renderSeats() {
 
   for (const b of $$('[data-night]')) b.onclick = () => send('nightAction', { targetId: b.dataset.night });
   for (const b of $$('[data-vote]')) b.onclick = () => send('vote', { targetId: b.dataset.vote });
+  for (const b of $$('[data-rate]')) {
+    b.onclick = () => {
+      const v = Number(b.dataset.value);
+      send('rate', { targetId: b.dataset.rate, value: state.myRatings[b.dataset.rate] === v ? 0 : v });
+    };
+  }
   for (const b of $$('[data-mark]')) {
     b.onclick = e => {
       e.stopPropagation();
@@ -718,7 +854,7 @@ function renderVotesPanel() {
 $('#lobbyChatSlot').append($('#chatTemplate').content.cloneNode(true));
 let chatChannel = 'town';
 let chatPhaseKey = null; // switch channel automatically when night falls / day breaks
-const chatSeen = { town: null, mafia: null }; // messages read, per channel (null: not known yet)
+const chatSeen = { town: null, mafia: null, dead: null }; // messages read, per channel (null: not known yet)
 let chatRendered = '';
 
 const chatMessages = ch => (state && state.chat && state.chat[ch]) || [];
@@ -733,6 +869,7 @@ function chatSection(m) {
 
 function chatClosedReason() {
   const me = state.me;
+  if (chatChannel === 'dead') return t('chat.closedGraveyard');
   if (chatChannel === 'mafia') return t('chat.closedMafiaDay');
   if (state.phase === 'night') return t('chat.closedNight');
   if (!me.alive) return t('chat.closedDead');
@@ -748,20 +885,23 @@ function placeChat() {
 function renderChat() {
   if (!state || !state.me || !state.chat) return;
   const me = state.me;
-  const hasMafia = state.chat.mafia !== null;
-  // night: Mafia players land in their own chat; morning: everyone back in the town chat
-  const phaseKey = `${state.phase}:${state.day}`;
+  const available = ch => ch === 'town' || state.chat[ch] !== null;
+  // night: Mafia players land in their own chat; the dead in the graveyard; otherwise the town chat
+  const phaseKey = `${state.phase}:${state.day}:${me.alive}`;
   if (phaseKey !== chatPhaseKey) {
     chatPhaseKey = phaseKey;
-    chatChannel = state.phase === 'night' && state.chat.canPost.mafia ? 'mafia' : 'town';
+    chatChannel = state.chat.canPost.mafia ? 'mafia' : state.chat.canPost.dead ? 'dead' : 'town';
   }
-  if (!hasMafia) chatChannel = 'town';
+  if (!available(chatChannel)) chatChannel = 'town';
 
-  $('#chatChannels').classList.toggle('hidden', !hasMafia);
-  for (const b of $$('[data-channel]')) b.classList.toggle('active', b.dataset.channel === chatChannel);
+  $('#chatChannels').classList.toggle('hidden', !available('mafia') && !available('dead'));
+  for (const b of $$('[data-channel]')) {
+    b.classList.toggle('active', b.dataset.channel === chatChannel);
+    b.classList.toggle('hidden', !available(b.dataset.channel));
+  }
 
   const list = chatMessages(chatChannel);
-  for (const ch of ['town', 'mafia']) {
+  for (const ch of ['town', 'mafia', 'dead']) {
     const n = chatMessages(ch).length;
     // first look after (re)loading: what's there already counts as read; a new game starts a fresh chat
     if (chatSeen[ch] === null || chatSeen[ch] > n) chatSeen[ch] = n;
@@ -786,6 +926,8 @@ function renderChat() {
   $('#chatClosed').classList.toggle('hidden', canPost);
   $('#chatClosed').textContent = canPost ? '' : chatClosedReason();
   $('#chat').classList.toggle('mafia', chatChannel === 'mafia');
+  $('#chat').classList.toggle('dead', chatChannel === 'dead');
+  $('#revealBtn').classList.toggle('hidden', !(chatChannel === 'dead' && state.chat.canPost.dead && !me.revealed));
 
   // re-render the list only when something changed, so scrolling isn't disturbed
   const key = `${chatChannel}:${list.length}:${list.at(-1)?.id}:${lang}`;
@@ -799,11 +941,16 @@ function renderChat() {
   for (const m of list) {
     const sec = chatSection(m);
     if (sec !== section) { html += `<div class="chat-sep"><span>${esc(sec)}</span></div>`; section = sec; prev = null; }
+    if (m.kind === 'reveal') {
+      html += `<div class="msg-reveal">${avatar(m.name, (playerById(m.from) || {}).avatar)}<span><b>${esc(m.name)}</b> ${esc(t('chat.revealed'))}</span>${roleTag(m.role)}</div>`;
+      prev = null;
+      continue;
+    }
     const mine = m.from === me.id;
     const grouped = prev && prev.from === m.from && m.at - prev.at < 5 * 60 * 1000;
     const time = new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     html += `<div class="msg ${mine ? 'mine' : ''} ${grouped ? 'grouped' : ''}">
-      ${mine || grouped ? '<span class="msg-gap"></span>' : avatar(m.name)}
+      ${mine || grouped ? '<span class="msg-gap"></span>' : avatar(m.name, (playerById(m.from) || {}).avatar)}
       <div class="msg-body">
         ${mine || grouped ? '' : `<div class="msg-name">${esc(m.name)}</div>`}
         <div class="bubble">${esc(m.text)}<time>${esc(time)}</time></div>
@@ -811,13 +958,15 @@ function renderChat() {
     </div>`;
     prev = m;
   }
-  box.innerHTML = html || `<p class="chat-empty">${esc(t(chatChannel === 'mafia' ? 'chat.emptyMafia' : 'chat.empty'))}</p>`;
+  const empty = { town: 'chat.empty', mafia: 'chat.emptyMafia', dead: 'chat.emptyDead' }[chatChannel];
+  box.innerHTML = html || `<p class="chat-empty">${esc(t(empty))}</p>`;
   if (nearBottom || list.at(-1)?.from === me.id) box.scrollTop = box.scrollHeight;
 }
 
 for (const b of $$('[data-channel]')) {
   b.onclick = () => { chatChannel = b.dataset.channel; chatRendered = ''; renderChat(); $('#chatList').scrollTop = 1e9; };
 }
+$('#revealBtn').onclick = () => send('revealRole');
 $('#chatForm').addEventListener('submit', async e => {
   e.preventDefault();
   const input = $('#chatInput');
@@ -831,7 +980,7 @@ $('#chatForm').addEventListener('submit', async e => {
 // ---------- end-of-game recap ----------
 function openRecap() {
   const roleOf = id => (playerById(id) || {}).role;
-  const roles = state.players.map(p => `<span class="recap-player">${avatar(p.name)}<b>${esc(p.name)}</b>${roleTag(p.role)}</span>`).join('');
+  const roles = state.players.map(p => `<span class="recap-player">${avatar(p.name, p.avatar)}<b>${esc(p.name)}</b>${roleTag(p.role)}</span>`).join('');
   const sections = state.history.map(h => {
     if (h.type === 'night') {
       const lines = [];
@@ -934,9 +1083,12 @@ langSelect.value = lang;
 langSelect.onchange = () => {
   setLang(langSelect.value);
   applyStaticTranslations();
+  renderAuthMode();
+  renderAccount();
   render();
 };
 
 applyStaticTranslations();
 render();
-if (urlRoom && !loadSession()) $('#name').focus();
+renderAuthMode();
+if (!store.get(AUTH_KEY)) $('#authUser').focus();
