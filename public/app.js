@@ -31,6 +31,10 @@ Site.init({
   },
 });
 
+// streamer mode (see the section below): set per browser
+const STREAMER_KEY = 'mafia.streamer';
+const streamerOn = () => store.get(STREAMER_KEY) === 'on';
+
 // ---------- utils ----------
 function loadSession() {
   try { return JSON.parse(store.get(SESSION_KEY)); } catch { return null; }
@@ -58,13 +62,14 @@ const ICONS = {
   ended: icon('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>'),
   eyeOpen: icon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   eye: icon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>'),
+  stream: icon('<circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/>'),
   check: icon('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
 };
 const progress = (done, total) => `<div class="bar-track"><div class="bar-fill" style="width:${total ? (100 * done / total) : 0}%"></div></div>`;
 const roleTag = r => r ? `<span class="tag ${state.roleInfo[r].team}">${esc(roleName(r))}</span>` : '';
 // identifies "the moment" a host action was requested for; if it changes, the action is stale
 const momentKey = () => state ? `${state.phase}:${state.day}:${state.speech ? state.speech.index : ''}` : '';
-const inviteUrl = () => `${location.origin}/?room=${state.code}`;
+const inviteUrl = () => `${location.origin}/mafia/?room=${state.code}`;
 
 // ---------- host confirmation (dialog + press-and-hold) ----------
 let pending = null;
@@ -124,7 +129,7 @@ document.addEventListener('keydown', e => {
   if (pending) closeModal();
   closeMarkMenu();
   closeRename();
-  for (const id of ['recap', 'board']) $('#' + id).classList.add('hidden');
+  $('#recap').classList.add('hidden');
 });
 
 // ---------- socket ----------
@@ -134,7 +139,7 @@ socket.on('connect', () => {
   $('#offline').classList.add('hidden');
   const s = loadSession();
   // an invite link to a different room wins over resuming the old one
-  if (s && (!urlRoom || urlRoom === s.code)) {
+  if (s && !Site.creating && (!urlRoom || urlRoom === s.code)) { // not when the hub asked for a new room
     socket.emit('resume', s, res => {
       if (!res.ok) { saveSession(null); state = null; render(); }
     });
@@ -148,8 +153,8 @@ socket.on('state', s => {
   render();
 });
 socket.on('kicked', r => {
-  leftRoom();
-  toast(t(r && r.closed ? 'toast.roomClosed' : 'toast.kicked'));
+  saveSession(null);
+  toHub(t(r && r.closed ? 'toast.roomClosed' : 'toast.kicked'));
 });
 
 function leftRoom() {
@@ -158,7 +163,7 @@ function leftRoom() {
   urlRoom = '';
   chatSeen.town = chatSeen.mafia = chatSeen.dead = null;
   chatRendered = '';
-  history.replaceState(null, '', '/');
+  history.replaceState(null, '', '/mafia/');
   render();
 }
 
@@ -169,7 +174,7 @@ $('#joinBtn').onclick = () => send('join', { code: $('#joinCode').value });
 $('#watchBtn').onclick = () => send('join', { code: $('#joinCode').value, spectate: true });
 $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joinBtn').click(); });
 
-$('#homeBtn').onclick = () => { homeView = true; render(); };
+$('#homeBtn').onclick = () => { location.href = '/'; }; // your seat stays: the hub shows "back to the game"
 
 // ---------- voice chat: who hears whom ----------
 // Lobby and after the game: everyone. By day the living speak to everyone; at night only the
@@ -186,6 +191,7 @@ function voiceRoute(from, to) {
 }
 function voiceChannel() {
   if (!state || !state.me || state.phase === 'lobby' || state.phase === 'ended') return 'all';
+  if (hideSecrets() && state.phase === 'night') return 'streamerNight'; // the same label whatever your role
   const me = state.players.find(p => p.id === state.me.id);
   if (!me || !me.alive) return 'out';
   if (state.phase === 'night') return me.role === 'mafia' ? 'mafia' : 'night';
@@ -199,6 +205,10 @@ Voice.init({
   transcripts: () => !!(state && state.settings && state.settings.transcripts && state.phase !== 'lobby'),
   // what a recorded clip belongs to (the server keeps Mafia night talk secret until the end)
   clipMeta: () => (state && ['night', 'speech', 'vote'].includes(state.phase) ? { code: state.code, phase: state.phase, day: state.day } : null),
+  // streamer mode at night: nobody glows (a glowing teammate would give the Mafia away) and the
+  // Mafia's voices can play on another output (headphones the stream doesn't capture)
+  glow: () => !(hideSecrets() && state.phase === 'night'),
+  sink: () => (hideSecrets() && state.phase === 'night' ? store.get(NIGHT_SINK_KEY) || '' : ''),
 });
 
 // ---------- accounts (shared, see common.js) ----------
@@ -224,7 +234,8 @@ function renderTopbar() {
   $('#leaveBtn').classList.toggle('hidden', !inRoom);
   $('#topPhase').textContent = inRoom ? phaseTitle() : '';
   $('#topMe').textContent = inRoom ? t(isHost() ? 'ui.playingAsHost' : 'ui.playingAs', { name: state.me.name }) : '';
-  if (inRoom) $('#topCode').textContent = state.code;
+  // streamers: the code is masked (viewers could join with it); clicking still copies the link
+  if (inRoom) $('#topCode').textContent = streamerOn() ? '••••' : state.code;
   const watchers = inRoom ? state.spectators : [];
   $('#topWatchers').classList.toggle('hidden', !watchers.length);
   $('#topWatchers').innerHTML = `${ICONS.eyeOpen}<span>${watchers.length}</span>`;
@@ -247,7 +258,7 @@ $('#shareLink').onclick = () => navigator.share({ title: 'Mafia', text: t('share
 // What, if anything, the game is waiting on this player for right now.
 function needsMe() {
   if (!state || !state.me || !state.me.alive) return null;
-  if (state.phase === 'night' && state.night.hasAction && !state.night.myTarget) return { type: 'night', key: `n${state.day}` };
+  if (state.phase === 'night' && state.night.hasAction && !state.night.myTarget && !streamerOn()) return { type: 'night', key: `n${state.day}` };
   if (state.phase === 'speech' && state.speech.current === state.me.id) return { type: 'speech', key: `s${state.day}:${state.speech.index}` };
   if (state.phase === 'vote' && !state.votes[state.me.id]) return { type: 'vote', key: `v${state.day}` };
   return null;
@@ -308,7 +319,8 @@ function setIfNotFocused(el, prop, value) {
 }
 
 function renderLobby() {
-  $('#shareCode').innerHTML = esc(t('ui.shareCode', { code: '\u0000' })).replace('\u0000', `<strong class="code">${esc(state.code)}</strong>`);
+  $('#shareCode').innerHTML = esc(t('ui.shareCode', { code: '\u0000' })).replace('\u0000', `<strong class="code">${esc(streamerOn() ? '••••' : state.code)}</strong>`);
+  $('#inviteQr').classList.toggle('masked', streamerOn());
   const qr = `/qr.svg?room=${state.code}`;
   if ($('#inviteQr').getAttribute('src') !== qr) $('#inviteQr').src = qr;
   $('#lobbyCount').textContent = t('ui.lobbyCount', { count: state.players.length, max: state.maxPlayers, min: state.minPlayers });
@@ -455,7 +467,7 @@ window.addEventListener('resize', closeMarkMenu);
 // Your role is shown only while you press and hold the card.
 const roleCardEl = $('#roleCard');
 const peek = on => {
-  if (roleShown === on || (on && state && state.me && state.me.spectator)) return;
+  if (roleShown === on || (on && state && state.me && (state.me.spectator || hideSecrets()))) return;
   roleShown = on;
   if (state && state.me && state.phase !== 'lobby') renderGame();
 };
@@ -478,7 +490,16 @@ function renderPhasePanel() {
   const me = state.me;
   const panel = $('#phasePanel');
 
-  if (state.phase === 'night') {
+  if (state.phase === 'night' && hideSecrets()) {
+    // the same for every role: nothing on screen says whether you have a night move
+    panel.innerHTML = `
+      ${state.nightEndsAt ? '<div class="timer-wrap small" id="timerWrap"><div class="timer-ring"></div><div class="timer" id="timer"></div></div>' : `<div class="phase-icon">${ICONS.night}</div>`}
+      <div class="big">${esc(t('night.sleeps'))}</div>
+      <div class="prompt">${esc(t('streamer.nightNote'))}</div>
+      <button id="secretNightBtn" type="button">${esc(t('streamer.openSecret'))}</button>`;
+    $('#secretNightBtn').onclick = openSecret;
+    tickTimer();
+  } else if (state.phase === 'night') {
     const picked = state.night.myTarget;
     // the Mafia and the Doctor may also choose nobody
     const canPickNobody = state.night.hasAction && (me.role === 'mafia' || me.role === 'doctor');
@@ -555,10 +576,11 @@ function copChecks() {
 
 function renderSeats() {
   const me = state.me;
-  const night = state.phase === 'night' && state.night.hasAction ? state.night : null;
+  const secret = hideSecrets();
+  const night = state.phase === 'night' && state.night.hasAction && !secret ? state.night : null;
   const voting = state.phase === 'vote' && me.alive;
   const n = state.players.length;
-  const checks = copChecks();
+  const checks = secret ? {} : copChecks();
 
   for (const el of $$('#table .seat')) el.remove();
   $('#table').style.setProperty('--n', Math.max(4, n));
@@ -603,7 +625,7 @@ function renderSeats() {
       btn = `<button data-vote="${p.id}">${esc(t('vote.btn'))}</button>`;
     }
 
-    const showRole = p.id !== me.id || roleShown || state.phase === 'ended';
+    const showRole = secret ? publicRole(p) : p.id !== me.id || roleShown || state.phase === 'ended';
     const checked = p.name in checks && !p.role ? `<span class="tag ${checks[p.name] ? 'mafia' : 'town'}">${esc(t('seat.checked', { result: t(checks[p.name] ? 'cop.mafia' : 'cop.town') }))}</span>` : '';
     const voted = state.phase === 'vote' && state.votes[p.id] ? `<span class="voted" title="${esc(t('seat.voted'))}">${ICONS.check}</span>` : '';
     const markBtn = p.id !== me.id
@@ -698,6 +720,12 @@ function renderRoleCard() {
     roleCardEl.innerHTML = `<div class="role-hidden">${ICONS.eyeOpen}<span>${esc(t('ui.watchingNote'))}</span></div>`;
     return;
   }
+  if (hideSecrets()) {
+    box.className = 'card role-box';
+    roleCardEl.innerHTML = `<div class="role-hidden">${ICONS.stream}<span>${esc(t('streamer.roleHidden'))}</span></div><button class="small" id="secretBtn" type="button">${esc(t('streamer.openSecret'))}</button>`;
+    $('#secretBtn').onclick = e => { e.stopPropagation(); openSecret(); };
+    return;
+  }
   box.className = 'card role-box' + (roleShown ? ` revealed ${state.roleInfo[me.role].team}` : '');
   roleCardEl.innerHTML = roleShown
     ? roleDetails() + (me.alive ? '' : tagHtml('tag.dead'))
@@ -706,7 +734,7 @@ function renderRoleCard() {
 
 // ---------- role reveal at the start of a game ----------
 function maybeReveal() {
-  const show = !state.me.spectator && state.phase !== 'lobby' && state.phase !== 'ended' && state.gameId && store.get(REVEALED_KEY) !== state.gameId;
+  const show = !state.me.spectator && !hideSecrets() && state.phase !== 'lobby' && state.phase !== 'ended' && state.gameId && store.get(REVEALED_KEY) !== state.gameId;
   const overlay = $('#reveal');
   if (!show) { overlay.classList.add('hidden'); return; }
   if (!overlay.classList.contains('hidden')) return;
@@ -815,12 +843,12 @@ function placeChat() {
 function renderChat() {
   if (!state || !state.me || !state.chat) return;
   const me = state.me;
-  const available = ch => ch === 'town' || state.chat[ch] !== null;
+  const available = ch => ch === 'town' || (state.chat[ch] !== null && !hideSecrets());
   // night: Mafia players land in their own chat; the dead in the graveyard; otherwise the town chat
   const phaseKey = `${state.phase}:${state.day}:${me.alive}`;
   if (phaseKey !== chatPhaseKey) {
     chatPhaseKey = phaseKey;
-    chatChannel = state.chat.canPost.mafia ? 'mafia' : state.chat.canPost.dead ? 'dead' : 'town';
+    chatChannel = hideSecrets() ? 'town' : state.chat.canPost.mafia ? 'mafia' : state.chat.canPost.dead ? 'dead' : 'town';
   }
   if (!available(chatChannel)) chatChannel = 'town';
 
@@ -841,7 +869,8 @@ function renderChat() {
   let unreadTotal = 0;
   for (const b of $$('[data-channel]')) {
     const ch = b.dataset.channel;
-    const n = Math.max(0, chatMessages(ch).length - chatSeen[ch]);
+    // (hidden channels don't count: an unread badge would give the Mafia chat away)
+    const n = available(ch) ? Math.max(0, chatMessages(ch).length - chatSeen[ch]) : 0;
     unreadTotal += n;
     const badge = b.querySelector('.badge');
     badge.textContent = n > 9 ? '9+' : n;
@@ -857,7 +886,7 @@ function renderChat() {
   $('#chatClosed').textContent = canPost ? '' : chatClosedReason();
   $('#chat').classList.toggle('mafia', chatChannel === 'mafia');
   $('#chat').classList.toggle('dead', chatChannel === 'dead');
-  $('#revealBtn').classList.toggle('hidden', !(chatChannel === 'dead' && state.chat.canPost.dead && !me.revealed));
+  $('#revealBtn').classList.toggle('hidden', !(chatChannel === 'dead' && state.chat.canPost.dead && !me.revealed) || hideSecrets());
 
   // re-render the list only when something changed, so scrolling isn't disturbed
   const key = `${chatChannel}:${list.length}:${list.at(-1)?.id}:${lang}`;
@@ -959,6 +988,133 @@ let recapInsights = false;
 $('#recapClose').onclick = () => $('#recap').classList.add('hidden');
 $('#recap').addEventListener('pointerdown', e => { if (e.target.id === 'recap') $('#recap').classList.add('hidden'); });
 
+// ---------- streamer mode ----------
+// For playing on stream: the main window looks the same whatever your role — no role card, no
+// teammates, no night buttons, the night blurred — and everything secret (role, night moves,
+// private results, Mafia and graveyard chats) goes to a separate "secret window" you keep out of
+// the capture. Room codes are masked too, so viewers can't join.
+const hideSecrets = () => streamerOn() && !!(state && state.me && !state.me.spectator && state.phase !== 'lobby' && state.phase !== 'ended');
+// a role everyone at the table can see: after the game, or a player out with roles revealed on death
+const publicRole = p => state.phase === 'ended' || (!p.alive && state.settings.revealRoleOnDeath);
+let secretWin = null;
+const secretOpen = () => !!(secretWin && !secretWin.closed);
+
+function renderStreamerBtn() {
+  const b = $('#streamerBtn');
+  if (!b) return;
+  b.innerHTML = ICONS.stream;
+  b.setAttribute('aria-pressed', String(streamerOn()));
+  b.title = t('streamer.hint');
+}
+// the toggle sits in the gear menu (Mafia only)
+$('#settingsMenu').insertAdjacentHTML('beforeend', `<div class="set-row"><span data-i18n="streamer.title"></span><button id="streamerBtn" class="icon-btn" type="button" aria-pressed="false"></button></div>`);
+$('#streamerBtn').onclick = () => {
+  store.set(STREAMER_KEY, streamerOn() ? null : 'on');
+  renderStreamerBtn();
+  if (streamerOn()) toast(t('streamer.on'), 'info');
+  if (state && state.me) { history.replaceState(null, '', streamerOn() ? '/mafia/' : `/mafia/?room=${state.code}`); render(); }
+};
+
+function openSecret() {
+  if (secretOpen()) { secretWin.focus(); return; }
+  secretWin = window.open('/mafia/secret.html', 'mafiaSecret', 'popup=yes,width=480,height=760');
+  if (!secretWin) { toast(t('streamer.popupBlocked')); return; }
+  secretWin.addEventListener('load', () => { secretBuilt = false; renderSecret(); });
+}
+
+// The secret window: drawn from here (it has no scripts of its own); built once, then updated in
+// parts so a half-typed chat message isn't wiped.
+let secretBuilt = false;
+const secretChatSeen = {};
+function renderSecret() {
+  if (!secretOpen() || !state || !state.me) return;
+  const d = secretWin.document;
+  const root = d.getElementById('secretRoot');
+  if (!root) return;
+  if (!secretBuilt) {
+    root.innerHTML = `
+      <header class="secret-head"><b>🔒 ${esc(t('streamer.secretTitle'))}</b><span class="muted small-text">${esc(t('streamer.secretHint'))}</span></header>
+      <section id="sRole" class="card"></section>
+      <section id="sNight" class="card hidden"></section>
+      <section id="sPrivate" class="card hidden"></section>
+      <section id="sChatMafia" class="card hidden" data-ch="mafia"><h3>${esc(t('chat.mafia'))}</h3><ol class="s-chat"></ol>
+        <form class="row"><input maxlength="300" placeholder="${esc(t('chat.placeholder'))}"><button class="primary small" type="submit">${esc(t('streamer.send'))}</button></form></section>
+      <section id="sChatDead" class="card hidden" data-ch="dead"><h3>${esc(t('chat.dead'))}</h3><ol class="s-chat"></ol>
+        <form class="row"><input maxlength="300" placeholder="${esc(t('chat.placeholder'))}"><button class="primary small" type="submit">${esc(t('streamer.send'))}</button></form>
+        <button class="small s-reveal hidden" type="button">${esc(t('chat.reveal'))}</button></section>
+      <section id="sAudio" class="card hidden"><h3>${esc(t('streamer.audioTitle'))}</h3><p class="muted small-text">${esc(t('streamer.audioHint'))}</p><select></select></section>`;
+    for (const sec of root.querySelectorAll('[data-ch]')) {
+      sec.querySelector('form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const input = sec.querySelector('input');
+        const text = input.value.trim();
+        if (!text) return;
+        const res = await send('chat', { channel: sec.dataset.ch, text });
+        if (res && res.ok) input.value = '';
+      });
+    }
+    root.querySelector('.s-reveal').onclick = () => send('revealRole');
+    const sel = root.querySelector('#sAudio select');
+    sel.onchange = () => { store.set(NIGHT_SINK_KEY, sel.value || null); Voice.update(true); };
+    secretBuilt = true;
+  }
+  const me = state.me;
+  const inGame = state.phase !== 'lobby';
+  // your role (and your fellow Mafia)
+  d.getElementById('sRole').innerHTML = !inGame || !me.role
+    ? `<p class="muted">${esc(t('streamer.noGame'))}</p>`
+    : `<h3>${esc(t('ui.yourRole'))}</h3><div class="role-box revealed ${state.roleInfo[me.role].team}">${roleDetails()}</div>${me.alive ? '' : tagHtml('tag.dead')}`;
+  // the night move
+  const night = state.phase === 'night' && me.alive && state.night.hasAction ? state.night : null;
+  const sNight = d.getElementById('sNight');
+  sNight.classList.toggle('hidden', !night);
+  if (night) {
+    const picks = night.mafiaVotes || {};
+    const pickers = id => Object.entries(picks).filter(([m, tg]) => tg === id && m !== me.id).map(([m]) => nameOf(m));
+    const canNobody = me.role === 'mafia' || me.role === 'doctor';
+    sNight.innerHTML = `<h3>${esc(t('streamer.nightMove'))}</h3><p>${esc(nightPrompt())}</p>
+      <div class="s-targets">${night.validTargets.map(id => `<button class="${night.myTarget === id ? 'primary' : ''}" data-s-night="${id}">${esc(t('action.' + me.role))}: ${esc(nameOf(id))}${pickers(id).length ? ` <span class="muted small-text">(${esc(pickers(id).join(', '))})</span>` : ''}</button>`).join('')}
+      ${canNobody ? `<button class="${night.myTarget === 'none' ? 'primary' : 'ghost'}" data-s-night="none">${esc(t('night.nobody.' + me.role))}</button>` : ''}</div>`;
+    for (const b of sNight.querySelectorAll('[data-s-night]')) b.onclick = () => send('nightAction', { targetId: b.dataset.sNight });
+  }
+  // private results (the cop's checks, the doctor's saves...)
+  const sPrivate = d.getElementById('sPrivate');
+  sPrivate.classList.toggle('hidden', !state.privateLog.length);
+  sPrivate.innerHTML = `<h3>${esc(t('ui.privateNotes'))}</h3><ul class="log">${state.privateLog.slice().reverse().map(e => `<li>${esc(t('ui.nightNote', { n: e.day, text: t(e.key, e.params) }))}</li>`).join('')}</ul>`;
+  // Mafia and graveyard chats
+  for (const [id, ch] of [['sChatMafia', 'mafia'], ['sChatDead', 'dead']]) {
+    const sec = d.getElementById(id);
+    const list = state.chat[ch];
+    sec.classList.toggle('hidden', list === null || list === undefined);
+    if (!list) continue;
+    sec.querySelector('form').classList.toggle('hidden', !state.chat.canPost[ch]);
+    const box = sec.querySelector('.s-chat');
+    if (secretChatSeen[ch] !== list.length) {
+      secretChatSeen[ch] = list.length;
+      box.innerHTML = list.slice(-80).map(m => (m.kind === 'reveal'
+        ? `<li class="muted"><b>${esc(m.name)}</b> ${esc(t('chat.revealed'))} ${roleTag(m.role)}</li>`
+        : `<li><b>${esc(m.name)}:</b> ${esc(m.text)}</li>`)).join('') || `<li class="muted">${esc(t(ch === 'mafia' ? 'chat.emptyMafia' : 'chat.emptyDead'))}</li>`;
+      box.scrollTop = box.scrollHeight;
+    }
+  }
+  d.querySelector('#sChatDead .s-reveal').classList.toggle('hidden', !(state.chat.canPost.dead && !me.revealed));
+  // where the Mafia's night voices play (headphones the stream doesn't capture)
+  const sAudio = d.getElementById('sAudio');
+  sAudio.classList.toggle('hidden', !(Voice.joined && me.role === 'mafia'));
+  if (Voice.joined && me.role === 'mafia' && navigator.mediaDevices && !sAudio.dataset.filled) {
+    sAudio.dataset.filled = '1';
+    navigator.mediaDevices.enumerateDevices().then(devs => {
+      const outs = devs.filter(x => x.kind === 'audiooutput');
+      const sel = sAudio.querySelector('select');
+      sel.innerHTML = `<option value="">${esc(t('streamer.audioDefault'))}</option>` + outs.map(o => `<option value="${esc(o.deviceId)}">${esc(o.label || o.deviceId.slice(0, 8))}</option>`).join('');
+      sel.value = store.get(NIGHT_SINK_KEY) || '';
+    }).catch(() => {});
+  }
+  // the secret window's own tab title asks for the night move
+  d.title = night && !night.myTarget ? `● ${t('alert.night')}` : `🔒 ${t('streamer.secretTitle')}`;
+}
+const NIGHT_SINK_KEY = 'mafia.nightSink';
+
 function renderGame() {
   loadNotes();
   renderRoleCard();
@@ -969,9 +1125,10 @@ function renderGame() {
   renderVotesPanel();
   renderRoundsPanel();
   $('#log').innerHTML = state.log.slice().reverse().map(e => `<li>${esc(t(e.key, e.params))}</li>`).join('');
-  $('#privateBox').classList.toggle('hidden', state.privateLog.length === 0);
+  $('#privateBox').classList.toggle('hidden', state.privateLog.length === 0 || hideSecrets());
   $('#privateLog').innerHTML = state.privateLog.slice().reverse().map(e => `<li>${esc(t('ui.nightNote', { n: e.day, text: t(e.key, e.params) }))}</li>`).join('');
   maybeReveal();
+  renderSecret();
 }
 
 // counts down the current speech, or the vote when it has a time limit
@@ -1007,9 +1164,13 @@ function render() {
   const inRoom = !!(state && state.me) && !homeView;
   document.body.dataset.phase = inRoom ? state.phase : 'home';
   document.body.dataset.winner = (state && state.winner) || '';
+  document.body.classList.toggle('streamer', streamerOn());
+  document.body.classList.toggle('streamer-night', hideSecrets() && state.phase === 'night');
+  renderStreamerBtn();
+  if (inRoom && streamerOn() && location.search.includes('room=')) history.replaceState(null, '', '/mafia/'); // keep the code off screen
   if (inRoom && urlRoom !== state.code) {
     urlRoom = state.code;
-    history.replaceState(null, '', `/?room=${state.code}`);
+    history.replaceState(null, '', streamerOn() ? '/mafia/' : `/mafia/?room=${state.code}`); // streamers: no room code in the address bar
   }
   if (!inRoom || state.phase === 'lobby' || state.phase === 'ended') $('#reveal').classList.add('hidden');
   if (!inRoom || state.phase !== 'ended') $('#recap').classList.add('hidden');
@@ -1216,45 +1377,7 @@ socket.on('reaction', r => {
   if (anchor) { anchor.classList.remove('reacted'); void anchor.offsetWidth; anchor.classList.add('reacted'); }
 });
 
-// ---------- leaderboard ----------
-const MIN_GAMES_FOR_RATE = 3;
-let boardTab = 'wins';
-let boardUsers = [];
-async function openBoard() {
-  const res = await api('leaderboard');
-  if (!res.ok) return;
-  boardUsers = res.users;
-  $('#board').classList.remove('hidden');
-  renderBoard();
-}
-function renderBoard() {
-  for (const b of $$('[data-board]')) b.classList.toggle('active', b.dataset.board === boardTab);
-  const metric = {
-    wins: u => [u.stats.wins, u.stats.wins],
-    winrate: u => [u.stats.games >= MIN_GAMES_FOR_RATE ? pctOf(u.stats.wins, u.stats.games) : -1, `${pctOf(u.stats.wins, u.stats.games)}%`],
-    decency: u => [u.score, u.score > 0 ? `+${u.score}` : u.score],
-    games: u => [u.stats.games, u.stats.games],
-  }[boardTab];
-  const rows = boardUsers.map(u => ({ u, m: metric(u) })).filter(r => r.m[0] >= 0 && (boardTab === 'decency' || r.u.stats.games > 0))
-    .sort((a, b) => b.m[0] - a.m[0] || b.u.stats.wins - a.u.stats.wins || a.u.username.localeCompare(b.u.username));
-  const medal = i => ['🥇', '🥈', '🥉'][i] || `<span class="rank">${i + 1}</span>`;
-  $('#boardList').innerHTML = rows.length ? rows.map(({ u, m }, i) => `
-    <li class="board-row ${account && u.id === account.id ? 'me' : ''}" data-player="${u.id}">
-      <span class="board-rank">${medal(i)}</span>
-      ${avatar(u.username, u.avatar, u.equipped)}
-      <span class="board-id"><b class="${nameCls(u.equipped)}">${esc(u.username)}</b>${statusPill(u.score)}
-        <span class="muted small-text">${esc(t('board.sub', { g: u.stats.games, w: u.stats.wins }))}</span></span>
-      <span class="board-metric">${m[1]}</span>
-    </li>`).join('') : `<p class="muted small-text">${esc(t('board.empty'))}</p>`;
-  $('#boardNote').textContent = boardTab === 'winrate' ? t('board.minGames', { n: MIN_GAMES_FOR_RATE }) : '';
-  for (const row of $$('#boardList [data-player]')) row.onclick = () => openPlayer(row.dataset.player);
-}
-for (const b of $$('[data-board]')) b.onclick = () => { boardTab = b.dataset.board; renderBoard(); };
-$('#boardBtn').innerHTML = COMMON_ICONS.trophy;
-$('#boardBtn').onclick = openBoard;
-$('#homeBoard').onclick = openBoard;
-$('#boardClose').onclick = () => $('#board').classList.add('hidden');
-$('#board').addEventListener('pointerdown', e => { if (e.target.id === 'board') $('#board').classList.add('hidden'); });
+$('#homeBoard').onclick = () => openLeaderboard('mafia');
 
 applyStaticTranslations();
 applySpooky();

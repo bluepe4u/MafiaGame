@@ -48,6 +48,7 @@ const Voice = (() => {
     }
     const ch = cfg.channel();
     const silent = ch === 'night';
+    const blind = cfg.glow && !cfg.glow(); // streamer night: no 'on air' look either
     dock.innerHTML = `
       <div class="voice-row">
         <span class="voice-ch ${ch}">${esc(t('voice.ch.' + ch))}</span>
@@ -55,7 +56,7 @@ const Voice = (() => {
         <button class="ghost small voice-leave" type="button" aria-label="${esc(t('voice.leave'))}" title="${esc(t('voice.leave'))}">×</button>
       </div>
       ${cfg.transcripts() ? `<span class="voice-rec" title="${esc(t('voice.recHint'))}">● ${esc(t('voice.rec'))}</span>` : ''}
-      <button class="voice-talk ${talking ? 'live' : ''} ${mode}" type="button" ${silent ? 'disabled' : ''}>
+      <button class="voice-talk ${talking && !blind ? 'live' : ''} ${mode}" type="button" ${silent ? 'disabled' : ''}>
         ${svgIcon(mode === 'open' && openMuted ? MIC_OFF : MIC)}
         <span>${esc(silent ? t('voice.silentNight') : mode === 'ptt' ? t('voice.hold') : openMuted ? t('voice.unmute') : t('voice.mute'))}</span>
       </button>
@@ -203,6 +204,8 @@ const Voice = (() => {
       const send = cfg.route(me, pid) ? track : null;
       if (p.sender && p.sender.track !== send) p.sender.replaceTrack(send).catch(() => {});
       p.audio.muted = !cfg.route(pid, me);
+      const sink = cfg.sink ? cfg.sink() : '';
+      if (p.audio.setSinkId && (p.audio.sinkId || '') !== sink) p.audio.setSinkId(sink).catch(() => {});
     }
   }
 
@@ -210,7 +213,7 @@ const Voice = (() => {
     const silent = cfg && cfg.channel() === 'night';
     talking = !!(joined && track && !silent && (mode === 'ptt' ? pttHeld : !openMuted));
     if (track) track.enabled = talking;
-    dock.querySelector('.voice-talk')?.classList.toggle('live', talking);
+    dock.querySelector('.voice-talk')?.classList.toggle('live', talking && !(cfg.glow && !cfg.glow()));
     const transcribe = talking && cfg.transcripts();
     if (serverStt) { if (transcribe) resumeClip(); else pauseClip(); } else if (transcribe) startRecognition(); else stopRecognition();
   }
@@ -300,6 +303,7 @@ const Voice = (() => {
   }
   function paintSpeaking() {
     const speaking = new Set();
+    if (cfg.glow && !cfg.glow()) { for (const el of document.querySelectorAll('.speaking')) el.classList.remove('speaking'); return; }
     for (const [pid, l] of levels) {
       l.an.getByteTimeDomainData(l.buf);
       let sum = 0;

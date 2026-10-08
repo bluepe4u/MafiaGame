@@ -29,7 +29,7 @@ Site.init({
     leave: async () => { if (state && state.me) await send('leave'); store.set(SESSION_KEY, null); },
   },
 });
-$('#homeBtn').onclick = () => { homeView = true; render(); };
+$('#homeBtn').onclick = () => { location.href = '/'; }; // your seat stays: the hub shows "back to the game"
 Voice.init({ socket, me: () => state && state.me && state.me.id, route: () => true, channel: () => 'all', transcripts: () => false });
 $('#profileBtn').onclick = () => openProfile();
 $('#homeProfile').onclick = () => openProfile();
@@ -57,7 +57,7 @@ socket.on('connect', () => {
   $('#offline').classList.add('hidden');
   let s = null;
   try { s = JSON.parse(store.get(SESSION_KEY)); } catch {}
-  if (s && (!urlRoom || urlRoom === s.code)) {
+  if (s && !Site.creating && (!urlRoom || urlRoom === s.code)) { // not when the hub asked for a new room
     socket.emit('resume', s, res => { if (!res.ok) { store.set(SESSION_KEY, null); state = null; render(); } });
   }
 });
@@ -70,7 +70,7 @@ socket.on('state', s => {
   fxOnState(prev, s);
   render();
 });
-socket.on('kicked', r => { leftRoom(); toast(t(r && r.closed ? 'toast.roomClosed' : 'toast.kicked')); });
+socket.on('kicked', r => { store.set(SESSION_KEY, null); toHub(t(r && r.closed ? 'toast.roomClosed' : 'toast.kicked')); });
 function leftRoom() {
   store.set(SESSION_KEY, null);
   state = null;
@@ -1062,60 +1062,12 @@ socket.on('reaction', r => {
   setTimeout(() => el.remove(), 2500);
 });
 
-// ---------- leaderboard and player pages (Monopoly stats) ----------
-const pct = pctOf;
-let boardTab = 'wins';
-let boardUsers = [];
-async function openBoard() {
-  const res = await api('mono/leaderboard');
-  if (!res.ok) return;
-  boardUsers = res.users;
-  $('#boardSheet').classList.remove('hidden');
-  renderBoardSheet();
-}
-function renderBoardSheet() {
-  for (const b of $$('[data-board]')) b.classList.toggle('active', b.dataset.board === boardTab);
-  const metric = {
-    wins: m => [m.wins, m.wins],
-    winrate: m => [m.games >= 3 ? pct(m.wins, m.games) : -1, `${pct(m.wins, m.games)}%`],
-    worth: m => [m.bestNetWorth, money(m.bestNetWorth)],
-    rent: m => [m.rentCollected, money(m.rentCollected)],
-    games: m => [m.games, m.games],
-  }[boardTab];
-  const rows = boardUsers.map(u => ({ u, m: metric(u.monoStats) })).filter(r => r.u.monoStats.games > 0 && r.m[0] >= 0)
-    .sort((a, b) => b.m[0] - a.m[0] || b.u.monoStats.wins - a.u.monoStats.wins);
-  $('#boardList').innerHTML = rows.length ? rows.map(({ u, m }, i) => `
-    <li class="board-row ${account && u.id === account.id ? 'me' : ''}" data-player="${u.id}">
-      <span class="board-rank">${['🥇', '🥈', '🥉'][i] || `<span class="rank">${i + 1}</span>`}</span>
-      ${avatar(u.username, u.avatar, u.equipped)}
-      <span class="board-id"><b class="${nameCls(u.equipped)}">${esc(u.username)}</b>${statusPill(u.score)}<span class="muted small-text">${esc(t('mono.board.sub', { g: u.monoStats.games, w: u.monoStats.wins }))}</span></span>
-      <span class="board-metric">${m[1]}</span>
-    </li>`).join('') : `<p class="muted small-text">${esc(t('board.empty'))}</p>`;
-  $('#boardNote').textContent = boardTab === 'winrate' ? t('board.minGames', { n: 3 }) : '';
-  for (const row of $$('#boardList [data-player]')) row.onclick = () => openPlayer(row.dataset.player);
-}
-for (const b of $$('[data-board]')) b.onclick = () => { boardTab = b.dataset.board; renderBoardSheet(); };
-$('#boardBtn').onclick = openBoard;
-$('#homeBoard').onclick = openBoard;
-$('#boardClose').onclick = () => $('#boardSheet').classList.add('hidden');
+$('#homeBoard').onclick = () => openLeaderboard('mono');
 
-// ---------- the whole game log ----------
-$('#logBtn').onclick = () => { renderLog(); $('#logSheet').classList.remove('hidden'); };
-$('#logClose').onclick = () => $('#logSheet').classList.add('hidden');
-function renderLog() {
-  if (!state || !state.game) return;
-  const byName = name => [...state.players, ...state.spectators].find(p => p.name === name);
-  const time = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  $('#logList').innerHTML = state.game.log.slice().reverse().map(e => {
-    const who = e.params && byName(e.params.name);
-    return `<li><span class="log-time">${time(e.at)}</span>${who ? dot(who.id) : '<span class="pdot blank"></span>'}<span>${esc(fmtLog(e))}</span></li>`;
-  }).join('');
-}
-
-for (const id of ['boardSheet', 'results', 'logSheet']) $('#' + id).addEventListener('pointerdown', e => { if (e.target.id === id) $('#' + id).classList.add('hidden'); });
+for (const id of ['results', 'logSheet']) $('#' + id).addEventListener('pointerdown', e => { if (e.target.id === id) $('#' + id).classList.add('hidden'); });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  for (const id of ['boardSheet', 'results', 'sqInfo', 'tradeModal', 'playerMenu', 'logSheet']) $('#' + id).classList.add('hidden');
+  for (const id of ['results', 'sqInfo', 'tradeModal', 'playerMenu', 'logSheet']) $('#' + id).classList.add('hidden');
 });
 
 applyStaticTranslations();

@@ -32,13 +32,15 @@ const COMMON_ICONS = {
   eye: svgIcon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   eyeOff: svgIcon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>'),
   list: svgIcon('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
+  home: svgIcon('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>'),
 };
 const ico = (name, cls = '') => `<span class="ui-ico ${cls}">${COMMON_ICONS[name]}</span>`;
 // drawn icons instead of emoji in the site's chrome (trophy buttons, the game switcher)
 for (const el of document.querySelectorAll('.trophy')) el.outerHTML = ico('trophy');
 for (const a of document.querySelectorAll('#siteMenu a')) {
   const i = a.querySelector('.site-ico');
-  if (i) i.outerHTML = ico(a.getAttribute('href').includes('monopoly') ? 'dice' : 'hat', 'site-ico');
+  const href = a.getAttribute('href');
+  if (i) i.outerHTML = ico(href.includes('monopoly') ? 'dice' : href.includes('mafia') ? 'hat' : 'home', 'site-ico');
 }
 
 // The page's settings and hooks (filled in by Site.init)
@@ -48,6 +50,7 @@ const Site = {
   baseTitle: document.title,
   home: false,
   ready: false, // the account check on page load is done
+  creating: new URLSearchParams(location.search).get('create') === '1', // opened from the hub's "Create a room"
   urlRoom: () => '',
   hooks: {
     onAccount() {}, onLang() {}, onItems() {}, celebrate() {},
@@ -55,7 +58,8 @@ const Site = {
     leave: async () => {}, // leave the current room (before following the table to a new one)
   },
 };
-const gameUrl = (game, code) => `${game === 'mono' ? '/monopoly/' : '/'}?room=${code}&join=1`;
+const gamePath = game => (game === 'mono' ? '/monopoly/' : '/mafia/');
+const gameUrl = (game, code) => `${gamePath(game)}?room=${code}`;
 const gameIcon = game => ico(game === 'mono' ? 'dice' : 'hat');
 
 function toast(msg, kind = '') {
@@ -260,6 +264,72 @@ document.addEventListener('keydown', e => {
   closeOverlay('admin');
   $('#siteMenu').classList.add('hidden');
 });
+
+// ---------- leaderboard: both games in one window ----------
+document.body.insertAdjacentHTML('beforeend', `<div id="lbSheet" class="overlay hidden" role="dialog" aria-modal="true">
+  <div class="sheet board-sheet"><div class="sheet-head"><h2>${ico('trophy')} <span data-i18n="lb.title"></span></h2><button id="lbClose" class="ghost small" data-i18n="ui.close"></button></div>
+  <div class="sheet-body"><div class="tabs lb-games" role="tablist"><button data-lb-game="mafia" data-i18n="site.mafia"></button><button data-lb-game="mono" data-i18n="site.monopoly"></button></div>
+  <div class="tabs board-tabs" id="lbTabs" role="tablist"></div><ol id="lbList" class="board-list"></ol><p id="lbNote" class="muted small-text"></p></div></div></div>`);
+const LB_MIN_GAMES = 3;
+const LB = {
+  mafia: {
+    stats: u => u.stats,
+    sub: u => t('board.sub', { g: u.stats.games, w: u.stats.wins }),
+    tabs: {
+      wins: u => [u.stats.wins, u.stats.wins],
+      winrate: u => [u.stats.games >= LB_MIN_GAMES ? pctOf(u.stats.wins, u.stats.games) : -1, `${pctOf(u.stats.wins, u.stats.games)}%`],
+      decency: u => [u.score, u.score > 0 ? `+${u.score}` : u.score],
+      games: u => [u.stats.games, u.stats.games],
+    },
+    label: k => t('board.tab.' + k),
+  },
+  mono: {
+    stats: u => u.monoStats,
+    sub: u => t('mono.board.sub', { g: u.monoStats.games, w: u.monoStats.wins }),
+    tabs: {
+      wins: u => [u.monoStats.wins, u.monoStats.wins],
+      winrate: u => [u.monoStats.games >= LB_MIN_GAMES ? pctOf(u.monoStats.wins, u.monoStats.games) : -1, `${pctOf(u.monoStats.wins, u.monoStats.games)}%`],
+      worth: u => [u.monoStats.bestNetWorth, money(u.monoStats.bestNetWorth)],
+      rent: u => [u.monoStats.rentCollected, money(u.monoStats.rentCollected)],
+      games: u => [u.monoStats.games, u.monoStats.games],
+    },
+    label: k => t('mono.board.tab.' + k),
+  },
+};
+const lb = { game: 'mafia', tab: 'wins', users: [] };
+async function openLeaderboard(game) {
+  const res = await api('leaderboard');
+  if (!res.ok) return;
+  lb.users = res.users;
+  if (game && LB[game] && game !== lb.game) { lb.game = game; lb.tab = 'wins'; }
+  renderLeaderboard();
+  $('#lbSheet').classList.remove('hidden');
+}
+function renderLeaderboard() {
+  const cfg = LB[lb.game];
+  for (const b of $$('[data-lb-game]')) b.classList.toggle('active', b.dataset.lbGame === lb.game);
+  $('#lbTabs').innerHTML = Object.keys(cfg.tabs).map(k => `<button class="${k === lb.tab ? 'active' : ''}" data-lb-tab="${k}">${esc(cfg.label(k))}</button>`).join('');
+  for (const b of $$('[data-lb-tab]')) b.onclick = () => { lb.tab = b.dataset.lbTab; renderLeaderboard(); };
+  const metric = cfg.tabs[lb.tab];
+  const rows = lb.users.map(u => ({ u, m: metric(u) })).filter(r => r.m[0] >= 0 && (lb.tab === 'decency' || cfg.stats(r.u).games > 0))
+    .sort((a, b) => b.m[0] - a.m[0] || cfg.stats(b.u).wins - cfg.stats(a.u).wins || a.u.username.localeCompare(b.u.username));
+  const medal = i => ['🥇', '🥈', '🥉'][i] || `<span class="rank">${i + 1}</span>`;
+  $('#lbList').innerHTML = rows.length ? rows.map(({ u, m }, i) => `
+    <li class="board-row ${account && u.id === account.id ? 'me' : ''}" data-player="${u.id}">
+      <span class="board-rank">${medal(i)}</span>
+      ${avatar(u.username, u.avatar, u.equipped)}
+      <span class="board-id"><b class="${nameCls(u.equipped)}">${esc(u.username)}</b>${titleTag(u.title)}${statusPill(u.score)}<span class="muted small-text">${esc(cfg.sub(u))}</span></span>
+      <span class="board-metric">${m[1]}</span>
+    </li>`).join('') : `<p class="muted small-text">${esc(t('board.empty'))}</p>`;
+  $('#lbNote').textContent = lb.tab === 'winrate' ? t('board.minGames', { n: LB_MIN_GAMES }) : '';
+  for (const row of $$('#lbList [data-player]')) row.onclick = () => openProfile(row.dataset.player, lb.game);
+}
+for (const b of $$('[data-lb-game]')) b.onclick = () => { lb.game = b.dataset.lbGame; lb.tab = 'wins'; renderLeaderboard(); };
+$('#lbClose').onclick = () => closeOverlay('lbSheet');
+$('#lbSheet').addEventListener('pointerdown', e => { if (e.target.id === 'lbSheet') closeOverlay('lbSheet'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeOverlay('lbSheet'); });
+$('#boardBtn').innerHTML = COMMON_ICONS.trophy;
+$('#boardBtn').onclick = () => openLeaderboard(Site.game === 'hub' ? null : Site.game);
 
 // ---------- dialogs: a styled confirm, and a "save this" notice ----------
 document.body.insertAdjacentHTML('beforeend', `<div id="askBox" class="overlay hidden" role="alertdialog" aria-modal="true">
@@ -516,7 +586,7 @@ async function renderActive() {
   const shown = activeRooms.filter(r => !myTables.some(tb => tb.current && tb.current.code === r.code));
   box.classList.toggle('hidden', !shown.length);
   box.innerHTML = shown.map(r => `
-    <a class="active-game g-${r.game}" href="${r.game === 'mono' ? '/monopoly/' : '/'}?room=${r.code}" data-active="${r.game}:${r.code}">
+    <a class="active-game g-${r.game}" href="${gameUrl(r.game, r.code)}" data-active="${r.game}:${r.code}">
       <span class="ag-ico">${gameIcon(r.game)}</span>
       <span class="ag-text"><b>${esc(t('active.title', { game: t(r.game === 'mono' ? 'site.monopoly' : 'site.mafia') }))}</b>
         <span class="muted small-text">${esc(t('ui.room'))} <span class="code">${r.code}</span> · ${esc(t(r.phase === 'lobby' ? 'active.lobby' : 'active.playing'))} · ${r.players.map(p => esc(p.name)).join(', ')}</span></span>
@@ -1401,15 +1471,46 @@ Site.init = function init({ game, socket, urlRoom, hooks }) {
     if (!account && qs.get('table')) toast(t('table.loginFirst'), 'info');
     Site.ready = true;
     renderAccount();
+    showFlash();
+    if (Site.game !== 'hub') return enterGamePage();
     if (!account) { $('#authUser').focus(); return; }
+    // back from logging in: to the page that sent us here
+    const next = qs.get('next');
+    if (next && /^\/[a-z]+\/(\?|$)/.test(next)) { location.replace(next); return; }
     // a table link (?table=…), possibly kept from before logging in
     const table = await joinPendingTable();
-    // following a table into its new room (?room=…&join=1)
-    const code = (qs.get('room') || '').toUpperCase();
-    if (qs.get('join') === '1' && code) send('join', { code });
-    if (table || qs.get('join')) history.replaceState(null, '', location.pathname + (code ? `?room=${code}` : ''));
+    if (table || qs.get('next')) history.replaceState(null, '', '/');
   })();
 };
+
+// ---------- game pages show rooms only; everything else lives on the hub (/) ----------
+// A game page without a room to show goes to the hub; a link with ?room= joins it, ?create=1 makes one.
+async function enterGamePage() {
+  if (!account) { location.replace(`/?next=${encodeURIComponent(location.pathname + location.search)}`); return; }
+  await joinPendingTable();
+  const code = (qs.get('room') || '').toUpperCase();
+  if (qs.get('create') === '1') {
+    history.replaceState(null, '', location.pathname);
+    const r = await send('create');
+    if (!r || !r.ok) return toHub();
+  } else if (code) {
+    const r = await send('join', { code, spectate: qs.get('watch') === '1' });
+    if (!r || !r.ok) return toHub(r && r.error ? t(r.error.key, r.error.params) : '');
+  }
+  Site.booted = true;
+  // nothing to show (no room, and resuming the last one didn't work out): the hub
+  setTimeout(() => { if (Site.home) toHub(); }, code ? 0 : 1800);
+}
+const FLASH_KEY = 'site.flash';
+function toHub(message) {
+  try { if (message) sessionStorage.setItem(FLASH_KEY, message); } catch {}
+  location.replace('/');
+}
+function showFlash() {
+  let m = null;
+  try { m = sessionStorage.getItem(FLASH_KEY); sessionStorage.removeItem(FLASH_KEY); } catch {}
+  if (m) toast(m, 'info');
+}
 const PENDING_TABLE_KEY = 'site.pendingTable';
 async function joinPendingTable() {
   let table = null;
@@ -1432,5 +1533,7 @@ try { if (qs.get('table')) sessionStorage.setItem(PENDING_TABLE_KEY, qs.get('tab
 Site.setHome = function setHome(home) {
   if (home === Site.home) return;
   Site.home = home;
+  // a game page that has shown a room and is now empty (left, kicked, room closed): the hub
+  if (home && Site.game !== 'hub' && Site.booted) { toHub(); return; }
   refreshHome();
 };
