@@ -87,3 +87,29 @@ test('insights: off without a key; with one, the reply is parsed and trimmed to 
     delete process.env.ANTHROPIC_API_KEY;
   }
 });
+
+test('round note: parsed and kept to real names of players in that day', async () => {
+  process.env.ANTHROPIC_API_KEY = 'test-key';
+  const realFetch = global.fetch;
+  let sent = '';
+  global.fetch = async (url, opts) => {
+    sent = JSON.parse(opts.body).messages[0].content;
+    const reply = {
+      summary: 'C pushed A.', accusations: [{ from: 'C', to: 'A', strength: 7, why: 'quiet' }, { from: 'C', to: 'Ghost', strength: 1 }, { from: 'A', to: 'A', strength: 1 }],
+      defenses: [{ from: 'B', to: 'A' }], alliances: [{ players: ['A', 'B'], why: 'backed each other' }, { players: ['A'] }],
+      suspects: [{ name: 'A', by: ['C', 'Ghost'] }], quotes: [{ name: 'A', text: 'это не я' }],
+    };
+    return { ok: true, json: async () => ({ content: [{ type: 'text', text: JSON.stringify(reply) }] }) };
+  };
+  try {
+    const note = await insights.analyzeRound({ day: 1, alive: ['A', 'B', 'C'], morning: null, earlier: [], lines: [{ name: 'C', text: 'подозреваю А' }], votes: [['C', 'A']], out: 'A' });
+    assert.deepStrictEqual(note.accusations, [{ from: 'C', to: 'A', strength: 3, why: 'quiet' }]);
+    assert.deepStrictEqual(note.alliances, [{ players: ['A', 'B'], why: 'backed each other' }]);
+    assert.deepStrictEqual(note.suspects, [{ name: 'A', by: ['C'] }]);
+    assert.match(sent, /C: подозреваю А/);
+    assert.match(sent, /do NOT know anyone's role/);
+  } finally {
+    global.fetch = realFetch;
+    delete process.env.ANTHROPIC_API_KEY;
+  }
+});

@@ -197,6 +197,8 @@ Voice.init({
   route: voiceRoute,
   channel: voiceChannel,
   transcripts: () => !!(state && state.settings && state.settings.transcripts && state.phase !== 'lobby'),
+  // what a recorded clip belongs to (the server keeps Mafia night talk secret until the end)
+  clipMeta: () => (state && ['night', 'speech', 'vote'].includes(state.phase) ? { code: state.code, phase: state.phase, day: state.day } : null),
 });
 
 // ---------- accounts (shared, see common.js) ----------
@@ -732,7 +734,7 @@ function renderTabs() {
   }
   for (const p of $$('[data-panel]')) p.classList.toggle('hidden', p.dataset.panel !== tab);
 }
-for (const b of $$('[data-tab]')) b.onclick = () => { tab = b.dataset.tab; store.set(TAB_KEY, tab); renderTabs(); renderChat(); };
+for (const b of $$('[data-tab]')) b.onclick = () => { tab = b.dataset.tab; store.set(TAB_KEY, tab); renderTabs(); renderChat(); if (state && state.me) renderRoundsPanel(); };
 
 // votes grouped by target, biggest first
 function groupVotes(votes) {
@@ -748,6 +750,21 @@ function voteRows(entry) {
       <span class="vote-voters">${voters.map(v => esc(nameOf(v))).join(', ')}</span>
     </div>`);
   return rows.join('');
+}
+
+// the Rounds tab: the AI's notes after each day (public speech only) and who votes together
+const rounds = { game: null, seen: 0, toasted: 0 }; // notes already read / announced in this game
+function renderRoundsPanel() {
+  const notes = state.roundNotes || [];
+  if (rounds.game !== state.gameId) Object.assign(rounds, { game: state.gameId, seen: notes.length, toasted: notes.length });
+  const waiting = state.settings.transcripts && state.phase !== 'lobby' && state.phase !== 'ended';
+  $('#roundsPanel').innerHTML = `${votePairsHtml(votePairs(state.history, nameOf))}
+    ${notes.slice().reverse().map(r => roundNoteHtml(r)).join('')}
+    ${!notes.length ? `<p class="muted small-text">${esc(t(waiting ? 'rounds.waiting' : 'rounds.empty'))}</p>` : ''}`;
+  if (notes.length > rounds.toasted) { rounds.toasted = notes.length; if (tab !== 'rounds') toast(t('rounds.ready', { n: notes.at(-1).day }), 'info'); }
+  if (tab === 'rounds') rounds.seen = notes.length;
+  $('#roundsBadge').classList.toggle('hidden', notes.length <= rounds.seen);
+  $('#roundsBadge').textContent = notes.length - rounds.seen;
 }
 
 function renderVotesPanel() {
@@ -932,6 +949,7 @@ function openRecap() {
     <h3>${esc(t('recap.roles'))}</h3>
     <div class="recap-roles">${roles}</div>
     <div class="recap-steps">${sections}</div>
+    ${roundsHtml(state.roundNotes, state.insights)}
     ${state.insights ? insightsHtml(state.insights) : state.transcript && state.transcript.length >= 3 ? `<p class="muted small-text insights-wait">✨ ${esc(t('insights.wait'))}</p>` : ''}
     ${transcriptHtml(state.transcript)}`;
   recapInsights = !!state.insights;
@@ -949,6 +967,7 @@ function renderGame() {
   renderHostPanel();
   renderTabs();
   renderVotesPanel();
+  renderRoundsPanel();
   $('#log').innerHTML = state.log.slice().reverse().map(e => `<li>${esc(t(e.key, e.params))}</li>`).join('');
   $('#privateBox').classList.toggle('hidden', state.privateLog.length === 0);
   $('#privateLog').innerHTML = state.privateLog.slice().reverse().map(e => `<li>${esc(t('ui.nightNote', { n: e.day, text: t(e.key, e.params) }))}</li>`).join('');

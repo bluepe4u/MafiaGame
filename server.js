@@ -15,6 +15,7 @@ const { TableStore } = require('./src/tables');
 const { Archive } = require('./src/archive');
 const { createVoiceHub, iceServers } = require('./src/voice');
 const insights = require('./src/insights');
+const { SttQueue } = require('./src/stt');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -326,8 +327,72 @@ app.post('/api/tables/start', api(req => {
   return call;
 }));
 
+// ---------- voice transcripts: clips -> text -> round notes -> the game's analysis ----------
+const AI_LANG = process.env.INSIGHTS_LANG || 'ru';
+const stt = new SttQueue({
+  onText: (job, text) => {
+    const room = rooms.get(job.code);
+    if (!room || room.gameId !== job.gameId) return;
+    try { room.addTranscript(job.pid, text, { phase: job.phase, day: job.day }); } catch {}
+  },
+});
+// wait until a room's clips (for one day, or all) are transcribed, at most two minutes
+async function drained(code, day) {
+  for (let i = 0; i < 60 && stt.pending(code, day); i++) await new Promise(r => setTimeout(r, 2000));
+}
+const roundJobs = new Map(); // room code -> the latest round note in progress
+function noteRound(room, day) {
+  if (!room.settings.transcripts || !insights.enabled()) return;
+  const { code, gameId } = room;
+  const job = (roundJobs.get(code) || Promise.resolve()).then(async () => {
+    await drained(code, day);
+    if (room.gameId !== gameId) return;
+    const input = room.roundInput(day);
+    if (!input.lines.length) return; // nothing was said (or transcribed) that day
+    const note = await insights.analyzeRound(input, AI_LANG);
+    if (note) room.addRoundNote(gameId, day, note);
+  }).catch(e => console.error('Round note failed:', e.message));
+  roundJobs.set(code, job);
+}
+// after a game: wait for the last clips and round notes, then the AI's read of the whole game
+async function finishMafiaGame(game, record) {
+  const room = rooms.get(record.code);
+  if (!room || !room.settings.transcripts) return;
+  await drained(record.code);
+  await roundJobs.get(record.code);
+  if (room.gameId === record.gameId) {
+    game.transcript = room.transcript.map(({ name, text, at, phase, day, channel }) => ({ name, text, at, phase, day, channel })).slice(-1500);
+    game.roundNotes = room.roundNotes;
+    archive.save();
+  }
+  if (!insights.enabled() || game.transcript.length < 3) return;
+  const ins = await insights.analyzeMafia(game, AI_LANG);
+  if (!ins) return;
+  archive.setInsights(game.id, ins);
+  rooms.get(record.code)?.setInsights(record.gameId, ins);
+}
+// one push-to-talk clip from a player's own microphone (audio is dropped once transcribed)
+app.post('/api/voice/clip', express.raw({ type: () => true, limit: '3mb' }), api(req => {
+  const user = currentUser(req);
+  if (!stt.enabled()) throw new GameError('err.sttOff');
+  const room = rooms.get(String(req.query.code || '').toUpperCase());
+  const member = room && room.byUser(user.id);
+  if (!member) throw new GameError('err.notInRoom');
+  if (!room.settings.transcripts || !voiceAllowed(room) || !users.features.transcripts) throw new GameError('err.transcriptsOff');
+  const phase = String(req.query.phase || '');
+  const day = Number(req.query.day);
+  if (!['night', 'speech', 'vote'].includes(phase) || !Number.isInteger(day) || day < room.day - 1 || day > room.day) throw new GameError('err.gameNotRunning');
+  if (!Buffer.isBuffer(req.body) || req.body.length < 1500) return {}; // a click, not speech
+  const names = [...room.players, ...room.spectators].map(p => p.name).join(', ');
+  stt.add({
+    code: room.code, gameId: room.gameId, pid: member.id, phase, day, audio: req.body, mime: req.get('content-type') || 'audio/webm',
+    lang: AI_LANG, prompt: `Игра «Мафия», игроки: ${names}. Мафия, мирный житель, комиссар, доктор, путана, голосую, пропускаю, ночь, день, подозреваю.`,
+  });
+  return {};
+}));
+
 // ---------- voice: STUN/TURN servers for the browser-to-browser audio ----------
-app.get('/api/voice/ice', api(req => ({ iceServers: iceServers(currentUser(req).id), insights: insights.enabled() })));
+app.get('/api/voice/ice', api(req => ({ iceServers: iceServers(currentUser(req).id), insights: insights.enabled(), stt: stt.enabled() })));
 
 // ---------- the game night archive ----------
 app.get('/api/archive', api(req => {
@@ -412,15 +477,9 @@ const roomOptions = () => ({
   onGameEnd: results => users.recordGame(results),
   onArchive: record => {
     const game = archive.add({ ...record, transcript: record.transcript.slice(-1500) });
-    // with a transcript (and an API key on the server): an AI read of the game, shown in the recap and archive
-    if (game && insights.enabled() && record.transcript.length >= 3) {
-      insights.analyzeMafia(game, process.env.INSIGHTS_LANG || 'ru').then(ins => {
-        if (!ins) return;
-        archive.setInsights(game.id, ins);
-        rooms.get(record.code)?.setInsights(record.gameId, ins);
-      }).catch(e => console.error('Insights failed:', e.message));
-    }
+    if (game) finishMafiaGame(game, record).catch(e => console.error('Insights failed:', e.message));
   },
+  onRound: (room, day) => noteRound(room, day),
   onStart: room => room.tableId && tables.saveSettings(room.tableId, 'mafia', room.settings),
   features: () => users.features,
   onRate: (targetUserId, oldValue, newValue, fromUserId) => {

@@ -59,11 +59,17 @@ each phone simply doesn't send audio to anyone not allowed to hear it. The insta
 TURN relay (coturn, ports 3478 and 49160–49260/udp) for networks that block direct connections;
 its secret lives in `/etc/mafia.env`.
 
-**Transcripts and AI insights (optional):** with "Voice transcripts" on in a Mafia lobby, each phone
-turns its own player's speech into text (browser speech recognition); the transcript is shown after
-the game and kept in the archive. Add `ANTHROPIC_API_KEY=...` to `/etc/mafia.env` and
-`systemctl restart mafia` to also get a short AI read of each such game (Claude Haiku by default;
-`INSIGHTS_MODEL`, `INSIGHTS_LANG` override).
+**Transcripts and AI notes (optional):** with "Voice transcripts" on in a Mafia lobby, each player's
+browser records only its own push-to-talk speech; the server transcribes the clips with Groq's
+Whisper (`GROQ_API_KEY`; the free tier is enough for a table: clips are merged and paced under its
+limits) or OpenAI (`OPENAI_API_KEY`, also the backup), and drops the audio. `STT_URL` points at any
+OpenAI-compatible endpoint instead (e.g. a self-hosted Whisper). Without a key, the browser's own
+speech recognition is used. With `ANTHROPIC_API_KEY`, after each day's vote the AI writes a round
+note from public speech only (no roles): who accused / defended whom, who seems to play together,
+suspects, quotes — shown live in the Rounds tab. After the game it reads everything (roles, Mafia
+night talk) for the final analysis: each round in hindsight, who really played together, MVP, best
+bluff. "Voting together" pairs come straight from the votes. Keys go in `/etc/mafia.env`, then
+`systemctl restart mafia` (Claude Haiku by default; `INSIGHTS_MODEL`, `INSIGHTS_LANG` override).
 
 **Security:** the app sends standard browser protections (Content-Security-Policy, no framing,
 nosniff, a strict referrer policy, HSTS over HTTPS) and rate-limits socket events per connection.

@@ -45,7 +45,7 @@ const REACT_MIN_GAP_MS = 600;
 const SAVED_FIELDS = [
   'code', 'players', 'spectators', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions', 'lastDoctorTarget',
   'doctorSelfHealUsed', 'speech', 'lastStarterSeat', 'votes', 'voteEndsAt', 'nightEndsAt', 'log', 'privateLog', 'history', 'chat',
-  'revealedRoles', 'ratings', 'winner', 'lastActivity', 'tableId', 'startedAt', 'transcript', 'insights',
+  'revealedRoles', 'ratings', 'winner', 'lastActivity', 'tableId', 'startedAt', 'transcript', 'insights', 'roundNotes',
 ];
 const TRANSCRIPT_KEEP = 3000; // lines per game
 const TRANSCRIPT_MAX_CHARS = 600; // per line
@@ -112,7 +112,9 @@ class Room {
     code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout,
     profileOf = () => null, onRate = () => {}, onGameEnd = () => {}, onStart = () => {}, onArchive = () => {}, tableId = null,
     features = () => ({ family: true, voice: true, transcripts: true }),
+    onRound = () => {},
   } = {}) {
+    this.onRound = onRound; // (room, day) after each day's vote: the AI notes for that round
     this.code = code;
     this.features = features; // the admin's site-wide switches
     this.tableId = tableId; // the table that started this room, if any
@@ -166,6 +168,8 @@ class Room {
     // speech-to-text lines from the voice chat (when the host turned transcripts on): secret until the end
     this.transcript = []; // [{ pid, name, text, at, phase, day, channel }]
     this.insights = null; // the AI's read of the game, added after it ends
+    // the AI's notes after each day's vote, from public speech only (no roles): everyone sees them
+    this.roundNotes = []; // [{ day, note }]
     this.winner = null;
     if (this.timer) this.clearTimer(this.timer);
     this.timer = null;
@@ -740,6 +744,7 @@ class Room {
     const tallyParam = ranked.map(([t, c]) => [this.player(t).name, c]);
     const outId = voteOutcome(this.votes);
     this.history.push({ type: 'vote', day: this.day, votes: { ...this.votes }, out: outId });
+    this.onRound(this, this.day);
     if (outId) {
       const out = this.player(outId);
       out.alive = false;
@@ -885,7 +890,8 @@ class Room {
   }
 
   // A line of speech recognised on a player's own device (each phone transcribes only its owner).
-  addTranscript(pid, text) {
+  // when: { phase, day } the clip was spoken in (it may arrive after the phase changed)
+  addTranscript(pid, text, when = {}) {
     this.assert(this.settings.transcripts && this.settings.voice !== false, 'err.transcriptsOff');
     this.assert(this.phase !== PHASES.LOBBY, 'err.gameNotRunning');
     const m = this.member(pid);
@@ -893,10 +899,47 @@ class Room {
     text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, TRANSCRIPT_MAX_CHARS);
     if (!text) return;
     const p = this.player(pid);
-    const channel = !p || !p.alive ? 'dead' : this.phase === PHASES.NIGHT ? (p.role === ROLES.MAFIA ? 'mafia' : 'night') : 'town';
-    this.transcript.push({ pid, name: m.name, text, at: Date.now(), phase: this.phase, day: this.day, channel });
+    const phase = when.phase || this.phase;
+    const day = when.day ?? this.day;
+    // out of the game when spoken: dead now, and already out by that moment
+    const outAt = p ? this.outDay(p.id) : null;
+    const wasOut = !p || (!p.alive && !!outAt && (outAt.day < day || (outAt.day === day && outAt.phase === 'night' && phase !== 'night')));
+    const channel = wasOut ? 'dead' : phase === PHASES.NIGHT ? (p.role === ROLES.MAFIA ? 'mafia' : 'night') : 'town';
+    this.transcript.push({ pid, name: m.name, text, at: Date.now(), phase, day, channel });
     if (this.transcript.length > TRANSCRIPT_KEEP) this.transcript.splice(0, this.transcript.length - TRANSCRIPT_KEEP);
     this.lastActivity = Date.now(); // no broadcast: nobody sees it until the game ends
+  }
+
+  // when a player left the game: { day, phase: 'night' | 'vote' }
+  outDay(pid) {
+    for (const h of this.history) {
+      if (h.type === 'night' && h.killed === pid) return { day: h.day, phase: 'night' };
+      if (h.type === 'vote' && h.out === pid) return { day: h.day, phase: 'vote' };
+    }
+    return null;
+  }
+
+  // What the AI may read for a live round note: only what the whole table heard that day.
+  roundInput(day) {
+    const name = id => this.player(id)?.name || '?';
+    const vote = this.history.find(h => h.type === 'vote' && h.day === day);
+    const night = this.history.find(h => h.type === 'night' && h.day === day);
+    return {
+      day,
+      alive: this.players.filter(p => { const o = this.outDay(p.id); return !o || o.day > day || (o.day === day && o.phase === 'vote'); }).map(p => p.name),
+      morning: night ? (night.killed ? `${name(night.killed)} was killed at night` : 'nobody died at night') : null,
+      lines: this.transcript.filter(l => l.day === day && l.channel === 'town' && l.phase !== 'night').map(({ name: n, text }) => ({ name: n, text })),
+      votes: vote ? Object.entries(vote.votes).map(([v, tgt]) => [name(v), tgt === 'skip' ? 'skip' : name(tgt)]) : [],
+      out: vote && vote.out ? name(vote.out) : null,
+      earlier: this.roundNotes.filter(r => r.day < day).map(r => `Day ${r.day}: ${r.note.summary}`),
+    };
+  }
+
+  addRoundNote(gameId, day, note) {
+    if (this.gameId !== gameId || this.roundNotes.some(r => r.day === day)) return;
+    this.roundNotes.push({ day, note });
+    this.roundNotes.sort((a, b) => a.day - b.day);
+    this.touch();
   }
 
   setInsights(gameId, insights) {
@@ -915,6 +958,7 @@ class Room {
         userId: p.userId || null, name: p.name, role: p.role, team: ROLE_INFO[p.role].team, survived: p.alive, won: ROLE_INFO[p.role].team === winner,
       })),
       gameId: this.gameId,
+      roundNotes: this.roundNotes,
       transcript: this.transcript.map(({ name, text, at, phase, day, channel }) => ({ name, text, at, phase, day, channel })),
       timeline: this.history.map(h => (h.type === 'vote'
         ? { type: 'vote', day: h.day, out: h.out ? name(h.out) : null }
@@ -990,6 +1034,7 @@ class Room {
       winner: this.winner,
       transcript: ended ? this.transcript : undefined,
       insights: ended ? this.insights : undefined,
+      roundNotes: this.roundNotes,
       history: ended ? this.history : this.history.filter(h => h.type === 'vote'),
       // the Mafia's chat is theirs alone until the game ends
       chat: {

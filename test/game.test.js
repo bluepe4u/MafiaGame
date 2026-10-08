@@ -730,3 +730,30 @@ test('site features: a switch the admin turned off can\'t be turned on in a lobb
   assert.strictEqual(room.settings.voice, false);
   assert.deepStrictEqual(room.viewFor(ann.id).features, features);
 });
+
+test('round notes: the live input is public only — no night talk, no roles, no talk from the out', () => {
+  const rounds = [];
+  const { room, by } = setup(SIX, SIX_ROLES);
+  room.onRound = (r, day) => rounds.push(day);
+  room.settings.transcripts = true;
+  room.addTranscript(by.A.id, 'убьём Б', { phase: 'night', day: 1 }); // Mafia at night
+  room.history.push({ type: 'night', day: 1, actions: [], killed: by.F.id, saved: null });
+  by.F.alive = false;
+  room.addTranscript(by.F.id, 'я был мирным', { phase: 'speech', day: 1 }); // out: graveyard
+  room.addTranscript(by.C.id, 'подозреваю А', { phase: 'speech', day: 1 });
+  room.addTranscript(by.A.id, 'это не я', { phase: 'vote', day: 1 });
+  room.phase = 'vote';
+  room.votes = { [by.C.id]: by.A.id, [by.B.id]: by.A.id, [by.A.id]: by.C.id };
+  room.resolveVote ? room.resolveVote() : room.forceEndVote(by.A.id);
+  assert.deepStrictEqual(rounds, [1]);
+  const input = room.roundInput(1);
+  assert.deepStrictEqual(input.lines, [{ name: 'C', text: 'подозреваю А' }, { name: 'A', text: 'это не я' }]);
+  assert.strictEqual(input.morning, 'F was killed at night');
+  assert.ok(!input.alive.includes('F'));
+  assert.ok(input.alive.includes('A')); // voted out today, but was in the day's talk
+  assert.strictEqual(input.out, 'A');
+  assert.ok(!JSON.stringify(input).match(/mafia|cop|doctor|hooker/));
+  room.addRoundNote(room.gameId, 1, { summary: 'x', accusations: [], defenses: [], alliances: [], suspects: [], quotes: [] });
+  room.addRoundNote(room.gameId, 1, { summary: 'dup' });
+  assert.strictEqual(room.viewFor(by.C.id).roundNotes.length, 1);
+});

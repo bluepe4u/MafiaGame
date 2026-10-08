@@ -25,6 +25,7 @@ const Voice = (() => {
   let openMuted = false;
   let recog = null;
   let recogWanted = false;
+  let serverStt = false; // the server transcribes uploaded clips (better than the browser's recognition)
   const peers = new Map(); // pid -> { pc, sender, audio, polite, makingOffer, ignoreOffer, level }
   const levels = new Map(); // pid -> analyser for the "speaking" glow
 
@@ -50,10 +51,10 @@ const Voice = (() => {
     dock.innerHTML = `
       <div class="voice-row">
         <span class="voice-ch ${ch}">${esc(t('voice.ch.' + ch))}</span>
-        ${cfg.transcripts() ? `<span class="voice-rec" title="${esc(t('voice.recHint'))}">● ${esc(t('voice.rec'))}</span>` : ''}
         <span class="voice-count" title="${esc(t('voice.inVoice'))}">${inVoice}</span>
         <button class="ghost small voice-leave" type="button" aria-label="${esc(t('voice.leave'))}" title="${esc(t('voice.leave'))}">×</button>
       </div>
+      ${cfg.transcripts() ? `<span class="voice-rec" title="${esc(t('voice.recHint'))}">● ${esc(t('voice.rec'))}</span>` : ''}
       <button class="voice-talk ${talking ? 'live' : ''} ${mode}" type="button" ${silent ? 'disabled' : ''}>
         ${svgIcon(mode === 'open' && openMuted ? MIC_OFF : MIC)}
         <span>${esc(silent ? t('voice.silentNight') : mode === 'ptt' ? t('voice.hold') : openMuted ? t('voice.unmute') : t('voice.mute'))}</span>
@@ -93,6 +94,7 @@ const Voice = (() => {
       if (!ice) {
         const res = await api('voice/ice');
         ice = res.ok ? res.iceServers : [{ urls: 'stun:stun.l.google.com:19302' }];
+        serverStt = !!(res.ok && res.stt);
       }
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       track = stream.getAudioTracks()[0];
@@ -114,6 +116,7 @@ const Voice = (() => {
     joined = false;
     pttHeld = false;
     stopRecognition();
+    finishClip();
     cfg.socket.emit('voice:leave');
     for (const pid of [...peers.keys()]) dropPeer(pid);
     if (stream) for (const tr of stream.getTracks()) tr.stop();
@@ -208,7 +211,52 @@ const Voice = (() => {
     talking = !!(joined && track && !silent && (mode === 'ptt' ? pttHeld : !openMuted));
     if (track) track.enabled = talking;
     dock.querySelector('.voice-talk')?.classList.toggle('live', talking);
-    if (talking && cfg.transcripts()) startRecognition(); else stopRecognition();
+    const transcribe = talking && cfg.transcripts();
+    if (serverStt) { if (transcribe) resumeClip(); else pauseClip(); } else if (transcribe) startRecognition(); else stopRecognition();
+  }
+
+  // ---------- transcripts, preferred way: record my own speech, the server transcribes it ----------
+  // One recording spans several presses close together (paused in between), so short replies
+  // share one clip: fewer requests to the speech-to-text service, and silence is never recorded.
+  const CLIP_GAP_MS = 12000; // a longer pause sends the clip
+  const CLIP_MAX_MS = 45000;
+  let clip = null; // { rec, chunks, meta, startedAt, idle }
+  function resumeClip() {
+    const meta = cfg.clipMeta && cfg.clipMeta();
+    if (!meta || !stream || !window.MediaRecorder) return;
+    if (clip && (clip.meta.phase !== meta.phase || clip.meta.day !== meta.day || Date.now() - clip.startedAt > CLIP_MAX_MS)) finishClip();
+    if (clip) {
+      clearTimeout(clip.idle);
+      if (clip.rec.state === 'paused') clip.rec.resume();
+      return;
+    }
+    const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+    const rec = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 24000 });
+    const c = { rec, chunks: [], meta, startedAt: Date.now(), idle: null };
+    rec.ondataavailable = e => { if (e.data.size) c.chunks.push(e.data); };
+    rec.onstop = () => upload(c);
+    rec.start();
+    clip = c;
+  }
+  function pauseClip() {
+    if (!clip || clip.rec.state !== 'recording') return;
+    clip.rec.pause();
+    clearTimeout(clip.idle);
+    clip.idle = setTimeout(finishClip, CLIP_GAP_MS);
+  }
+  function finishClip() {
+    if (!clip) return;
+    clearTimeout(clip.idle);
+    if (clip.rec.state !== 'inactive') clip.rec.stop();
+    clip = null;
+  }
+  async function upload(c) {
+    const blob = new Blob(c.chunks, { type: c.rec.mimeType || 'audio/webm' });
+    if (blob.size < 1500) return;
+    const q = new URLSearchParams({ code: c.meta.code, phase: c.meta.phase, day: String(c.meta.day) });
+    try {
+      await fetch('/api/voice/clip?' + q, { method: 'POST', headers: { 'Content-Type': blob.type, Authorization: `Bearer ${store.get(AUTH_KEY)}` }, body: blob });
+    } catch {}
   }
 
   // ---------- transcripts: this phone's own speech, as text ----------

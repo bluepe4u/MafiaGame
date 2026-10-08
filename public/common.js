@@ -1166,6 +1166,47 @@ async function followTable(call, mine = false) {
   location.href = url;
 }
 
+// ---------- Mafia rounds: the AI's live notes, and who votes together (from the votes) ----------
+// One day's note: summary, who accused / defended whom, who seems to play together, quotes.
+function roundNoteHtml(r, retro) {
+  const n = r.note;
+  const dots = k => '●'.repeat(k) + '○'.repeat(3 - k);
+  return `<section class="round-note">
+    <h4>${esc(t('archive.day', { n: r.day }))}</h4>
+    <p>${esc(n.summary)}</p>
+    ${n.accusations.length ? `<div class="rn-block"><span class="rn-label">${esc(t('rounds.accused'))}</span><ul>${n.accusations.map(a => `<li><b>${esc(a.from)}</b> → <b>${esc(a.to)}</b> <span class="rn-dots" title="${esc(t('rounds.strength'))}">${dots(a.strength)}</span>${a.why ? ` <span class="muted">${esc(a.why)}</span>` : ''}</li>`).join('')}</ul></div>` : ''}
+    ${n.defenses.length ? `<div class="rn-block"><span class="rn-label">${esc(t('rounds.defended'))}</span><ul>${n.defenses.map(d => `<li><b>${esc(d.from)}</b> 🛡 <b>${esc(d.to)}</b></li>`).join('')}</ul></div>` : ''}
+    ${n.alliances.length ? `<div class="rn-block"><span class="rn-label">${esc(t('rounds.together'))}</span><ul>${n.alliances.map(a => `<li><b>${a.players.map(esc).join(' + ')}</b>${a.why ? ` <span class="muted">${esc(a.why)}</span>` : ''}</li>`).join('')}</ul></div>` : ''}
+    ${n.suspects.length ? `<div class="rn-block"><span class="rn-label">${esc(t('rounds.suspects'))}</span><div class="badge-row">${n.suspects.map(x => `<span class="badge-chip">${esc(x.name)}${x.by.length ? ` <span class="muted">← ${x.by.map(esc).join(', ')}</span>` : ''}</span>`).join('')}</div></div>` : ''}
+    ${n.quotes.length ? `<div class="rn-quotes">${n.quotes.map(q => `<blockquote>«${esc(q.text)}» <span class="muted">— ${esc(q.name)}</span></blockquote>`).join('')}</div>` : ''}
+    ${retro ? `<p class="rn-retro">✨ ${esc(retro)}</p>` : ''}
+  </section>`;
+}
+
+// Pairs who voted for the same target most often, from the actual votes (no AI involved).
+// history: [{ type: 'vote', votes: { voterId: targetId | 'skip' } }], name(id)
+function votePairs(history, name) {
+  const pair = {};
+  for (const h of history.filter(x => x.type === 'vote')) {
+    const voters = Object.keys(h.votes);
+    for (let i = 0; i < voters.length; i++) {
+      for (let j = i + 1; j < voters.length; j++) {
+        const [a, b] = [voters[i], voters[j]].sort();
+        const p = (pair[a + '|' + b] ||= { a, b, same: 0, both: 0 });
+        p.both += 1;
+        if (h.votes[a] === h.votes[b]) p.same += 1;
+      }
+    }
+  }
+  return Object.values(pair).filter(p => p.same >= 2).sort((x, y) => y.same / y.both - x.same / x.both || y.same - x.same).slice(0, 6)
+    .map(p => ({ names: [name(p.a), name(p.b)], same: p.same, both: p.both }));
+}
+function votePairsHtml(pairs) {
+  if (!pairs.length) return '';
+  return `<div class="rn-block vote-pairs"><span class="rn-label">${esc(t('rounds.votedTogether'))}</span>
+    <ul>${pairs.map(p => `<li><b>${p.names.map(esc).join(' + ')}</b> <span class="muted">${esc(t('rounds.votedOf', { n: p.same, of: p.both }))}</span></li>`).join('')}</ul></div>`;
+}
+
 // ---------- after a Mafia game: the AI's read and the voice transcript ----------
 function insightsHtml(ins) {
   if (!ins) return '';
@@ -1176,8 +1217,15 @@ function insightsHtml(ins) {
     ${ins.mvp || ins.bestBluff ? `<div class="badge-row">${ins.mvp ? `<span class="badge-chip">🏆 ${esc(t('insights.mvp'))}: ${esc(ins.mvp)}</span>` : ''}${ins.bestBluff ? `<span class="badge-chip">🎭 ${esc(t('insights.bluff'))}: ${esc(ins.bestBluff)}</span>` : ''}</div>` : ''}
     ${ins.moments.length ? `<ul class="insight-moments">${ins.moments.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
     ${ins.players.length ? `<ul class="insight-players">${ins.players.map(line).join('')}</ul>` : ''}
+    ${ins.pairs && ins.pairs.length ? `<div class="rn-block"><span class="rn-label">${esc(t('rounds.realPairs'))}</span><ul>${ins.pairs.map(p => `<li><b>${p.players.map(esc).join(' + ')}</b> — ${esc(p.note)}</li>`).join('')}</ul></div>` : ''}
     <p class="muted small-text">${esc(t('insights.note'))}</p>
   </section>`;
+}
+// all of a game's round notes, with the AI's look back at each day once roles are known
+function roundsHtml(notes, ins) {
+  if (!notes || !notes.length) return '';
+  const retro = day => ins && ins.rounds && (ins.rounds.find(r => r.day === day) || {}).note;
+  return `<details class="transcript rounds-details"><summary>${esc(t('rounds.title', { n: notes.length }))}</summary><div class="rounds-list">${notes.map(r => roundNoteHtml(r, retro(r.day))).join('')}</div></details>`;
 }
 function transcriptHtml(lines) {
   if (!lines || !lines.length) return '';
@@ -1254,7 +1302,7 @@ function gameHtml(g) {
     return `<div class="arch-game"><div class="arch-head">${ico('hat')}<b>${esc(t('site.mafia'))}</b><span class="tag ${g.winner === 'mafia' ? 'mafia' : 'town'}">${esc(win)}</span>
       <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)} · ${esc(t('archive.days', { n: g.days }))}</span></div>
       <div class="arch-players">${players}</div>${tl ? `<ol class="arch-timeline">${tl}</ol>` : ''}
-      ${insightsHtml(g.insights)}${transcriptHtml(g.transcript)}</div>`;
+      ${roundsHtml(g.roundNotes, g.insights)}${insightsHtml(g.insights)}${transcriptHtml(g.transcript)}</div>`;
   }
   const rows = g.players.map(p => `<li><span class="board-rank">${['🥇', '🥈', '🥉'][p.place - 1] || p.place}</span><b>${esc(p.name)}</b><span class="spacer"></span>${p.bankrupt ? `<span class="tag mafia">${esc(t('mono.bankrupt'))}</span>` : `<span>${money(p.netWorth)}</span>`}</li>`).join('');
   return `<div class="arch-game"><div class="arch-head">${ico('dice')}<b>${esc(t('site.monopoly'))}</b>${g.winner ? `<span class="tag town">${esc(t('archive.winner', { name: g.winner }))}</span>` : ''}
