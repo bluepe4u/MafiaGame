@@ -36,7 +36,13 @@ function imageType(buf) {
   return null;
 }
 
-const emptyStats = () => ({ games: 0, wins: 0, survived: 0, mafiaGames: 0, mafiaWins: 0, townGames: 0, townWins: 0, roles: {} });
+const RECENT_KEEP = 20;
+const emptyStats = () => ({
+  games: 0, wins: 0, survived: 0, mafiaGames: 0, mafiaWins: 0, townGames: 0, townWins: 0, roles: {}, roleWins: {},
+  // detailed numbers, recorded since the player page was added (detailedGames counts those games)
+  detailedGames: 0, votes: 0, townVotes: 0, votesOnMafia: 0, votesMatched: 0, kills: 0, saves: 0, copHits: 0, messages: 0,
+  streak: 0, bestStreak: 0, recent: [],
+});
 
 class UserStore {
   constructor(dir) {
@@ -217,13 +223,27 @@ class UserStore {
     for (const r of results) {
       const u = this.users[r.userId];
       if (!u) continue;
-      const s = (u.stats ||= emptyStats());
+      const s = (u.stats = { ...emptyStats(), ...u.stats });
       s.games += 1;
       s.wins += r.won ? 1 : 0;
       s.survived += r.survived ? 1 : 0;
       s[r.team + 'Games'] += 1;
       s[r.team + 'Wins'] += r.won ? 1 : 0;
       s.roles[r.role] = (s.roles[r.role] || 0) + 1;
+      if (r.won) s.roleWins[r.role] = (s.roleWins[r.role] || 0) + 1;
+      s.streak = r.won ? s.streak + 1 : 0;
+      s.bestStreak = Math.max(s.bestStreak, s.streak);
+      if (r.votes !== undefined) {
+        s.detailedGames += 1;
+        s.votes += r.votes;
+        if (r.team === 'town') { s.townVotes += r.votes; s.votesOnMafia += r.votesOnMafia; }
+        s.votesMatched += r.votesMatched;
+        s.kills += r.kills;
+        s.saves += r.saves;
+        s.copHits += r.copHits;
+        s.messages += r.messages;
+      }
+      s.recent = [{ at: r.at || Date.now(), role: r.role, won: r.won, survived: r.survived, players: r.players }, ...s.recent].slice(0, RECENT_KEEP);
     }
     this.save();
   }
@@ -241,7 +261,7 @@ class UserStore {
       likes,
       dislikes: user.dislikes,
       score: likes - user.dislikes + (user.bonus || 0),
-      stats: user.stats || emptyStats(),
+      stats: { ...emptyStats(), ...user.stats },
       admin: !!user.admin,
       inventory,
       equipped: Object.fromEntries(Object.entries(user.equipped || {}).filter(([, i]) => inventory.includes(i))),

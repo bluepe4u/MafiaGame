@@ -83,9 +83,12 @@ test('game results add up into profile stats', () => {
   const { user } = store.register('Sonny', 'pass');
   store.recordGame([{ userId: user.id, role: 'mafia', team: 'mafia', won: true, survived: true }, { userId: 'nobody', role: 'cop', team: 'town', won: false, survived: false }]);
   store.recordGame([{ userId: user.id, role: 'cop', team: 'town', won: false, survived: false }]);
-  assert.deepStrictEqual(store.publicProfile(user).stats, {
-    games: 2, wins: 1, survived: 1, mafiaGames: 1, mafiaWins: 1, townGames: 1, townWins: 0, roles: { mafia: 1, cop: 1 },
-  });
+  const st = store.publicProfile(user).stats;
+  assert.deepStrictEqual(
+    { games: st.games, wins: st.wins, survived: st.survived, mafiaGames: st.mafiaGames, mafiaWins: st.mafiaWins, townGames: st.townGames, townWins: st.townWins, roles: st.roles },
+    { games: 2, wins: 1, survived: 1, mafiaGames: 1, mafiaWins: 1, townGames: 1, townWins: 0, roles: { mafia: 1, cop: 1 } },
+  );
+  assert.deepStrictEqual([st.streak, st.bestStreak, st.recent.map(g => g.role)], [0, 1, ['cop', 'mafia']]);
 });
 
 test('decency bonus, dislike shield, lowest status, and who disliked whom', () => {
@@ -122,4 +125,17 @@ test('items: gift, equip, take back; reactions unlocked; unknown items refused',
   store.takeBack(u, 'hat.crown');
   p = store.publicProfile(u);
   assert.deepStrictEqual([p.equipped, p.inventory, p.gifts], [{}, ['react.knife'], []]);
+});
+
+test('detailed game numbers add up; old stats without them still load', () => {
+  const store = new UserStore(tmp());
+  const { user } = store.register('Luca', 'pass');
+  user.stats = { games: 3, wins: 2, survived: 1, mafiaGames: 1, mafiaWins: 1, townGames: 2, townWins: 1, roles: { mafia: 1, citizen: 2 } };
+  store.recordGame([{ userId: user.id, role: 'citizen', team: 'town', won: true, survived: true, votes: 2, votesOnMafia: 1, votesMatched: 2, kills: 0, saves: 0, copHits: 0, messages: 7, players: 8 }]);
+  store.recordGame([{ userId: user.id, role: 'mafia', team: 'mafia', won: true, survived: false, votes: 1, votesOnMafia: 0, votesMatched: 0, kills: 2, saves: 0, copHits: 0, messages: 3, players: 8 }]);
+  const st = store.publicProfile(user).stats;
+  assert.deepStrictEqual(
+    [st.games, st.detailedGames, st.votes, st.townVotes, st.votesOnMafia, st.votesMatched, st.kills, st.messages, st.streak, st.roleWins],
+    [5, 2, 3, 2, 1, 2, 2, 10, 2, { citizen: 1, mafia: 1 }],
+  );
 });

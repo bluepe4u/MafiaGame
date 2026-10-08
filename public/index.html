@@ -29,6 +29,7 @@
     <div id="topWatchers" class="watchers-chip hidden"></div>
     <div class="spacer"></div>
     <div id="topMe" class="muted top-me"></div>
+    <button id="boardBtn" class="icon-btn hidden" type="button"></button>
     <button id="spookyBtn" class="icon-btn spooky-btn" type="button" aria-pressed="false"></button>
     <button id="alertsBtn" class="icon-btn" type="button" aria-pressed="true"></button>
     <select id="langSelect" class="lang-select" aria-label="Language"></select>
@@ -58,6 +59,7 @@
       <div id="playCard" class="card home-card hidden">
         <button id="homeProfile" class="me-row" type="button"></button>
         <button id="createBtn" class="primary big-btn" data-i18n="ui.createRoom"></button>
+        <button id="homeBoard" class="ghost home-board"><span class="trophy">🏆</span> <span data-i18n="board.title"></span></button>
         <div class="divider"><span data-i18n="ui.orJoin"></span></div>
         <div class="row join-row">
           <input id="joinCode" class="code-input" data-i18n-placeholder="ui.roomCode" maxlength="4" autocapitalize="characters" spellcheck="false">
@@ -264,6 +266,44 @@
       </div>
       <div id="adminBody" class="sheet-body admin-body"></div>
     </div>
+  </div>
+
+  <div id="board" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet board-sheet">
+      <div class="sheet-head">
+        <h2><span class="trophy">🏆</span> <span data-i18n="board.title"></span></h2>
+        <button id="boardClose" class="ghost small" data-i18n="ui.close"></button>
+      </div>
+      <div class="sheet-body">
+        <div class="tabs board-tabs" role="tablist">
+          <button data-board="wins" data-i18n="board.tab.wins"></button>
+          <button data-board="winrate" data-i18n="board.tab.winrate"></button>
+          <button data-board="decency" data-i18n="board.tab.decency"></button>
+          <button data-board="games" data-i18n="board.tab.games"></button>
+        </div>
+        <ol id="boardList" class="board-list"></ol>
+        <p id="boardNote" class="muted small-text"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="playerPage" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet player-sheet">
+      <div class="sheet-head">
+        <h2 id="playerTitle"></h2>
+        <button id="playerClose" class="ghost small" data-i18n="ui.close"></button>
+      </div>
+      <div id="playerBody" class="sheet-body player-body"></div>
+    </div>
+  </div>
+
+  <div id="renameMenu" class="mark-menu rename-menu hidden" role="dialog">
+    <div id="renameTitle" class="mark-title"></div>
+    <form id="renameForm" class="row">
+      <input id="renameInput" maxlength="20" autocomplete="off">
+      <button type="submit" class="primary small" data-i18n="rename.save"></button>
+    </form>
+    <p class="muted small-text" data-i18n="rename.hint"></p>
   </div>
 
   <div id="giftBox" class="overlay gift-overlay hidden" role="dialog" aria-modal="true">

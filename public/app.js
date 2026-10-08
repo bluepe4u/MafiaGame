@@ -162,7 +162,8 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (pending) closeModal();
   closeMarkMenu();
-  $('#recap').classList.add('hidden');
+  if (typeof closeRename === 'function') closeRename();
+  for (const id of ['recap', 'board', 'playerPage']) $('#' + id).classList.add('hidden');
 });
 
 // ---------- socket ----------
@@ -256,6 +257,8 @@ function renderAccount() {
   $('#authCard').classList.toggle('hidden', !!account);
   $('#playCard').classList.toggle('hidden', !account);
   $('#profileBtn').classList.toggle('hidden', !account);
+  $('#boardBtn').classList.toggle('hidden', !account);
+  $('#boardBtn').title = t('board.title');
   if (!account) return;
   $('#profileBtn').innerHTML = avatar(account.username, account.avatar, account.equipped);
   $('#profileBtn').title = t('profile.open');
@@ -511,8 +514,9 @@ function renderLobby() {
   const empty = Math.max(0, state.minPlayers - state.players.length);
   $('#lobbyPlayers').innerHTML = state.players.map(p => `
     <li class="${p.connected ? '' : 'offline'} ${p.ready ? 'is-ready' : ''}" data-pid="${p.id}">
-      <span class="avatar-wrap">${avatar(p.name, p.avatar, p.cos)}${p.ready ? `<span class="voted ready-mark">${ICONS.check}</span>` : ''}</span>
+      <span class="avatar-wrap ${p.userId ? 'clickable' : ''}" data-open-player="${p.userId || ''}">${avatar(p.name, p.avatar, p.cos)}${p.ready ? `<span class="voted ready-mark">${ICONS.check}</span>` : ''}</span>
       <span class="pname"><b class="${nameCls(p.cos)}">${esc(p.name)}</b>${statusPill(p.score)}${p.id === state.hostId ? tagHtml('tag.host', 'host') : ''}${p.id === state.me.id ? tagHtml('tag.you', 'you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
+      ${isHost() ? `<button class="ghost small icon-only" data-rename="${p.id}" title="${esc(t('rename.btn'))}" aria-label="${esc(t('rename.btn'))}">✎</button>` : ''}
       ${isHost() && p.id !== state.me.id ? `<button class="ghost small" data-kick="${p.id}">${esc(t('ui.remove'))}</button>` : ''}
     </li>`).join('') + `<li class="empty">${esc(t('ui.emptySeat'))}</li>`.repeat(empty);
   for (const b of $$('[data-kick]')) {
@@ -551,7 +555,10 @@ function renderLobby() {
   $('#watchToggle').textContent = t(state.me.spectator ? 'ui.playInstead' : 'ui.watchInstead');
   $('#spectatorBox').classList.toggle('hidden', !state.spectators.length);
   $('#spectatorList').innerHTML = state.spectators.map(w => `<span class="spectator ${w.connected ? '' : 'offline'}" data-pid="${w.id}">${avatar(w.name, w.avatar, w.cos)}<b>${esc(w.name)}</b>${statusPill(w.score)}${
+    isHost() ? `<button class="ghost small icon-only" data-rename="${w.id}" aria-label="${esc(t('rename.btn'))}">✎</button>` : ''}${
     isHost() && w.id !== state.me.id ? `<button class="ghost small" data-kick="${w.id}">${esc(t('ui.remove'))}</button>` : ''}</span>`).join('');
+  for (const b of $$('#lobby [data-rename]')) b.onclick = e => { e.stopPropagation(); openRename(b.dataset.rename, b); };
+  for (const el of $$('#lobby [data-open-player]')) if (el.dataset.openPlayer) el.onclick = () => openPlayer(el.dataset.openPlayer);
   for (const b of $$('#spectatorList [data-kick]')) {
     b.onclick = () => confirmHost({ title: t('host.kick.title', { name: (state.spectators.find(w => w.id === b.dataset.kick) || {}).name }), text: t('host.kick.text'), event: 'kick', payload: { playerId: b.dataset.kick } });
   }
@@ -1524,6 +1531,179 @@ async function renderAdmin() {
 $('#adminBtn').onclick = () => { $('#profile').classList.add('hidden'); $('#admin').classList.remove('hidden'); renderAdmin(); };
 $('#adminClose').onclick = () => $('#admin').classList.add('hidden');
 $('#admin').addEventListener('pointerdown', e => { if (e.target.id === 'admin') $('#admin').classList.add('hidden'); });
+
+// ---------- leaderboard ----------
+const MIN_GAMES_FOR_RATE = 3;
+const pctOf = (w, g) => (g ? Math.round((100 * w) / g) : 0);
+let boardTab = 'wins';
+let boardUsers = [];
+async function openBoard() {
+  const res = await api('leaderboard');
+  if (!res.ok) return;
+  boardUsers = res.users;
+  $('#board').classList.remove('hidden');
+  renderBoard();
+}
+function renderBoard() {
+  for (const b of $$('[data-board]')) b.classList.toggle('active', b.dataset.board === boardTab);
+  const metric = {
+    wins: u => [u.stats.wins, u.stats.wins],
+    winrate: u => [u.stats.games >= MIN_GAMES_FOR_RATE ? pctOf(u.stats.wins, u.stats.games) : -1, `${pctOf(u.stats.wins, u.stats.games)}%`],
+    decency: u => [u.score, u.score > 0 ? `+${u.score}` : u.score],
+    games: u => [u.stats.games, u.stats.games],
+  }[boardTab];
+  const rows = boardUsers.map(u => ({ u, m: metric(u) })).filter(r => r.m[0] >= 0 && (boardTab === 'decency' || r.u.stats.games > 0))
+    .sort((a, b) => b.m[0] - a.m[0] || b.u.stats.wins - a.u.stats.wins || a.u.username.localeCompare(b.u.username));
+  const medal = i => ['🥇', '🥈', '🥉'][i] || `<span class="rank">${i + 1}</span>`;
+  $('#boardList').innerHTML = rows.length ? rows.map(({ u, m }, i) => `
+    <li class="board-row ${account && u.id === account.id ? 'me' : ''}" data-player="${u.id}">
+      <span class="board-rank">${medal(i)}</span>
+      ${avatar(u.username, u.avatar, u.equipped)}
+      <span class="board-id"><b class="${nameCls(u.equipped)}">${esc(u.username)}</b>${statusPill(u.score)}
+        <span class="muted small-text">${esc(t('board.sub', { g: u.stats.games, w: u.stats.wins }))}</span></span>
+      <span class="board-metric">${m[1]}</span>
+    </li>`).join('') : `<p class="muted small-text">${esc(t('board.empty'))}</p>`;
+  $('#boardNote').textContent = boardTab === 'winrate' ? t('board.minGames', { n: MIN_GAMES_FOR_RATE }) : '';
+  for (const row of $$('#boardList [data-player]')) row.onclick = () => openPlayer(row.dataset.player);
+}
+for (const b of $$('[data-board]')) b.onclick = () => { boardTab = b.dataset.board; renderBoard(); };
+$('#boardBtn').innerHTML = '<span class="trophy">🏆</span>';
+$('#boardBtn').onclick = openBoard;
+$('#homeBoard').onclick = openBoard;
+$('#boardClose').onclick = () => $('#board').classList.add('hidden');
+$('#board').addEventListener('pointerdown', e => { if (e.target.id === 'board') $('#board').classList.add('hidden'); });
+
+// ---------- player page: lifetime stats and the playstyle pentagon ----------
+// Five axes, each 0..1 (null when there's no data yet).
+function playstyle(st) {
+  const ratio = (a, b) => (b ? a / b : null);
+  return [
+    ['survival', ratio(st.survived, st.games)],
+    ['deception', ratio(st.mafiaWins, st.mafiaGames)],
+    ['intuition', ratio(st.votesOnMafia, st.townVotes)],
+    ['influence', ratio(st.votesMatched, st.votes)],
+    ['town', ratio(st.townWins, st.townGames)],
+  ];
+}
+
+function radarSvg(axes) {
+  const size = 300, c = size / 2, R = 104;
+  const point = (i, r) => {
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / axes.length;
+    return [c + r * Math.cos(a), c + r * Math.sin(a)];
+  };
+  const ring = f => axes.map((_, i) => point(i, R * f).join(',')).join(' ');
+  const shape = axes.map(([, v], i) => point(i, R * Math.max(0.04, v || 0)).join(',')).join(' ');
+  const labels = axes.map(([key, v], i) => {
+    const [x, y] = point(i, R + 30);
+    const anchor = Math.abs(x - c) < 8 ? 'middle' : x > c ? 'start' : 'end';
+    return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="radar-label"><tspan>${esc(t('player.axis.' + key))}</tspan>
+      <tspan x="${x}" dy="15" class="radar-value">${v === null ? '—' : Math.round(v * 100) + '%'}</tspan></text>`;
+  }).join('');
+  return `<svg class="radar" viewBox="-40 -10 ${size + 80} ${size + 20}" role="img">
+    <defs><linearGradient id="radarFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--glow-a)" stop-opacity=".75"/><stop offset="1" stop-color="var(--glow-b)" stop-opacity=".55"/></linearGradient></defs>
+    ${[0.25, 0.5, 0.75, 1].map(f => `<polygon points="${ring(f)}" class="radar-ring"/>`).join('')}
+    ${axes.map((_, i) => `<line x1="${c}" y1="${c}" x2="${point(i, R)[0]}" y2="${point(i, R)[1]}" class="radar-axis"/>`).join('')}
+    <polygon points="${shape}" class="radar-shape" fill="url(#radarFill)"/>
+    ${axes.map(([, v], i) => `<circle cx="${point(i, R * Math.max(0.04, v || 0))[0]}" cy="${point(i, R * Math.max(0.04, v || 0))[1]}" r="4" class="radar-dot"/>`).join('')}
+    ${labels}
+  </svg>`;
+}
+
+async function openPlayer(userId) {
+  if (!userId) return;
+  const res = await api('player/' + userId);
+  if (!res.ok) return;
+  const u = res.user;
+  const st = u.stats;
+  $('#playerTitle').textContent = u.username;
+  const axes = playstyle(st);
+  const roleRows = Object.entries(st.roles).sort((a, b) => b[1] - a[1]);
+  const best = roleRows.filter(([, g]) => g >= 2).map(([r, g]) => [r, (st.roleWins[r] || 0) / g]).sort((a, b) => b[1] - a[1])[0];
+  const tile = (v, label) => `<div class="stat"><b>${v}</b><span>${esc(label)}</span></div>`;
+  const dateFmt = ts => new Date(ts).toLocaleDateString([], { day: 'numeric', month: 'short' });
+  $('#playerBody').innerHTML = `
+    <div class="profile-top">
+      <span class="player-avatar">${avatar(u.username, u.avatar, u.equipped)}</span>
+      <div class="profile-id">
+        <div class="profile-name ${nameCls(u.equipped)}">${esc(u.username)}</div>
+        ${statusPill(u.score)}
+        <div class="karma"><span class="karma-up">${ICONS.up}${esc(t('profile.likes', { n: u.likes }))}</span><span class="karma-down">${ICONS.down}${esc(t('profile.dislikes', { n: u.dislikes }))}</span></div>
+      </div>
+    </div>
+    ${!st.games ? `<p class="muted">${esc(t('player.noGames'))}</p>` : `
+    <div class="stat-grid four">
+      ${tile(st.games, t('player.games'))}
+      ${tile(pctOf(st.wins, st.games) + '%', t('player.winRate'))}
+      ${tile(st.streak, t('player.streak'))}
+      ${tile(st.bestStreak, t('player.bestStreak'))}
+    </div>
+    <section class="player-section">
+      <h3>${esc(t('player.playstyle'))}</h3>
+      <div class="radar-wrap">${radarSvg(axes)}
+        <ul class="radar-help">${axes.map(([k]) => `<li><b>${esc(t('player.axis.' + k))}</b> — ${esc(t('player.help.' + k))}</li>`).join('')}</ul>
+      </div>
+      <p class="muted small-text">${esc(st.detailedGames ? t('player.basedOn', { n: st.detailedGames }) : t('player.noDetail'))}</p>
+    </section>
+    <section class="player-section">
+      <h3>${esc(t('player.roles'))}</h3>
+      <div class="role-bars">${roleRows.map(([r, g]) => `
+        <div class="role-bar ${state && state.roleInfo ? '' : ''}">
+          <span class="tag ${r === 'mafia' ? 'mafia' : 'town'}">${esc(roleName(r))}</span>
+          <span class="bar-track wide"><span class="bar-fill ${r === 'mafia' ? 'mafia' : 'town'}" style="width:${pctOf(st.roleWins[r] || 0, g)}%"></span></span>
+          <span class="muted small-text">${esc(t('player.roleLine', { g, w: pctOf(st.roleWins[r] || 0, g) }))}</span>
+        </div>`).join('')}</div>
+    </section>
+    <section class="player-section">
+      <h3>${esc(t('player.highlights'))}</h3>
+      <div class="stat-grid four">
+        ${tile(st.kills, t('player.kills'))}
+        ${tile(st.saves, t('player.saves'))}
+        ${tile(st.copHits, t('player.copHits'))}
+        ${tile(st.detailedGames ? (st.messages / st.detailedGames).toFixed(1) : '—', t('player.chatty'))}
+      </div>
+      <div class="highlight-line">
+        ${roleRows[0] ? `<span class="muted small-text">${esc(t('player.favRole'))}:</span> <span class="tag ${roleRows[0][0] === 'mafia' ? 'mafia' : 'town'}">${esc(roleName(roleRows[0][0]))}</span>` : ''}
+        ${best ? `<span class="muted small-text">${esc(t('player.bestRole'))}:</span> <span class="tag ${best[0] === 'mafia' ? 'mafia' : 'town'}">${esc(roleName(best[0]))} · ${Math.round(best[1] * 100)}%</span>` : ''}
+      </div>
+    </section>
+    <section class="player-section">
+      <h3>${esc(t('player.recent'))}</h3>
+      <div class="recent-games">${st.recent.map(g => `
+        <span class="recent ${g.won ? 'won' : 'lost'}" title="${esc(dateFmt(g.at))} · ${esc(roleName(g.role))} · ${esc(t(g.won ? 'player.won' : 'player.lost'))}">
+          <b>${g.won ? 'W' : 'L'}</b><span>${esc(roleName(g.role))}</span>${g.survived ? '' : '<i>💀</i>'}
+        </span>`).join('')}</div>
+    </section>`}`;
+  $('#playerPage').classList.remove('hidden');
+}
+$('#playerClose').onclick = () => $('#playerPage').classList.add('hidden');
+$('#playerPage').addEventListener('pointerdown', e => { if (e.target.id === 'playerPage') $('#playerPage').classList.add('hidden'); });
+
+// ---------- host renames people in the lobby ----------
+let renameFor = null;
+function openRename(pid, anchor) {
+  const m = [...state.players, ...state.spectators].find(p => p.id === pid);
+  if (!m) return;
+  renameFor = pid;
+  const menu = $('#renameMenu');
+  $('#renameTitle').textContent = t('rename.title', { name: m.name });
+  $('#renameInput').value = m.name;
+  menu.classList.remove('hidden');
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = `${window.scrollX + Math.min(window.innerWidth - menu.offsetWidth - 12, Math.max(12, r.left))}px`;
+  menu.style.top = `${window.scrollY + r.bottom + 6}px`;
+  $('#renameInput').focus();
+  $('#renameInput').select();
+}
+const closeRename = () => { renameFor = null; $('#renameMenu').classList.add('hidden'); };
+$('#renameForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const res = await send('rename', { playerId: renameFor, name: $('#renameInput').value });
+  if (res && res.ok) closeRename();
+});
+document.addEventListener('pointerdown', e => {
+  if (renameFor && !e.target.closest('#renameMenu') && !e.target.closest('[data-rename]')) closeRename();
+});
 
 // ---------- language ----------
 const langSelect = $('#langSelect');

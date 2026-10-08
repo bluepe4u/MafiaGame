@@ -797,11 +797,53 @@ class Room {
     this.phase = PHASES.ENDED;
     this.speech = null;
     this.addPublic(winner === 'town' ? 'log.townWins' : 'log.mafiaWins');
-    this.onGameEnd(this.players.filter(p => p.userId && p.role).map(p => ({
-      userId: p.userId, role: p.role, team: ROLE_INFO[p.role].team, won: ROLE_INFO[p.role].team === winner, survived: p.alive,
-    })));
+    this.onGameEnd(this.gameResults(winner));
     this.touch();
     return true;
+  }
+
+  // What each account holder did this game, for lifetime stats and the playstyle pentagon.
+  gameResults(winner) {
+    const roleOf = id => this.player(id)?.role;
+    const at = Date.now();
+    return this.players.filter(p => p.userId && p.role).map(p => {
+      const r = {
+        userId: p.userId, role: p.role, team: ROLE_INFO[p.role].team, won: ROLE_INFO[p.role].team === winner, survived: p.alive,
+        votes: 0, votesOnMafia: 0, votesMatched: 0, kills: 0, saves: 0, copHits: 0, players: this.players.length, at,
+        messages: [...this.chat.town, ...this.chat.dead].filter(m => m.from === p.id && !m.kind).length,
+      };
+      for (const h of this.history) {
+        if (h.type === 'vote') {
+          const target = h.votes[p.id];
+          if (!target || target === NOBODY || target === 'skip') continue;
+          r.votes += 1;
+          if (roleOf(target) === ROLES.MAFIA) r.votesOnMafia += 1; // only counted for Town players' intuition
+          if (target === h.out) r.votesMatched += 1;
+        } else {
+          for (const a of h.actions) {
+            if (a.actor !== p.id || a.blocked) continue;
+            if (a.role === ROLES.MAFIA && h.killed && a.target === h.killed) r.kills += 1;
+            if (a.role === ROLES.DOCTOR && h.saved && a.target === h.saved) r.saves += 1;
+            if (a.role === ROLES.COP && roleOf(a.target) === ROLES.MAFIA) r.copHits += 1;
+          }
+        }
+      }
+      return r;
+    });
+  }
+
+  // ---------- host renames, in the lobby ----------
+  // Only the name shown in this room changes; the account keeps its username.
+  rename(pid, targetId, name) {
+    this.requireHost(pid);
+    this.assert(this.phase === PHASES.LOBBY, 'err.settingsLobbyOnly');
+    const target = this.member(targetId);
+    this.assert(target, 'err.invalidTarget');
+    name = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 20);
+    this.assert(name, 'err.nameRequired');
+    this.assert(![...this.players, ...this.spectators].some(p => p.id !== targetId && p.name.toLowerCase() === name.toLowerCase()), 'err.nameTaken');
+    target.name = name;
+    this.touch();
   }
 
   // ---------- per-player view ----------
@@ -830,7 +872,7 @@ class Room {
       players: this.players.map(p => {
         const profile = p.userId ? this.profileOf(p.userId) : null;
         return {
-          id: p.id, name: p.name, seat: p.seat, alive: p.alive, connected: p.connected,
+          id: p.id, userId: p.userId, name: p.name, seat: p.seat, alive: p.alive, connected: p.connected,
           role: roleVisible(p) ? p.role : null,
           avatar: profile?.avatar || null,
           score: profile ? profile.score : null,
@@ -841,7 +883,7 @@ class Room {
       }),
       spectators: this.spectators.map(p => {
         const profile = p.userId ? this.profileOf(p.userId) : null;
-        return { id: p.id, name: p.name, connected: p.connected, avatar: profile?.avatar || null, score: profile ? profile.score : null, cos: profile?.equipped || {} };
+        return { id: p.id, userId: p.userId, name: p.name, connected: p.connected, avatar: profile?.avatar || null, score: profile ? profile.score : null, cos: profile?.equipped || {} };
       }),
       countdownEndsAt: this.countdownEndsAt,
       nightEndsAt: this.phase === PHASES.NIGHT ? this.nightEndsAt : null,

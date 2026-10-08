@@ -61,6 +61,17 @@ app.post('/api/password', api(req => {
   return { token };
 }));
 app.get('/api/items', (_req, res) => res.json({ ok: true, items: ITEMS }));
+// leaderboard and player pages: for logged-in players only
+app.get('/api/leaderboard', api(req => {
+  currentUser(req);
+  return { users: Object.values(users.users).map(u => users.publicProfile(u)) };
+}));
+app.get('/api/player/:id', api(req => {
+  currentUser(req);
+  const u = users.users[req.params.id];
+  if (!u) throw new GameError('err.invalidTarget');
+  return { user: users.publicProfile(u) };
+}));
 app.post('/api/equip', api(req => {
   const user = currentUser(req);
   users.equip(user, req.body.slot, req.body.itemId || null);
@@ -305,6 +316,7 @@ io.on('connection', socket => {
   on('endSpeech', () => { const { room, pid } = ctx(); room.endSpeech(pid); });
   on('extendSpeech', () => { const { room, pid } = ctx(); room.extendSpeech(pid); });
   on('chat', ({ channel, text }) => { const { room, pid } = ctx(); room.sendChat(pid, channel, text); });
+  on('rename', ({ playerId, name }) => { const { room, pid } = ctx(); room.rename(pid, playerId, name); });
   on('watch', ({ on: watch }) => { const { room, pid } = ctx(); room.setSpectating(pid, !!watch); });
   on('ready', ({ ready }) => { const { room, pid } = ctx(); room.setReady(pid, !!ready); });
   on('startCountdown', () => { const { room, pid } = ctx(); room.startCountdown(pid); });

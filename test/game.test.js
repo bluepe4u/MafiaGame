@@ -594,6 +594,50 @@ test('the end of a game is reported for profile stats', () => {
   room.forceEndVote(ps[0].id);
   assert.strictEqual(results.length, 6);
   const m = results.find(r => r.userId === mafia.userId);
-  assert.deepStrictEqual(m, { userId: mafia.userId, role: 'mafia', team: 'mafia', won: false, survived: false });
-  assert.ok(results.filter(r => r.team === 'town').every(r => r.won));
+  assert.deepStrictEqual(
+    { role: m.role, team: m.team, won: m.won, survived: m.survived, votes: m.votes },
+    { role: 'mafia', team: 'mafia', won: false, survived: false, votes: 0 },
+  );
+  const town = results.filter(r => r.team === 'town');
+  assert.ok(town.every(r => r.won));
+  assert.ok(town.every(r => r.votes === 1 && r.votesOnMafia === 1 && r.votesMatched === 1), 'everyone voted the Mafia out');
+  assert.strictEqual(m.players, 6);
+});
+
+test('host renames players in the lobby; names stay unique', () => {
+  const room = new Room({ code: 'R', setTimer: () => 0, clearTimer: () => {} });
+  const [a, b] = ['Alice', 'Bob'].map(n => room.join(n, { userId: 'u' + n }));
+  const w = room.join('Watcher', { spectate: true });
+  assert.throws(() => room.rename(b.id, a.id, 'X'), /err\.hostOnly/);
+  room.rename(a.id, b.id, '  Новенький  ');
+  assert.strictEqual(room.player(b.id).name, 'Новенький');
+  assert.strictEqual(room.player(b.id).userId, 'uBob', 'the account is untouched');
+  room.rename(a.id, w.id, 'Гость');
+  assert.throws(() => room.rename(a.id, w.id, 'alice'), /err\.nameTaken/);
+  assert.throws(() => room.rename(a.id, w.id, '   '), /err\.nameRequired/);
+});
+
+test('game results: kills, saves and cop finds are credited', () => {
+  const results = [];
+  const roles = ['mafia', 'cop', 'doctor', 'citizen', 'citizen', 'citizen'];
+  const room = new Room({ code: 'K', setTimer: () => 0, clearTimer: () => {}, rng: () => 0, onGameEnd: r => results.push(...r) });
+  const ps = SIX.map(n => room.join(n, { userId: 'u' + n }));
+  room.updateSettings(ps[0].id, { roleCounts: { mafia: 1, cop: 1, doctor: 1, hooker: 0 } });
+  room.start(ps[0].id);
+  ps.forEach((p, i) => { p.role = roles[i]; });
+  const [A, B, C, D, E, F] = ps;
+  room.nightAction(A.id, D.id); // mafia kills D
+  room.nightAction(B.id, A.id); // cop finds the mafia
+  room.nightAction(C.id, F.id); // doctor protects someone else
+  room.skipToVote(A.id);
+  room.forceEndVote(A.id);
+  room.nightAction(A.id, E.id); // mafia goes for E
+  room.nightAction(B.id, C.id);
+  room.nightAction(C.id, E.id); // doctor saves E
+  room.skipToVote(A.id);
+  for (const p of room.alive()) room.vote(p.id, p.id === A.id ? B.id : A.id);
+  const by = Object.fromEntries(results.map(r => [r.role === 'citizen' ? r.userId : r.role, r]));
+  assert.strictEqual(by.mafia.kills, 1);
+  assert.strictEqual(by.doctor.saves, 1);
+  assert.strictEqual(by.cop.copHits, 1);
 });
