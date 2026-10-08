@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b0d18">
-  <title>Находка для шпиона</title>
+  <title>Шпион</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%238b5cf6'/%3E%3Ccircle cx='11' cy='18' r='4' fill='none' stroke='%23fff' stroke-width='2.4'/%3E%3Ccircle cx='21' cy='18' r='4' fill='none' stroke='%23fff' stroke-width='2.4'/%3E%3Cpath d='M15 18h2M6 13l4-5h12l4 5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -106,7 +106,9 @@
             <div class="grid2">
               <label class="field"><span data-i18n="spy.rounds"></span> <input type="number" min="1" max="10" id="roundsInput"></label>
               <label class="field"><span data-i18n="spy.minutes"></span> <input type="number" min="3" max="15" id="minutesInput"></label>
+              <label class="field"><span data-i18n="spy.locationCount"></span> <input type="number" min="10" max="60" step="5" id="locationsInput"></label>
             </div>
+            <div class="field packs-field"><span data-i18n="spy.packs"></span><div id="packList" class="pack-list"></div></div>
             <div class="checks settings-rest">
               <label class="field"><span data-i18n="spy.verdict"></span>
                 <select id="verdictSelect"><option value="unanimous" data-i18n="spy.verdict.unanimous"></option><option value="majority" data-i18n="spy.verdict.majority"></option></select></label>
@@ -129,7 +131,8 @@
             <div id="spyCard" class="spy-card" tabindex="0"></div>
           </div>
           <div class="card">
-            <div class="card-head"><h3 data-i18n="spy.locations"></h3><span class="muted small-text" data-i18n="spy.crossOut"></span></div>
+            <div class="card-head"><h3 data-i18n="spy.locations"></h3><span id="locCount" class="count-pill"></span></div>
+            <p class="muted small-text" data-i18n="spy.crossOut"></p>
             <div id="locGrid" class="loc-grid"></div>
           </div>
         </aside>

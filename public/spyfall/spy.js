@@ -124,6 +124,9 @@ $('#roundsInput').addEventListener('change', e => send('settings', { rounds: par
 $('#minutesInput').addEventListener('change', e => send('settings', { roundMinutes: parseInt(e.target.value, 10) }));
 $('#verdictSelect').addEventListener('change', e => send('settings', { verdict: e.target.value }));
 $('#voiceOn').addEventListener('change', e => send('settings', { voice: e.target.checked }));
+$('#locationsInput').addEventListener('change', e => send('settings', { locations: parseInt(e.target.value, 10) }));
+const PACKS = ['classic', 'russia', 'adventure', 'city', 'travel'];
+const packSize = pack => LOCS.filter(l => l.pack === pack).length;
 $('#startBtn').onclick = () => send('start');
 const setIfNotFocused = (el, v) => { if (document.activeElement !== el) el.value = v; };
 
@@ -155,6 +158,7 @@ function renderLobby() {
   $('#setupSummary').innerHTML = [
     t('spy.sumRounds', { n: s.rounds, m: s.roundMinutes }),
     t('spy.verdict.' + s.verdict),
+    t('spy.sumLocations', { packs: s.packs.map(p => t('spy.pack.' + p)).join(', '), n: Math.min(s.locations, s.packs.reduce((n, p) => n + packSize(p), 0) || s.locations) }),
     state.features && state.features.voice ? t(s.voice !== false ? 'sum.voiceOn' : 'sum.voiceOff') : '',
   ].filter(Boolean).map(x => `<li>${esc(x)}</li>`).join('');
   $('#hostSettings').classList.toggle('hidden', !isHost());
@@ -166,6 +170,13 @@ function renderLobby() {
     setIfNotFocused($('#roundsInput'), s.rounds);
     setIfNotFocused($('#minutesInput'), s.roundMinutes);
     $('#verdictSelect').value = s.verdict;
+    setIfNotFocused($('#locationsInput'), s.locations);
+    // one switch per location set, with how many places it has
+    $('#packList').innerHTML = PACKS.map(p => `<label class="check pack"><input type="checkbox" class="switch" data-pack="${p}" ${s.packs.includes(p) ? 'checked' : ''}>
+      <span>${esc(t('spy.pack.' + p))} <span class="muted small-text">${packSize(p)}</span></span></label>`).join('');
+    for (const input of $$('[data-pack]')) {
+      input.onchange = () => send('settings', { packs: [...$$('[data-pack]')].filter(x => x.checked).map(x => x.dataset.pack) });
+    }
     $('#voiceOn').checked = s.voice !== false;
     $('#voiceOn').closest('label').classList.toggle('hidden', !(state.features && state.features.voice));
   }
@@ -200,7 +211,8 @@ function renderLocations() {
   const out = new Set(crossed());
   const r = state.game.round;
   const reveal = r.stage === 'reveal' ? r.location : null;
-  $('#locGrid').innerHTML = LOCS.map(l => `<button class="loc ${out.has(l.id) ? 'out' : ''} ${reveal === l.id ? 'answer' : ''}" data-loc="${l.id}">${esc(lang === 'ru' ? l.ru : l.en)}</button>`).join('');
+  const deck = new Set(state.game.deck);
+  $('#locGrid').innerHTML = LOCS.filter(l => deck.has(l.id)).map(l => `<button class="loc ${out.has(l.id) ? 'out' : ''} ${reveal === l.id ? 'answer' : ''}" data-loc="${l.id}">${esc(lang === 'ru' ? l.ru : l.en)}</button>`).join('');
   for (const b of $$('#locGrid [data-loc]')) {
     b.onclick = () => {
       const set = new Set(crossed());
@@ -220,6 +232,7 @@ function renderGame() {
   renderStage();
   renderPlayers();
   $('#roundInfo').textContent = t('spy.roundOf', { n: g.roundN, of: g.rounds });
+  $('#locCount').textContent = t('spy.inPlay', { n: g.deck.length });
   $('#historyBox').classList.toggle('hidden', !g.history.length);
   $('#historyList').innerHTML = g.history.slice().reverse().map(h => `<li><b>${esc(t('spy.round', { n: h.n }))}</b> · ${esc(locName(h.location))} · ${esc(t('spy.spyWas', { name: nameOf(h.spy) }))} —
     <span class="tag ${h.result.winner === 'spy' ? 'mafia' : 'town'}">${esc(t('spy.reason.' + h.result.reason))}</span></li>`).join('');
@@ -320,7 +333,8 @@ function renderPlayers() {
 
 // ---------- the spy names the location ----------
 function openGuess() {
-  $('#guessGrid').innerHTML = LOCS.map(l => `<button class="loc" data-guess="${l.id}">${esc(lang === 'ru' ? l.ru : l.en)}</button>`).join('');
+  const deck = new Set(state.game.deck);
+  $('#guessGrid').innerHTML = LOCS.filter(l => deck.has(l.id)).map(l => `<button class="loc" data-guess="${l.id}">${esc(lang === 'ru' ? l.ru : l.en)}</button>`).join('');
   for (const b of $$('[data-guess]')) {
     b.onclick = async () => {
       if (!(await askConfirm({ title: t('spy.guessTitle'), text: t('spy.guessConfirm', { place: locName(b.dataset.guess) }), danger: true }))) return;

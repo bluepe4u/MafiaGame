@@ -57,3 +57,7 @@ body.spyfall main { max-width: 1240px; }
 .results li { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
 .results li.first { border-color: rgba(245, 197, 66, .5); background: linear-gradient(90deg, rgba(245, 197, 66, .14), var(--surface-2)); }
 .results .spacer { flex: 1; }
+
+.packs-field { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.pack-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px 14px; }
+.pack-list .check { margin: 0; }

@@ -29,13 +29,14 @@ function setup(n = 4, settings = {}) {
   return { room, by, makeSpy, timers, results, archived };
 }
 
-test('locations: 30, each with 6 roles in Russian and English', () => {
-  assert.strictEqual(LOCATIONS.length, 30);
+test('locations: 95 in 5 sets, each with 6 roles in Russian and English', () => {
+  assert.strictEqual(LOCATIONS.length, 95);
+  assert.strictEqual(LOCATIONS.filter(l => l.pack === 'classic').length, 30);
   for (const l of LOCATIONS) {
     assert.ok(l.ru && l.en && l.roles.length === 6, l.id);
     assert.ok(l.roles.every(r => r.ru && r.en), l.id);
   }
-  assert.strictEqual(new Set(LOCATIONS.map(l => l.id)).size, 30);
+  assert.strictEqual(new Set(LOCATIONS.map(l => l.id)).size, 95);
 });
 
 test('cards: the spy sees no location; everyone else the same location and a role; others see nothing', () => {
@@ -162,4 +163,25 @@ test('save and restore mid-round', () => {
   assert.strictEqual(copy.round.location, room.round.location);
   assert.strictEqual(copy.viewFor(by.Ann).game.card.location, room.round.location);
   assert.throws(() => setup(2), /err\.needPlayers/);
+});
+
+test('sets and count: the game\'s list is N locations from the chosen sets; rounds and guesses stay in it', () => {
+  const { room, by, makeSpy } = setup(3, { packs: ['russia', 'city', 'bogus'], locations: 25 });
+  assert.deepStrictEqual(room.settings.packs, ['russia', 'city']);
+  assert.strictEqual(room.g.deck.length, 25);
+  const packOf = Object.fromEntries(LOCATIONS.map(l => [l.id, l.pack]));
+  assert.ok(room.g.deck.every(id => ['russia', 'city'].includes(packOf[id])));
+  assert.ok(room.g.deck.includes(room.round.location));
+  assert.deepStrictEqual(room.viewFor(by.Ann).game.deck, room.g.deck);
+  makeSpy(by.Cid);
+  const outside = LOCATIONS.find(l => !room.g.deck.includes(l.id)).id;
+  assert.throws(() => room.spyGuess(by.Cid, outside), /err\.invalidTarget/);
+  // asking for more than the sets hold: all of them
+  const small = setup(3, { packs: ['travel'], locations: 60 });
+  assert.strictEqual(small.room.g.deck.length, 15);
+  const r = new SpyRoom({ code: 'X' });
+  const host = r.join('Ann');
+  assert.throws(() => r.updateSettings(host.id, { packs: [] }), /err\.spy\.pickPack/);
+  assert.throws(() => r.updateSettings(host.id, { locations: 5 }), /err\.spy\.locationsRange/);
+  assert.throws(() => r.updateSettings(host.id, { locations: 61 }), /err\.spy\.locationsRange/);
 });

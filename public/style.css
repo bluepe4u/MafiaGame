@@ -399,7 +399,7 @@ select option, select optgroup { background: #1b1b24; color: #f1f1f4; }
 
 /* seat extras: marks, notes, voted check */
 .avatar-wrap { position: relative; display: inline-flex; }
-.voted { position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--good); color: #062014; box-shadow: 0 0 0 2px #101016; }
+.voted { position: absolute; z-index: 3; right: -4px; bottom: -4px; /* above an avatar with a hat or frame */ width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--good); color: #062014; box-shadow: 0 0 0 2px #101016; }
 .voted svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .mark-btn {
   position: absolute; top: 7px; right: 7px; width: 18px !important; height: 18px; padding: 0; border-radius: 50%;

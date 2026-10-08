@@ -7,7 +7,7 @@
 
 const crypto = require('crypto');
 const { GameError } = require('../game');
-const { LOCATIONS, byId } = require('./locations');
+const { LOCATIONS, byId, PACK_IDS } = require('./locations');
 
 const MIN_PLAYERS = 3;
 const MAX_PLAYERS = 12;
@@ -16,6 +16,8 @@ const HOST_GRACE_MS = 30 * 1000;
 const ACCUSE_MS = 60 * 1000; // to vote on an accusation (missing votes count as "no")
 const FINAL_MS = 90 * 1000; // the vote when the round clock runs out
 const VERDICTS = ['unanimous', 'majority'];
+const MIN_LOCATIONS = 10;
+const MAX_LOCATIONS = 60;
 // points, as in the original rules
 const POINTS = { spyTime: 2, spyWrongAccuse: 4, spyGuessed: 4, town: 1, accuser: 2 };
 
@@ -42,7 +44,8 @@ class SpyRoom {
     this.players = []; // { id, token, userId, name, connected, ready }
     this.spectators = [];
     this.hostId = null;
-    this.settings = { rounds: 5, roundMinutes: 8, verdict: 'unanimous', voice: true };
+    // packs: which location sets are in play; locations: how many of them make this game's list
+    this.settings = { rounds: 5, roundMinutes: 8, verdict: 'unanimous', voice: true, packs: ['classic'], locations: 30 };
     this.phase = 'lobby';
     this.g = null;
     this.gameId = null;
@@ -202,6 +205,16 @@ class SpyRoom {
       this.assert(!s.voice || this.features().voice, 'err.featureOff');
       this.settings.voice = !!s.voice;
     }
+    if (s.packs !== undefined) {
+      const packs = [...new Set((Array.isArray(s.packs) ? s.packs : []).filter(x => PACK_IDS.includes(x)))];
+      this.assert(packs.length, 'err.spy.pickPack');
+      this.settings.packs = packs;
+    }
+    if (s.locations !== undefined) {
+      const v = Number(s.locations);
+      this.assert(Number.isInteger(v) && v >= MIN_LOCATIONS && v <= MAX_LOCATIONS, 'err.spy.locationsRange', { min: MIN_LOCATIONS, max: MAX_LOCATIONS });
+      this.settings.locations = v;
+    }
     this.touch();
   }
 
@@ -211,9 +224,13 @@ class SpyRoom {
     this.assert(this.phase === 'lobby', 'err.gameStarted');
     this.assert(this.players.length >= MIN_PLAYERS, 'err.needPlayers', { min: MIN_PLAYERS });
     const order = this.shuffle(this.players.map(p => p.id));
+    // this game's list of possible locations: N picked at random from the chosen sets
+    const pool = LOCATIONS.filter(l => this.settings.packs.includes(l.pack));
+    const deck = this.shuffle(pool.map(l => l.id)).slice(0, Math.min(this.settings.locations, pool.length));
     this.gameId = id();
     this.g = {
       order,
+      deck,
       scores: Object.fromEntries(order.map(p => [p, 0])),
       roundN: 0,
       dealer: 0, // index into order: who asks first this round
@@ -240,9 +257,10 @@ class SpyRoom {
   startRound() {
     const g = this.g;
     g.roundN += 1;
-    if (g.used.length >= LOCATIONS.length) g.used = [];
-    const pool = LOCATIONS.filter(l => !g.used.includes(l.id));
-    const loc = pool[Math.floor(this.rng() * pool.length)];
+    const deck = g.deck || LOCATIONS.map(l => l.id); // (games saved before decks existed)
+    if (g.used.length >= deck.length) g.used = [];
+    const pool = deck.filter(x => !g.used.includes(x));
+    const loc = byId[pool[Math.floor(this.rng() * pool.length)]];
     g.used.push(loc.id);
     const spy = g.order[Math.floor(this.rng() * g.order.length)];
     const roleOrder = this.shuffle(loc.roles.map((_, i) => i));
@@ -333,7 +351,7 @@ class SpyRoom {
     this.requireStage('talk', 'final');
     const r = this.round;
     this.assert(pid === r.spy, 'err.spy.notTheSpy');
-    this.assert(byId[locationId], 'err.invalidTarget');
+    this.assert(byId[locationId] && (!this.g.deck || this.g.deck.includes(locationId)), 'err.invalidTarget');
     this.endRound(locationId === r.location
       ? { winner: 'spy', reason: 'guessed', guess: locationId }
       : { winner: 'town', reason: 'spyMissed', guess: locationId });
@@ -507,6 +525,7 @@ class SpyRoom {
       const open = r && r.stage === 'reveal'; // the round's secrets once it's over
       view.game = {
         order: g.order, scores: g.scores, roundN: g.roundN, rounds: this.settings.rounds, winners: g.winners || null,
+        deck: g.deck || LOCATIONS.map(l => l.id), // the locations in play this game
         history: g.history,
         round: r && {
           n: r.n, dealer: r.dealer, endsAt: r.endsAt, asker: r.asker, lastAsker: r.lastAsker, asks: r.asks, stage: r.stage,
@@ -526,4 +545,4 @@ class SpyRoom {
   }
 }
 
-module.exports = { SpyRoom, MIN_PLAYERS, MAX_PLAYERS, ACCUSE_MS, FINAL_MS, POINTS };
+module.exports = { SpyRoom, MIN_PLAYERS, MAX_PLAYERS, ACCUSE_MS, FINAL_MS, POINTS, MIN_LOCATIONS, MAX_LOCATIONS };
