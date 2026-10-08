@@ -11,6 +11,7 @@ const { UserStore } = require('./src/users');
 const { ITEMS } = require('./src/items');
 const { attachMonopoly } = require('./src/monopoly/server');
 const { limitSocket } = require('./src/ratelimit');
+const { TableStore } = require('./src/tables');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -20,6 +21,12 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'rooms.json');
 
 const users = new UserStore(DATA_DIR);
+const tables = new TableStore(DATA_DIR);
+tables.prune(Object.keys(users.users));
+// a fresh site: the first account is created with a one-time admin invite left in the data dir
+const boot = users.bootstrapInvite(DATA_DIR);
+if (boot) console.log(`No accounts yet. Admin invite code is in ${boot.file}`);
+else fs.rm(path.join(DATA_DIR, 'admin-invite.txt'), { force: true }, () => {});
 
 const app = express();
 app.set('trust proxy', 'loopback'); // behind Caddy: use its X-Forwarded-Proto/Host for invite links
@@ -77,7 +84,9 @@ const currentUser = req => {
 
 app.use('/api', express.json({ limit: '2mb' }));
 app.post('/api/register', api(req => {
-  const { user, token } = users.register(req.body.username, req.body.password);
+  const { user, token, invite } = users.register(req.body.username, req.body.password, req.body.invite);
+  if (invite.tableId) { try { tables.join(invite.tableId, user); } catch {} }
+  if (invite.admin) fs.rm(path.join(DATA_DIR, 'admin-invite.txt'), { force: true }, () => {});
   return { token, user: users.publicProfile(user) };
 }));
 app.post('/api/login', api(req => {
@@ -147,6 +156,22 @@ app.post('/api/admin/gift', api(req => {
   for (const sock of allSockets()) if (sock.data.userId === u.id) sock.emit('gift', { itemId: req.body.itemId });
   return { user: users.adminView(u) };
 }));
+// invite codes: registration needs one; an invite can also seat the newcomer at a table
+app.get('/api/admin/invites', api(req => {
+  adminUser(req);
+  return { invites: users.inviteList().map(i => ({ ...i, table: i.tableId ? tables.tables[i.tableId]?.name || null : null })) };
+}));
+app.post('/api/admin/invites', api(req => {
+  const admin = adminUser(req);
+  const tableId = req.body.tableId ? tables.get(req.body.tableId).id : null;
+  return { code: users.createInvite(admin.id, { maxUses: req.body.maxUses, tableId }) };
+}));
+app.post('/api/admin/invites/revoke', api(req => {
+  adminUser(req);
+  users.revokeInvite(String(req.body.code || ''));
+  return {};
+}));
+
 // account fixes: a new name, a temporary password (shown once to the admin)
 app.post('/api/admin/rename', api(req => {
   adminUser(req);
@@ -213,6 +238,57 @@ app.post('/api/avatar', api(req => {
   users.setAvatar(user, Buffer.from(m[1], 'base64'));
   refreshUser(user.id);
   return { user: users.publicProfile(user) };
+}));
+
+// ---------- tables: a permanent space for a group, with a game picker ----------
+const GAMES = ['mafia', 'mono'];
+const gameInfo = (game, code) => (game === 'mono' ? mono.info(code) : rooms.has(code) ? roomSummary(rooms.get(code)) : null);
+function tableView(table, user) {
+  const online = new Set(allSockets().map(s => s.data.userId));
+  const current = table.current && gameInfo(table.current.game, table.current.code);
+  const live = !!(current && current.phase !== 'ended');
+  return {
+    id: table.id,
+    name: table.name,
+    isOwner: table.ownerId === user.id,
+    ownerId: table.ownerId,
+    members: table.members.map(id => users.users[id]).filter(Boolean).map(u => ({
+      id: u.id, username: u.username, avatar: u.avatar ? `/avatars/${u.avatar}` : null,
+      equipped: users.publicProfile(u).equipped, online: online.has(u.id),
+    })),
+    current: current ? { ...current, by: users.users[table.current.by]?.username || null } : null,
+    canStart: table.ownerId === user.id || !!user.admin || !live,
+    games: table.history.length,
+  };
+}
+const tableAction = fn => api(req => {
+  const user = currentUser(req);
+  const table = fn(user, req.body || {});
+  return table ? { table: tableView(table, user) } : {};
+});
+app.get('/api/tables', api(req => {
+  const user = currentUser(req);
+  return { tables: tables.mine(user.id).map(tb => tableView(tb, user)) };
+}));
+app.post('/api/tables/create', tableAction((user, b) => tables.create(user, b.name)));
+app.post('/api/tables/join', tableAction((user, b) => tables.join(b.id, user)));
+app.post('/api/tables/leave', tableAction((user, b) => { tables.leave(b.id, user); }));
+app.post('/api/tables/rename', tableAction((user, b) => tables.rename(b.id, user, b.name)));
+app.post('/api/tables/kick', tableAction((user, b) => tables.kick(b.id, user, b.userId)));
+// the next game: a fresh room, and everyone at the table is called into it
+app.post('/api/tables/start', api(req => {
+  const user = currentUser(req);
+  const table = tables.get(req.body.id);
+  if (!table.members.includes(user.id)) throw new GameError('err.tableNotFound');
+  const game = req.body.game;
+  if (!GAMES.includes(game)) throw new GameError('err.invalidTarget');
+  if (!tableView(table, user).canStart) throw new GameError('err.tableBusy');
+  const code = game === 'mono' ? mono.create() : createRoom().code;
+  if (game === 'mafia') scheduleSave();
+  tables.setCurrent(table, game, code, user.id);
+  const call = { tableId: table.id, table: table.name, game, code, by: user.username, byId: user.id };
+  for (const sock of allSockets()) if (table.members.includes(sock.data.userId)) sock.emit('tableGame', call);
+  return call;
 }));
 
 // QR code of the invite link, for players in the same room to scan
@@ -458,6 +534,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     saveNow();
     mono.shutdown();
     users.saveNow();
+    tables.saveNow();
     shuttingDown = true;
     io.close();
     server.close(() => process.exit(0));

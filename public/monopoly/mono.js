@@ -23,6 +23,8 @@ Site.init({
     onAccount: () => render(),
     onItems: () => render(),
     onLang: () => { buildBoard(); render(); },
+    busy: () => !!(state && state.me && state.phase === 'playing' && !state.me.spectator && state.game && gp(state.me.id) && !gp(state.me.id).bankrupt),
+    leave: async () => { if (state && state.me) await send('leave'); store.set(SESSION_KEY, null); },
   },
 });
 $('#profileBtn').onclick = () => openProfile();
@@ -152,9 +154,11 @@ function renderLobby() {
     <li class="${p.connected ? '' : 'offline'} ${p.ready ? 'is-ready' : ''}" data-pid="${p.id}">
       <span class="avatar-wrap clickable pc-wrap" style="--pc:${colorOf(p.id)}" data-open-player="${p.userId || ''}">${avatar(p.name, p.avatar, p.cos)}${p.ready ? '<span class="voted ready-mark">✓</span>' : ''}</span>
       <span class="pname"><b class="${nameCls(p.cos)}">${esc(p.name)}</b>${statusPill(p.score)}${p.id === state.hostId ? `<span class="tag host">${esc(t('tag.host'))}</span>` : ''}</span>
+      ${isHost() ? `<button class="ghost small icon-only" data-rename="${p.id}" title="${esc(t('rename.btn'))}" aria-label="${esc(t('rename.btn'))}">✎</button>` : ''}
       ${isHost() && p.id !== state.me.id ? `<button class="ghost small" data-kick="${p.id}">${esc(t('ui.remove'))}</button>` : ''}
     </li>`).join('');
   for (const b of $$('#lobby [data-kick]')) b.onclick = () => send('kick', { playerId: b.dataset.kick });
+  for (const b of $$('#lobby [data-rename]')) b.onclick = e => { e.stopPropagation(); openRename(b.dataset.rename, b, nameOf(b.dataset.rename)); };
   for (const el of $$('#lobby [data-open-player]')) if (el.dataset.openPlayer) el.onclick = () => openPlayer(el.dataset.openPlayer);
   const mine = state.players.find(p => p.id === state.me.id);
   const readyN = state.players.filter(p => p.ready).length;
@@ -168,7 +172,7 @@ function renderLobby() {
   $('#pieces').innerHTML = state.tokens.map(tk => `<button class="swatch ${mine && mine.piece === tk ? 'on' : ''}" style="--pc:${tk}" data-piece="${tk}" ${taken.has(tk) ? 'disabled' : ''} aria-label="${tk}"></button>`).join('');
   for (const b of $$('[data-piece]')) b.onclick = () => send('piece', { piece: b.dataset.piece });
   $('#spectatorBox').classList.toggle('hidden', !state.spectators.length);
-  $('#spectatorList').innerHTML = state.spectators.map(w => `<span class="spectator">${avatar(w.name, w.avatar, w.cos)}<b>${esc(w.name)}</b></span>`).join('');
+  $('#spectatorList').innerHTML = state.spectators.map(w => `<span class="spectator">${avatar(w.name, w.avatar, w.cos)}<b>${esc(w.name)}</b>${isHost() ? `<button class="ghost small icon-only" data-rename="${w.id}" aria-label="${esc(t('rename.btn'))}">✎</button>` : ''}</span>`).join('');
   $('#shareCode').innerHTML = esc(t('ui.shareCode', { code: '\u0000' })).replace('\u0000', `<strong class="code">${esc(state.code)}</strong>`);
   const qr = `/qr.svg?room=${state.code}&game=mono`;
   if ($('#inviteQr').getAttribute('src') !== qr) $('#inviteQr').src = qr;

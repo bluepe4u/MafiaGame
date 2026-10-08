@@ -45,6 +45,14 @@ bash deploy/connect-gdrive.sh root@<server>
 Back up now: `sudo /opt/mafia/deploy/backup.sh` · list / restore: `sudo /opt/mafia/deploy/restore.sh [latest | <file>]`
 (the current data is moved aside, not deleted).
 
+**Accounts are by invite.** On a fresh install (no accounts yet) the server writes a one-time
+admin invite code to `/var/lib/mafia/admin-invite.txt`; register with it to become the admin, then
+create invites for everyone else in the admin panel (Приглашения / Invites) — each is a link that
+opens registration with the code filled in, optionally seating the newcomer at a table.
+
+**Tables:** a group's permanent place (one link that never changes). Whoever starts the next game
+from the table — Mafia or Monopoly — takes everyone at the table into the new room.
+
 **Security:** the app sends standard browser protections (Content-Security-Policy, no framing,
 nosniff, a strict referrer policy, HSTS over HTTPS) and rate-limits socket events per connection.
 

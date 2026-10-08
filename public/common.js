@@ -32,8 +32,14 @@ const Site = {
   baseTitle: document.title,
   home: false,
   urlRoom: () => '',
-  hooks: { onAccount() {}, onLang() {}, onItems() {}, celebrate() {} },
+  hooks: {
+    onAccount() {}, onLang() {}, onItems() {}, celebrate() {},
+    busy: () => false, // in the middle of a game: a table's call shows a banner instead of moving
+    leave: async () => {}, // leave the current room (before following the table to a new one)
+  },
 };
+const gameUrl = (game, code) => `${game === 'mono' ? '/monopoly/' : '/'}?room=${code}&join=1`;
+const gameIcon = game => (game === 'mono' ? '🎲' : '🎩');
 
 function toast(msg, kind = '') {
   const el = $('#toast');
@@ -196,11 +202,21 @@ document.body.insertAdjacentHTML('beforeend', `
         <div class="tabs" role="tablist">
           <button data-admin-tab="live" data-i18n="admin.tab.live"></button>
           <button data-admin-tab="users" data-i18n="admin.tab.users"></button>
+          <button data-admin-tab="invites" data-i18n="admin.tab.invites"></button>
         </div>
         <div id="adminBody" class="admin-body"></div>
       </div>
     </div>
   </div>
+  <div id="renameMenu" class="mark-menu rename-menu hidden" role="dialog">
+    <div id="renameTitle" class="mark-title"></div>
+    <form id="renameForm" class="row">
+      <input id="renameInput" maxlength="20" autocomplete="off">
+      <button type="submit" class="primary small" data-i18n="rename.save"></button>
+    </form>
+    <p class="muted small-text" data-i18n="rename.hint"></p>
+  </div>
+  <div id="tableCall" class="table-call hidden" role="status"></div>
   <div id="giftBox" class="overlay gift-overlay hidden" role="dialog" aria-modal="true">
     <div class="gift-stage">
       <div class="gift-title" data-i18n="gift.title"></div>
@@ -239,15 +255,17 @@ function renderAuthMode() {
   for (const b of $$('[data-auth-mode]')) b.classList.toggle('active', b.dataset.authMode === authMode);
   $('#authSubmit').textContent = t(authMode === 'login' ? 'auth.login' : 'auth.register');
   $('#authPass').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+  $('#inviteField').classList.toggle('hidden', authMode !== 'register');
 }
 for (const b of $$('[data-auth-mode]')) b.onclick = () => { authMode = b.dataset.authMode; renderAuthMode(); };
 $('#authCard').addEventListener('submit', async e => {
   e.preventDefault();
-  const res = await api(authMode, { username: $('#authUser').value, password: $('#authPass').value });
+  const res = await api(authMode, { username: $('#authUser').value, password: $('#authPass').value, invite: $('#authInvite').value });
   if (!res.ok) return;
   $('#authPass').value = '';
   setAccount(res.user, res.token);
   toast(t('toast.welcome', { name: res.user.username }), 'info');
+  joinPendingTable();
 });
 
 function renderAccount() {
@@ -264,6 +282,7 @@ function renderAccount() {
   }
   Site.hooks.onAccount();
   renderActive();
+  loadTables();
 }
 
 async function refreshAccount() {
@@ -635,7 +654,7 @@ const gameName = g => t(g === 'mono' ? 'site.monopoly' : 'site.mafia');
 
 async function renderAdmin() {
   for (const b of $$('[data-admin-tab]')) b.classList.toggle('active', b.dataset.adminTab === adminTab);
-  return adminTab === 'live' ? renderAdminLive() : renderAdminUsers();
+  return adminTab === 'live' ? renderAdminLive() : adminTab === 'invites' ? renderAdminInvites() : renderAdminUsers();
 }
 
 async function renderAdminLive() {
@@ -726,6 +745,181 @@ async function renderAdminUsers() {
   }
 }
 
+// ---------- invites (admin): registration needs a code ----------
+const signupUrl = code => `${location.origin}/?invite=${code}`;
+const copyText = text => navigator.clipboard.writeText(text).then(() => toast(t('toast.copiedText'), 'info'), () => toast(text));
+
+async function renderAdminInvites() {
+  const res = await api('admin/invites');
+  if (!res.ok || adminTab !== 'invites') return;
+  const body = $('#adminBody');
+  body.innerHTML = `
+    <form id="inviteForm" class="invite-form">
+      <label class="field"><span>${esc(t('invite.uses'))}</span><select id="inviteUses">${[1, 3, 10, 30].map(n => `<option value="${n}">${n}</option>`).join('')}</select></label>
+      <label class="field"><span>${esc(t('invite.table'))}</span><select id="inviteTable"><option value="">${esc(t('invite.noTable'))}</option>${myTables.map(tb => `<option value="${tb.id}">${esc(tb.name)}</option>`).join('')}</select></label>
+      <button class="primary" type="submit">${esc(t('invite.create'))}</button>
+    </form>
+    <p class="muted small-text">${esc(t('invite.hint'))}</p>
+    ${res.invites.length ? res.invites.map(i => `<div class="admin-room invite-row ${i.uses >= i.maxUses ? 'used' : ''}">
+      <span class="admin-room-id"><b><span class="code">${esc(i.code)}</span> · ${esc(t('invite.usedOf', { n: i.uses, max: i.maxUses }))}</b>
+        <span class="muted small-text">${i.table ? `🪑 ${esc(i.table)} · ` : ''}${i.admin ? esc(t('invite.admin')) + ' · ' : ''}${esc(ago(i.createdAt))}${i.usedBy.length ? ` · ${esc(i.usedBy.join(', '))}` : ''}</span></span>
+      ${i.uses < i.maxUses ? `<button class="small" data-copy-invite="${esc(i.code)}">${esc(t('invite.copyLink'))}</button>` : ''}
+      <button class="ghost small" data-revoke="${esc(i.code)}">${esc(t('invite.revoke'))}</button>
+    </div>`).join('') : `<p class="muted small-text">${esc(t('invite.none'))}</p>`}`;
+  $('#inviteForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const r = await api('admin/invites', { maxUses: Number($('#inviteUses').value), tableId: $('#inviteTable').value || null });
+    if (r.ok) { copyText(signupUrl(r.code)); renderAdmin(); }
+  });
+  for (const b of body.querySelectorAll('[data-copy-invite]')) b.onclick = () => copyText(signupUrl(b.dataset.copyInvite));
+  for (const b of body.querySelectorAll('[data-revoke]')) b.onclick = () => api('admin/invites/revoke', { code: b.dataset.revoke }).then(renderAdmin);
+}
+
+// ---------- tables: a permanent space for the group, with the next-game picker ----------
+let myTables = [];
+let tableMenu = null; // the table whose settings are open
+let tablesTimer = null;
+const tableUrl = id => `${location.origin}/?table=${id}`;
+
+async function loadTables() {
+  clearTimeout(tablesTimer);
+  if (!account) { myTables = []; renderTables(); return; }
+  const res = await fetch('/api/tables', { headers: { Authorization: `Bearer ${store.get(AUTH_KEY)}` } }).then(r => r.json()).catch(() => null);
+  if (res && res.ok) myTables = res.tables;
+  renderTables();
+  // keep "who's online" fresh while the home screen is open
+  if (Site.home) tablesTimer = setTimeout(() => { if (!document.hidden) loadTables(); else tablesTimer = setTimeout(loadTables, 20000); }, 20000);
+}
+
+function renderTables() {
+  let box = $('#tables');
+  if (!box) {
+    $('#playCard').insertAdjacentHTML('afterbegin', '<div id="tables" class="tables hidden"></div>');
+    box = $('#tables');
+  }
+  box.classList.toggle('hidden', !account || !Site.home);
+  if (!account || !Site.home) return;
+  const createForm = `<form class="row table-create hidden" id="tableCreate"><input id="tableName" maxlength="40" placeholder="${esc(t('table.namePlaceholder'))}"><button class="primary small" type="submit">${esc(t('table.create'))}</button></form>`;
+  if (!myTables.length) {
+    box.innerHTML = `<button class="ghost table-new" id="tableNew">🪑 ${esc(t('table.createFirst'))}</button>${createForm}<p class="muted small-text table-help">${esc(t('table.help'))}</p>`;
+  } else {
+    box.innerHTML = myTables.map(tb => {
+      const online = tb.members.filter(m => m.online).length;
+      const cur = tb.current && tb.current.phase !== 'ended' ? tb.current : null;
+      const open = tableMenu === tb.id;
+      return `<div class="table-card">
+        <div class="tc-head"><span class="tc-ico">🪑</span><span class="tc-title"><b>${esc(tb.name)}</b>
+          <span class="muted small-text">${esc(t('table.online', { n: online, total: tb.members.length }))}</span></span>
+          <button class="ghost small icon-only" data-tmenu="${tb.id}" aria-label="${esc(t('table.settings'))}" title="${esc(t('table.settings'))}">⋯</button></div>
+        <div class="tc-members">${tb.members.map(m => `<span class="tc-member ${m.online ? 'on' : ''}" title="${esc(m.username)}">${avatar(m.username, m.avatar, m.equipped)}</span>`).join('')}</div>
+        ${cur ? `<a class="tc-now g-${cur.game}" href="${gameUrl(cur.game, cur.code)}" data-go="${cur.game}:${cur.code}">${gameIcon(cur.game)}
+          <span><b>${esc(t('table.now', { game: t(cur.game === 'mono' ? 'site.monopoly' : 'site.mafia') }))}</b>
+          <span class="muted small-text">${esc(t(cur.phase === 'lobby' ? 'active.lobby' : 'active.playing'))} · ${cur.players.map(p => esc(p.name)).join(', ') || esc(t('table.empty'))}</span></span>
+          <span class="ag-go">${esc(t('table.join'))} →</span></a>` : ''}
+        ${tb.canStart ? `<div class="tc-pick"><span class="muted small-text">${esc(t(cur ? 'table.newGame' : 'table.nextGame'))}</span>
+          <button data-start="${tb.id}:mafia">🎩 ${esc(t('site.mafia'))}</button><button data-start="${tb.id}:mono">🎲 ${esc(t('site.monopoly'))}</button></div>` : ''}
+        ${open ? `<div class="tc-settings">
+          <div class="row"><button class="small" data-tcopy="${tb.id}">${esc(t('table.copyLink'))}</button>
+            ${account.admin ? `<button class="small" data-tinvite="${tb.id}">${esc(t('table.inviteNew'))}</button>` : ''}</div>
+          <p class="muted small-text">${esc(t(account.admin ? 'table.linkHintAdmin' : 'table.linkHint'))}</p>
+          ${tb.isOwner || account.admin ? `<form class="row" data-trename="${tb.id}"><input value="${esc(tb.name)}" maxlength="40"><button class="small" type="submit">${esc(t('table.rename'))}</button></form>
+            <div class="tc-kick">${tb.members.filter(m => m.id !== tb.ownerId).map(m => `<span class="tc-kick-item">${esc(m.username)}<button class="ghost small" data-tkick="${tb.id}:${m.id}" aria-label="×">×</button></span>`).join('')}</div>` : ''}
+          <div class="row"><button class="ghost small" id="tableNew">＋ ${esc(t('table.another'))}</button><button class="danger small" data-tleave="${tb.id}">${esc(t('table.leave'))}</button></div>
+        </div>` : ''}
+      </div>`;
+    }).join('') + createForm;
+  }
+  const after = r => { if (r.ok) loadTables(); };
+  const newBtn = $('#tableNew');
+  if (newBtn) newBtn.onclick = () => { $('#tableCreate').classList.remove('hidden'); $('#tableName').focus(); };
+  $('#tableCreate').addEventListener('submit', async e => {
+    e.preventDefault();
+    const r = await api('tables/create', { name: $('#tableName').value });
+    if (r.ok) { tableMenu = r.table.id; toast(t('table.created'), 'info'); loadTables(); }
+  });
+  for (const b of box.querySelectorAll('[data-tmenu]')) b.onclick = () => { tableMenu = tableMenu === b.dataset.tmenu ? null : b.dataset.tmenu; renderTables(); };
+  for (const b of box.querySelectorAll('[data-start]')) {
+    b.onclick = async () => {
+      const [id, game] = b.dataset.start.split(':');
+      b.disabled = true;
+      const r = await api('tables/start', { id, game });
+      b.disabled = false;
+      if (r.ok) followTable(r, true);
+    };
+  }
+  for (const a of box.querySelectorAll('[data-go]')) {
+    a.onclick = e => {
+      const [game, code] = a.dataset.go.split(':');
+      if (game !== Site.game) return; // a normal link to the other game's page
+      e.preventDefault();
+      send('join', { code });
+    };
+  }
+  for (const b of box.querySelectorAll('[data-tcopy]')) b.onclick = () => copyText(tableUrl(b.dataset.tcopy));
+  for (const b of box.querySelectorAll('[data-tinvite]')) {
+    b.onclick = async () => {
+      const r = await api('admin/invites', { maxUses: 1, tableId: b.dataset.tinvite });
+      if (r.ok) copyText(`${signupUrl(r.code)}`);
+    };
+  }
+  for (const f of box.querySelectorAll('[data-trename]')) {
+    f.addEventListener('submit', e => { e.preventDefault(); api('tables/rename', { id: f.dataset.trename, name: f.querySelector('input').value }).then(after); });
+  }
+  for (const b of box.querySelectorAll('[data-tkick]')) {
+    b.onclick = () => { const [id, userId] = b.dataset.tkick.split(':'); api('tables/kick', { id, userId }).then(after); };
+  }
+  for (const b of box.querySelectorAll('[data-tleave]')) {
+    b.onclick = () => confirm(t('table.leaveConfirm')) && api('tables/leave', { id: b.dataset.tleave }).then(r => { tableMenu = null; after(r); });
+  }
+}
+
+// Someone at one of my tables started the next game: follow them there (or offer to, mid-game).
+async function followTable(call, mine = false) {
+  const url = gameUrl(call.game, call.code);
+  if (!mine && Site.hooks.busy()) {
+    const box = $('#tableCall');
+    box.innerHTML = `<span>${gameIcon(call.game)} ${esc(t('table.call', { name: call.by, table: call.table, game: t(call.game === 'mono' ? 'site.monopoly' : 'site.mafia') }))}</span>
+      <a class="primary small btn-link" href="${url}">${esc(t('table.go'))}</a><button class="ghost small" type="button" aria-label="×">×</button>`;
+    box.classList.remove('hidden');
+    box.querySelector('button').onclick = () => box.classList.add('hidden');
+    box.querySelector('a').onclick = async e => { e.preventDefault(); await Site.hooks.leave(); location.href = url; };
+    if (alertsOn) chime();
+    return;
+  }
+  if (!mine) {
+    toast(t('table.moving', { name: call.by, game: t(call.game === 'mono' ? 'site.monopoly' : 'site.mafia') }), 'info');
+    if (alertsOn) chime();
+    await new Promise(r => setTimeout(r, 1200));
+  }
+  await Site.hooks.leave();
+  location.href = url;
+}
+
+// ---------- host renames people (only inside the room; account names stay) ----------
+let renameFor = null;
+function openRename(pid, anchor, name) {
+  renameFor = pid;
+  const menu = $('#renameMenu');
+  $('#renameTitle').textContent = t('rename.title', { name });
+  $('#renameInput').value = name;
+  menu.classList.remove('hidden');
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = `${window.scrollX + Math.min(window.innerWidth - menu.offsetWidth - 12, Math.max(12, r.left))}px`;
+  menu.style.top = `${window.scrollY + r.bottom + 6}px`;
+  $('#renameInput').focus();
+  $('#renameInput').select();
+}
+const closeRename = () => { renameFor = null; $('#renameMenu').classList.add('hidden'); };
+$('#renameForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const res = await send('rename', { playerId: renameFor, name: $('#renameInput').value });
+  if (res && res.ok) closeRename();
+});
+document.addEventListener('pointerdown', e => {
+  if (renameFor && !e.target.closest('#renameMenu') && !e.target.closest('[data-rename]')) closeRename();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRename(); });
+
 // ---------- language ----------
 const langSelect = $('#langSelect');
 langSelect.innerHTML = Object.entries(LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
@@ -748,6 +942,7 @@ Site.init = function init({ game, socket, urlRoom, hooks }) {
   Site.urlRoom = urlRoom;
   Object.assign(Site.hooks, hooks);
   socket.on('gift', refreshAccount);
+  socket.on('tableGame', call => { loadTables(); followTable(call, account && call.byId === account.id); });
   // the admin reset this account's password: every open page goes back to the login form
   socket.on('loggedOut', () => { store.set(AUTH_KEY, null); account = null; renderAccount(); toast(t('toast.loggedOut')); });
   renderAuthMode();
@@ -758,14 +953,39 @@ Site.init = function init({ game, socket, urlRoom, hooks }) {
       if (res && res.ok) account = res.user;
       else if (res) store.set(AUTH_KEY, null); // expired or logged out elsewhere
     }
+    if (!account && qs.get('table')) toast(t('table.loginFirst'), 'info');
     renderAccount();
-    if (!account) $('#authUser').focus();
+    if (!account) { $('#authUser').focus(); return; }
+    // a table link (?table=…), possibly kept from before logging in
+    const table = await joinPendingTable();
+    // following a table into its new room (?room=…&join=1)
+    const code = (qs.get('room') || '').toUpperCase();
+    if (qs.get('join') === '1' && code) send('join', { code });
+    if (table || qs.get('join')) history.replaceState(null, '', location.pathname + (code ? `?room=${code}` : ''));
   })();
 };
+const PENDING_TABLE_KEY = 'site.pendingTable';
+async function joinPendingTable() {
+  let table = null;
+  try { table = sessionStorage.getItem(PENDING_TABLE_KEY); sessionStorage.removeItem(PENDING_TABLE_KEY); } catch {}
+  if (!table) return null;
+  const r = await api('tables/join', { id: table });
+  if (r.ok) { toast(t('table.joined', { name: r.table.name }), 'info'); loadTables(); }
+  return table;
+}
+const qs = new URLSearchParams(location.search);
+// an invite link (?invite=…) opens the registration form with the code filled in
+if (qs.get('invite')) {
+  authMode = 'register';
+  $('#authInvite').value = qs.get('invite').toUpperCase().slice(0, 12);
+}
+// remember a table link through logging in / registering
+try { if (qs.get('table')) sessionStorage.setItem(PENDING_TABLE_KEY, qs.get('table')); } catch {}
 
 // The page tells us whether its home screen is showing (for the "back to my game" banner).
 Site.setHome = function setHome(home) {
   if (home === Site.home) return;
   Site.home = home;
   renderActive();
+  loadTables();
 };

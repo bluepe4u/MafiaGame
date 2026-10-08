@@ -24,6 +24,8 @@ Site.init({
     onItems: () => render(),
     onLang: () => { renderSpookyBtn(); render(); },
     celebrate: () => celebrate('town'),
+    busy: () => !!(state && state.me && !state.me.spectator && state.phase !== 'lobby' && state.phase !== 'ended'),
+    leave: async () => { if (state && state.me) await send('leave'); saveSession(null); },
   },
 });
 
@@ -119,7 +121,7 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (pending) closeModal();
   closeMarkMenu();
-  if (typeof closeRename === 'function') closeRename();
+  closeRename();
   for (const id of ['recap', 'board']) $('#' + id).classList.add('hidden');
 });
 
@@ -319,7 +321,7 @@ function renderLobby() {
   $('#spectatorList').innerHTML = state.spectators.map(w => `<span class="spectator ${w.connected ? '' : 'offline'}" data-pid="${w.id}">${avatar(w.name, w.avatar, w.cos)}<b>${esc(w.name)}</b>${statusPill(w.score)}${
     isHost() ? `<button class="ghost small icon-only" data-rename="${w.id}" aria-label="${esc(t('rename.btn'))}">✎</button>` : ''}${
     isHost() && w.id !== state.me.id ? `<button class="ghost small" data-kick="${w.id}">${esc(t('ui.remove'))}</button>` : ''}</span>`).join('');
-  for (const b of $$('#lobby [data-rename]')) b.onclick = e => { e.stopPropagation(); openRename(b.dataset.rename, b); };
+  for (const b of $$('#lobby [data-rename]')) b.onclick = e => { e.stopPropagation(); openRename(b.dataset.rename, b, ([...state.players, ...state.spectators].find(p => p.id === b.dataset.rename) || {}).name || ''); };
   for (const el of $$('#lobby [data-open-player]')) if (el.dataset.openPlayer) el.onclick = () => openPlayer(el.dataset.openPlayer);
   for (const b of $$('#spectatorList [data-kick]')) {
     b.onclick = () => confirmHost({ title: t('host.kick.title', { name: (state.spectators.find(w => w.id === b.dataset.kick) || {}).name }), text: t('host.kick.text'), event: 'kick', payload: { playerId: b.dataset.kick } });
@@ -1180,32 +1182,6 @@ $('#boardBtn').onclick = openBoard;
 $('#homeBoard').onclick = openBoard;
 $('#boardClose').onclick = () => $('#board').classList.add('hidden');
 $('#board').addEventListener('pointerdown', e => { if (e.target.id === 'board') $('#board').classList.add('hidden'); });
-
-// ---------- host renames people in the lobby ----------
-let renameFor = null;
-function openRename(pid, anchor) {
-  const m = [...state.players, ...state.spectators].find(p => p.id === pid);
-  if (!m) return;
-  renameFor = pid;
-  const menu = $('#renameMenu');
-  $('#renameTitle').textContent = t('rename.title', { name: m.name });
-  $('#renameInput').value = m.name;
-  menu.classList.remove('hidden');
-  const r = anchor.getBoundingClientRect();
-  menu.style.left = `${window.scrollX + Math.min(window.innerWidth - menu.offsetWidth - 12, Math.max(12, r.left))}px`;
-  menu.style.top = `${window.scrollY + r.bottom + 6}px`;
-  $('#renameInput').focus();
-  $('#renameInput').select();
-}
-const closeRename = () => { renameFor = null; $('#renameMenu').classList.add('hidden'); };
-$('#renameForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const res = await send('rename', { playerId: renameFor, name: $('#renameInput').value });
-  if (res && res.ok) closeRename();
-});
-document.addEventListener('pointerdown', e => {
-  if (renameFor && !e.target.closest('#renameMenu') && !e.target.closest('[data-rename]')) closeRename();
-});
 
 applyStaticTranslations();
 applySpooky();

@@ -58,6 +58,7 @@ class UserStore {
     this.users = {}; // id -> { id, username, salt, hash, avatar, likes, dislikes, createdAt }
     this.sessions = {}; // sha256(token) -> userId
     this.ratingLog = []; // [{ from, to, value, at }]: who rated whom, for the admin
+    this.invites = {}; // code -> { createdBy, createdAt, maxUses, uses, usedBy, tableId, admin }
     this.failures = new Map(); // username (lowercase) -> [timestamps]
     this.saveTimer = null;
     try {
@@ -65,6 +66,7 @@ class UserStore {
       this.users = data.users || {};
       this.sessions = data.sessions || {};
       this.ratingLog = data.ratingLog || [];
+      this.invites = data.invites || {};
     } catch (e) {
       if (e.code !== 'ENOENT') console.error('Could not read users:', e.message);
     }
@@ -76,7 +78,7 @@ class UserStore {
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const tmp = `${this.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ users: this.users, sessions: this.sessions, ratingLog: this.ratingLog }));
+      fs.writeFileSync(tmp, JSON.stringify({ users: this.users, sessions: this.sessions, ratingLog: this.ratingLog, invites: this.invites }));
       fs.renameSync(tmp, this.file);
     } catch (e) {
       console.error('Saving users failed:', e.message);
@@ -99,15 +101,60 @@ class UserStore {
     return token;
   }
 
-  register(username, password) {
+  // Registration needs an invite code (from the admin); it may also seat the newcomer at a table.
+  register(username, password, inviteCode) {
     username = String(username || '').trim().replace(/\s+/g, ' ');
     password = String(password || '');
+    const code = String(inviteCode || '').trim().toUpperCase();
+    const invite = this.invites[code];
+    if (!code) throw new GameError('err.inviteRequired');
+    if (!invite || invite.uses >= invite.maxUses) throw new GameError('err.inviteInvalid');
     if (!USERNAME_RE.test(username)) throw new GameError('err.usernameInvalid', { min: 2, max: 20 });
     if (password.length < MIN_PASSWORD) throw new GameError('err.passwordShort', { min: MIN_PASSWORD });
     if (this.byName(username)) throw new GameError('err.usernameTaken');
     const user = { id: crypto.randomBytes(8).toString('hex'), username, ...hashPassword(password), avatar: null, likes: 0, dislikes: 0, createdAt: Date.now() };
+    if (invite.admin) user.admin = true;
     this.users[user.id] = user;
-    return { user, token: this.newSession(user) };
+    invite.uses += 1;
+    invite.usedBy.push(user.id);
+    return { user, token: this.newSession(user), invite };
+  }
+
+  // ---------- invites ----------
+  createInvite(byUserId, { maxUses = 1, tableId = null, admin = false } = {}) {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code;
+    do code = Array.from(crypto.randomBytes(8), b => alphabet[b % alphabet.length]).join('');
+    while (this.invites[code]);
+    maxUses = Math.max(1, Math.min(100, Math.round(Number(maxUses) || 1)));
+    this.invites[code] = { createdBy: byUserId, createdAt: Date.now(), maxUses, uses: 0, usedBy: [], tableId, admin: !!admin };
+    this.save();
+    return code;
+  }
+
+  revokeInvite(code) {
+    delete this.invites[code];
+    this.save();
+  }
+
+  inviteList() {
+    return Object.entries(this.invites).map(([code, inv]) => ({
+      code, maxUses: inv.maxUses, uses: inv.uses, createdAt: inv.createdAt, tableId: inv.tableId, admin: inv.admin,
+      createdBy: this.users[inv.createdBy]?.username || null,
+      usedBy: inv.usedBy.map(id => this.users[id]?.username).filter(Boolean),
+    })).sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  // A brand-new site has no accounts: make one admin invite and leave it in a file for the owner.
+  bootstrapInvite(dir) {
+    if (Object.keys(this.users).length) return null;
+    const existing = Object.entries(this.invites).find(([, inv]) => inv.admin && inv.uses < inv.maxUses);
+    const code = existing ? existing[0] : this.createInvite(null, { admin: true });
+    const file = path.join(dir, 'admin-invite.txt');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, code + '\n', { mode: 0o600 });
+    this.saveNow();
+    return { code, file };
   }
 
   login(username, password) {

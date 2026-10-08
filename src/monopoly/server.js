@@ -199,6 +199,14 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken }
   return {
     has: code => rooms.has(code),
     list: () => [...rooms.values()].map(summary),
+    info: code => (rooms.has(code) ? summary(rooms.get(code)) : null),
+    // an empty room for a table's next game: the first one in becomes the host
+    create: () => {
+      const room = new MonoRoom({ code: newCode(), ...roomOptions() });
+      rooms.set(room.code, room);
+      scheduleSave();
+      return room.code;
+    },
     userRooms: userId => [...rooms.values()].filter(r => r.byUser(userId)).map(summary),
     sockets: () => [...nsp.sockets.values()],
     // the admin closes a stuck room: everyone in it is sent back to the home screen

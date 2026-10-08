@@ -60,6 +60,7 @@
         </div>
         <label class="field"><span data-i18n="auth.username"></span> <input id="authUser" name="username" maxlength="20" autocomplete="username" spellcheck="false"></label>
         <label class="field"><span data-i18n="auth.password"></span> <input id="authPass" name="password" type="password" autocomplete="current-password"></label>
+        <label id="inviteField" class="field hidden"><span data-i18n="auth.invite"></span> <input id="authInvite" name="invite" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
         <button id="authSubmit" type="submit" class="primary big-btn"></button>
         <p class="muted small-text auth-hint" data-i18n="auth.hint"></p>
       </form>
@@ -233,15 +234,6 @@
         <p id="boardNote" class="muted small-text"></p>
       </div>
     </div>
-  </div>
-
-  <div id="renameMenu" class="mark-menu rename-menu hidden" role="dialog">
-    <div id="renameTitle" class="mark-title"></div>
-    <form id="renameForm" class="row">
-      <input id="renameInput" maxlength="20" autocomplete="off">
-      <button type="submit" class="primary small" data-i18n="rename.save"></button>
-    </form>
-    <p class="muted small-text" data-i18n="rename.hint"></p>
   </div>
 
   <div id="markMenu" class="mark-menu hidden" role="dialog">

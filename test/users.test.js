@@ -7,19 +7,21 @@ const os = require('os');
 const path = require('path');
 const { UserStore, imageType } = require('../src/users');
 
+// every registration needs an invite: make a fresh single-use one
+const reg = (store, username, password) => store.register(username, password, store.createInvite(null));
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mafia-users-'));
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(20)]);
 
 test('register, log in, sessions, and persistence across restarts', () => {
   const dir = tmp();
   const store = new UserStore(dir);
-  const { user, token } = store.register('  Вася  Пупкин ', 'pass');
+  const { user, token } = reg(store, '  Вася  Пупкин ', 'pass');
   assert.strictEqual(user.username, 'Вася Пупкин');
   assert.strictEqual(store.byToken(token).id, user.id);
-  assert.throws(() => store.register('вася пупкин', 'x1234'), /err\.usernameTaken/);
-  assert.throws(() => store.register('a', 'pass'), /err\.usernameInvalid/);
-  assert.throws(() => store.register('<script>', 'pass'), /err\.usernameInvalid/);
-  assert.throws(() => store.register('Bob', '123'), /err\.passwordShort/);
+  assert.throws(() => reg(store, 'вася пупкин', 'x1234'), /err\.usernameTaken/);
+  assert.throws(() => reg(store, 'a', 'pass'), /err\.usernameInvalid/);
+  assert.throws(() => reg(store, '<script>', 'pass'), /err\.usernameInvalid/);
+  assert.throws(() => reg(store, 'Bob', '123'), /err\.passwordShort/);
   assert.throws(() => store.login('Вася Пупкин', 'wrong'), /err\.badLogin/);
   const again = store.login('вася пупкин', 'pass');
   assert.ok(again.token && again.token !== token);
@@ -34,14 +36,14 @@ test('register, log in, sessions, and persistence across restarts', () => {
 
 test('too many failed logins are refused for a while', () => {
   const store = new UserStore(tmp());
-  store.register('Kay', 'secret');
+  reg(store, 'Kay', 'secret');
   for (let i = 0; i < 10; i++) assert.throws(() => store.login('Kay', 'nope'), /err\.badLogin/);
   assert.throws(() => store.login('Kay', 'secret'), /err\.tooManyLogins/);
 });
 
 test('changing the password logs out other sessions', () => {
   const store = new UserStore(tmp());
-  const { user, token } = store.register('Luca', 'old1');
+  const { user, token } = reg(store, 'Luca', 'old1');
   assert.throws(() => store.changePassword(user, 'bad', 'new1'), /err\.badPassword/);
   const fresh = store.changePassword(user, 'old1', 'new1');
   assert.strictEqual(store.byToken(token), null);
@@ -52,7 +54,7 @@ test('changing the password logs out other sessions', () => {
 test('avatars: only real images, old file replaced', () => {
   const dir = tmp();
   const store = new UserStore(dir);
-  const { user } = store.register('Vito', 'pass');
+  const { user } = reg(store, 'Vito', 'pass');
   assert.throws(() => store.setAvatar(user, Buffer.from('<svg onload=alert(1)>')), /err\.avatarType/);
   assert.throws(() => store.setAvatar(user, Buffer.alloc(2 * 1024 * 1024, 0xff)), /err\.avatarTooBig/);
   store.setAvatar(user, PNG);
@@ -66,7 +68,7 @@ test('avatars: only real images, old file replaced', () => {
 
 test('ratings change likes, dislikes and score', () => {
   const store = new UserStore(tmp());
-  const { user } = store.register('Fredo', 'pass');
+  const { user } = reg(store, 'Fredo', 'pass');
   store.applyRating(user.id, 0, 1);
   store.applyRating(user.id, 0, -1);
   store.applyRating(user.id, 0, -1);
@@ -80,7 +82,7 @@ test('ratings change likes, dislikes and score', () => {
 
 test('game results add up into profile stats', () => {
   const store = new UserStore(tmp());
-  const { user } = store.register('Sonny', 'pass');
+  const { user } = reg(store, 'Sonny', 'pass');
   store.recordGame([{ userId: user.id, role: 'mafia', team: 'mafia', won: true, survived: true }, { userId: 'nobody', role: 'cop', team: 'town', won: false, survived: false }]);
   store.recordGame([{ userId: user.id, role: 'cop', team: 'town', won: false, survived: false }]);
   const st = store.publicProfile(user).stats;
@@ -93,9 +95,9 @@ test('game results add up into profile stats', () => {
 
 test('decency bonus, dislike shield, lowest status, and who disliked whom', () => {
   const store = new UserStore(tmp());
-  const dan = store.register('Данил', 'pass').user;
-  const a = store.register('Ann', 'pass').user;
-  const b = store.register('Bob', 'pass').user;
+  const dan = reg(store, 'Данил', 'pass').user;
+  const a = reg(store, 'Ann', 'pass').user;
+  const b = reg(store, 'Bob', 'pass').user;
   store.applyRating(dan.id, 0, -1, a.id);
   store.applyRating(dan.id, 0, -1, b.id);
   store.applyRating(dan.id, -1, 1, b.id); // B changed their mind
@@ -110,7 +112,7 @@ test('decency bonus, dislike shield, lowest status, and who disliked whom', () =
 
 test('items: gift, equip, take back; reactions unlocked; unknown items refused', () => {
   const store = new UserStore(tmp());
-  const u = store.register('Kay', 'pass').user;
+  const u = reg(store, 'Kay', 'pass').user;
   assert.throws(() => store.gift(u, 'hat.nope'), /err\.invalidTarget/);
   assert.throws(() => store.equip(u, 'hat', 'hat.crown'), /err\.invalidTarget/, 'must own it first');
   store.gift(u, 'hat.crown');
@@ -129,7 +131,7 @@ test('items: gift, equip, take back; reactions unlocked; unknown items refused',
 
 test('detailed game numbers add up; old stats without them still load', () => {
   const store = new UserStore(tmp());
-  const { user } = store.register('Luca', 'pass');
+  const { user } = reg(store, 'Luca', 'pass');
   user.stats = { games: 3, wins: 2, survived: 1, mafiaGames: 1, mafiaWins: 1, townGames: 2, townWins: 1, roles: { mafia: 1, citizen: 2 } };
   store.recordGame([{ userId: user.id, role: 'citizen', team: 'town', won: true, survived: true, votes: 2, votesOnMafia: 1, votesMatched: 2, ballots: 3, decisive: 1, mafiaVotedOut: 1, kills: 0, saves: 0, copHits: 0, players: 8 }]);
   store.recordGame([{ userId: user.id, role: 'mafia', team: 'mafia', won: true, survived: false, votes: 1, votesOnMafia: 0, votesMatched: 0, ballots: 1, decisive: 0, mafiaVotedOut: 0, kills: 2, saves: 0, copHits: 0, players: 8 }]);
@@ -142,7 +144,7 @@ test('detailed game numbers add up; old stats without them still load', () => {
 
 test('Monopoly results add up into their own stats', () => {
   const store = new UserStore(tmp());
-  const { user } = store.register('Tessio', 'pass');
+  const { user } = reg(store, 'Tessio', 'pass');
   const base = { userId: user.id, players: 4, rentCollected: 300, rentPaid: 100, bought: 5, housesBuilt: 4, hotelsBuilt: 1, auctionsWon: 1, trades: 2, jailed: 1, doubles: 3, passedGo: 6, cardsDrawn: 4, rounds: 20, peakNetWorth: 3000 };
   store.recordMonoGame([{ ...base, won: true, place: 1, bankrupt: false, netWorth: 2500, topGroup: 'orange' }]);
   store.recordMonoGame([{ ...base, won: false, place: 3, bankrupt: true, netWorth: 0, topGroup: 'orange' }]);
@@ -154,8 +156,8 @@ test('Monopoly results add up into their own stats', () => {
 
 test('admin fixes: rename (unique names) and a temporary password that logs out everywhere', () => {
   const store = new UserStore(tmp());
-  const { user, token } = store.register('Dima', 'pass');
-  store.register('Lena', 'pass');
+  const { user, token } = reg(store, 'Dima', 'pass');
+  reg(store, 'Lena', 'pass');
   assert.throws(() => store.rename(user, 'lena'), /err\.usernameTaken/);
   store.rename(user, ' Дима  К ');
   assert.strictEqual(user.username, 'Дима К');
@@ -164,4 +166,28 @@ test('admin fixes: rename (unique names) and a temporary password that logs out 
   assert.strictEqual(store.byToken(token), null);
   assert.throws(() => store.login('Дима К', 'pass'), /err\.badLogin/);
   assert.ok(store.login('дима к', temp).token);
+});
+
+test('invites: required, single or multi use, admin bootstrap only on an empty site', () => {
+  const dir = tmp();
+  const store = new UserStore(dir);
+  assert.throws(() => store.register('Ann', 'pass'), /err\.inviteRequired/);
+  assert.throws(() => store.register('Ann', 'pass', 'NOPE'), /err\.inviteInvalid/);
+  const boot = store.bootstrapInvite(dir);
+  assert.strictEqual(fs.readFileSync(boot.file, 'utf8').trim(), boot.code);
+  const { user: admin } = store.register('Данил', 'pass', boot.code.toLowerCase());
+  assert.strictEqual(admin.admin, true);
+  assert.throws(() => store.register('Bob', 'pass', boot.code), /err\.inviteInvalid/);
+  assert.strictEqual(store.bootstrapInvite(dir), null);
+  const code = store.createInvite(admin.id, { maxUses: 2, tableId: 'T1' });
+  const r = store.register('Bob', 'pass', code);
+  assert.strictEqual(r.invite.tableId, 'T1');
+  assert.ok(!r.user.admin);
+  store.register('Cid', 'pass', code);
+  assert.throws(() => store.register('Dan', 'pass', code), /err\.inviteInvalid/);
+  assert.deepStrictEqual(store.inviteList().find(i => i.code === code).usedBy, ['Bob', 'Cid']);
+  store.saveNow();
+  assert.ok(new UserStore(dir).invites[code]);
+  store.revokeInvite(code);
+  assert.ok(!store.invites[code]);
 });
