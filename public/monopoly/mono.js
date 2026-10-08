@@ -30,6 +30,7 @@ Site.init({
   },
 });
 $('#homeBtn').onclick = () => { homeView = true; render(); };
+Voice.init({ socket, me: () => state && state.me && state.me.id, route: () => true, channel: () => 'all', transcripts: () => false });
 $('#profileBtn').onclick = () => openProfile();
 $('#homeProfile').onclick = () => openProfile();
 
@@ -132,6 +133,7 @@ function render() {
   if (inRoom && urlRoom !== state.code) { urlRoom = state.code; history.replaceState(null, '', `/monopoly/?room=${state.code}`); }
   renderReactBar();
   updateTurnAlert(monoNeed());
+  Voice.update(!!(state && state.me));
   if (!inRoom) return show('home');
   if (state.phase === 'lobby') { show('lobby'); return renderLobby(); }
   show('game');

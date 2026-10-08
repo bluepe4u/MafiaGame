@@ -171,6 +171,34 @@ $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joi
 
 $('#homeBtn').onclick = () => { homeView = true; render(); };
 
+// ---------- voice chat: who hears whom ----------
+// Lobby and after the game: everyone. By day the living speak to everyone; at night only the
+// Mafia hear each other. Players who are out (and spectators) listen, but talk only among themselves.
+function voiceRoute(from, to) {
+  if (!state || !state.me) return false;
+  if (state.phase === 'lobby' || state.phase === 'ended') return true;
+  const P = id => state.players.find(p => p.id === id);
+  const a = P(from), b = P(to);
+  const out = x => !x || !x.alive;
+  if (out(a)) return out(b);
+  if (state.phase === 'night') return a.role === 'mafia' && !!b && b.alive && b.role === 'mafia';
+  return true;
+}
+function voiceChannel() {
+  if (!state || !state.me || state.phase === 'lobby' || state.phase === 'ended') return 'all';
+  const me = state.players.find(p => p.id === state.me.id);
+  if (!me || !me.alive) return 'out';
+  if (state.phase === 'night') return me.role === 'mafia' ? 'mafia' : 'night';
+  return 'all';
+}
+Voice.init({
+  socket,
+  me: () => state && state.me && state.me.id,
+  route: voiceRoute,
+  channel: voiceChannel,
+  transcripts: () => !!(state && state.settings && state.settings.transcripts && state.phase !== 'lobby'),
+});
+
 // ---------- accounts (shared, see common.js) ----------
 $('#profileBtn').onclick = () => openProfile();
 $('#homeProfile').onclick = () => openProfile();
@@ -270,6 +298,7 @@ $('#voteSeconds').addEventListener('change', e => send('settings', { voteSeconds
 $('#revealRole').addEventListener('change', e => send('settings', { revealRoleOnDeath: e.target.checked }));
 $('#firstNightKill').addEventListener('change', e => send('settings', { firstNightKill: e.target.checked }));
 $('#familyMode').addEventListener('change', e => send('settings', { family: e.target.checked }));
+$('#transcripts').addEventListener('change', e => send('settings', { transcripts: e.target.checked }));
 
 function setIfNotFocused(el, prop, value) {
   if (document.activeElement !== el) el[prop] = value;
@@ -308,6 +337,7 @@ function renderLobby() {
     t(s.firstNightKill ? 'sum.firstNightKill' : 'sum.noFirstNightKill'),
     t(s.revealRoleOnDeath ? 'sum.reveal' : 'sum.noReveal'),
     s.family ? t('sum.family') : '',
+    s.transcripts ? t('sum.transcripts') : '',
   ].filter(Boolean).map(t => `<li>${esc(t)}</li>`).join('');
   const rce = state.roleCountsError;
   $('#roleError').textContent = state.players.length >= state.minPlayers && rce ? t(rce.key, rce.params) : '';
@@ -341,6 +371,7 @@ function renderLobby() {
     $('#revealRole').checked = s.revealRoleOnDeath;
     $('#firstNightKill').checked = s.firstNightKill;
     $('#familyMode').checked = !!s.family;
+    $('#transcripts').checked = !!s.transcripts;
   }
 }
 
@@ -892,9 +923,13 @@ function openRecap() {
     <div class="recap-winner">${esc(t('end.' + state.winner))}</div>
     <h3>${esc(t('recap.roles'))}</h3>
     <div class="recap-roles">${roles}</div>
-    <div class="recap-steps">${sections}</div>`;
+    <div class="recap-steps">${sections}</div>
+    ${state.insights ? insightsHtml(state.insights) : state.transcript && state.transcript.length >= 3 ? `<p class="muted small-text insights-wait">✨ ${esc(t('insights.wait'))}</p>` : ''}
+    ${transcriptHtml(state.transcript)}`;
+  recapInsights = !!state.insights;
   $('#recap').classList.remove('hidden');
 }
+let recapInsights = false;
 $('#recapClose').onclick = () => $('#recap').classList.add('hidden');
 $('#recap').addEventListener('pointerdown', e => { if (e.target.id === 'recap') $('#recap').classList.add('hidden'); });
 
@@ -938,6 +973,9 @@ function render() {
   }
   fxOnState();
   renderTopbar();
+  Voice.update(!!(state && state.me));
+  // the AI's read arrives a little after the game: refresh an open recap
+  if (state && state.insights && !recapInsights && !$('#recap').classList.contains('hidden')) openRecap();
   updateAlerts();
   const inRoom = !!(state && state.me) && !homeView;
   document.body.dataset.phase = inRoom ? state.phase : 'home';

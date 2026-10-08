@@ -700,3 +700,22 @@ test('family mode: no likes or dislikes after the game', () => {
   room.phase = 'ended';
   assert.throws(() => room.rate(ann.id, 'x', 1), /err\.familyNoRatings/);
 });
+
+test('transcripts: only when on, tagged by channel, secret until the game ends, archived', () => {
+  const { room, by } = setup(SIX, SIX_ROLES);
+  assert.throws(() => room.addTranscript(by.A.id, 'hi'), /err\.transcriptsOff/);
+  room.settings.transcripts = true;
+  room.addTranscript(by.A.id, '  я  проверю   Б  '); // night, Mafia
+  room.addTranscript(by.E.id, 'тихо');
+  assert.deepStrictEqual(room.transcript.map(l => [l.name, l.text, l.channel]), [['A', 'я проверю Б', 'mafia'], ['E', 'тихо', 'night']]);
+  assert.strictEqual(room.viewFor(by.E.id).transcript, undefined);
+  room.phase = 'ended';
+  assert.strictEqual(room.viewFor(by.E.id).transcript.length, 2);
+  const rec = room.archiveRecord('town');
+  assert.strictEqual(rec.transcript.length, 2);
+  assert.strictEqual(rec.transcript[0].pid, undefined); // names only in the archive
+  room.setInsights('other-game', { summary: 'x' });
+  assert.strictEqual(room.insights, null);
+  room.setInsights(room.gameId, { summary: 'x' });
+  assert.strictEqual(room.viewFor(by.E.id).insights.summary, 'x');
+});

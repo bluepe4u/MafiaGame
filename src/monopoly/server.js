@@ -8,11 +8,13 @@ const path = require('path');
 const { MonoRoom } = require('./game');
 const { GameError } = require('../game');
 const { limitSocket } = require('../ratelimit');
+const { createVoiceHub } = require('../voice');
 
 const ROOM_IDLE_MS = 60 * 60 * 1000;
 
 function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, onArchive = () => {}, onStart = () => {} }) {
   const nsp = io.of('/monopoly');
+  const voice = createVoiceHub(nsp);
   const rooms = new Map(); // code -> MonoRoom
   const stateFile = path.join(dataDir, 'monopoly-rooms.json');
   let saveTimer = null;
@@ -117,8 +119,11 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
       if (!member) throw new GameError('err.sessionExpired');
       attach(room, member);
     });
+    voice.attach(socket, ctx);
+
     on('leave', () => {
       const { room, pid } = ctx();
+      voice.leave(socket);
       socket.leave(room.code);
       socket.data.playerId = null;
       room.leave(pid);
@@ -128,7 +133,7 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
       room.kick(pid, playerId);
       for (const s of nsp.adapter.rooms.get(room.code) || []) {
         const sock = nsp.sockets.get(s);
-        if (sock?.data.playerId === playerId) { sock.data.playerId = null; sock.leave(room.code); sock.emit('kicked'); }
+        if (sock?.data.playerId === playerId) { voice.leave(sock); sock.data.playerId = null; sock.leave(room.code); sock.emit('kicked'); }
       }
     });
 
@@ -220,6 +225,7 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
       for (const s of nsp.adapter.rooms.get(code) || []) {
         const sock = nsp.sockets.get(s);
         if (!sock) continue;
+        voice.leave(sock);
         sock.data.playerId = null;
         sock.leave(code);
         sock.emit('kicked', { closed: true });

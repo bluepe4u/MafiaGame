@@ -13,6 +13,8 @@ const { attachMonopoly } = require('./src/monopoly/server');
 const { limitSocket } = require('./src/ratelimit');
 const { TableStore } = require('./src/tables');
 const { Archive } = require('./src/archive');
+const { createVoiceHub, iceServers } = require('./src/voice');
+const insights = require('./src/insights');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -222,6 +224,7 @@ app.post('/api/admin/endRoom', api(req => {
   for (const s of io.sockets.adapter.rooms.get(code) || []) {
     const sock = io.sockets.sockets.get(s);
     if (!sock) continue;
+    voiceHub.leave(sock);
     sock.data.playerId = null;
     sock.leave(code);
     sock.emit('kicked', { closed: true });
@@ -308,6 +311,9 @@ app.post('/api/tables/start', api(req => {
   return call;
 }));
 
+// ---------- voice: STUN/TURN servers for the browser-to-browser audio ----------
+app.get('/api/voice/ice', api(req => ({ iceServers: iceServers(currentUser(req).id), insights: insights.enabled() })));
+
 // ---------- the game night archive ----------
 app.get('/api/archive', api(req => {
   const user = currentUser(req);
@@ -362,6 +368,7 @@ const mono = attachMonopoly({
   onStart: room => room.tableId && tables.saveSettings(room.tableId, 'mono', room.settings),
 });
 
+const voiceHub = createVoiceHub(io.of('/'));
 const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets()];
 const roomSummary = room => ({
   game: 'mafia', code: room.code, phase: room.phase, lastActivity: room.lastActivity,
@@ -387,7 +394,17 @@ const roomOptions = () => ({
   onChange: onRoomChange,
   profileOf: userId => users.publicProfile(users.users[userId]),
   onGameEnd: results => users.recordGame(results),
-  onArchive: record => archive.add(record),
+  onArchive: record => {
+    const game = archive.add({ ...record, transcript: record.transcript.slice(-1500) });
+    // with a transcript (and an API key on the server): an AI read of the game, shown in the recap and archive
+    if (game && insights.enabled() && record.transcript.length >= 3) {
+      insights.analyzeMafia(game, process.env.INSIGHTS_LANG || 'ru').then(ins => {
+        if (!ins) return;
+        archive.setInsights(game.id, ins);
+        rooms.get(record.code)?.setInsights(record.gameId, ins);
+      }).catch(e => console.error('Insights failed:', e.message));
+    }
+  },
   onStart: room => room.tableId && tables.saveSettings(room.tableId, 'mafia', room.settings),
   onRate: (targetUserId, oldValue, newValue, fromUserId) => {
     users.applyRating(targetUserId, oldValue, newValue, fromUserId);
@@ -518,8 +535,11 @@ io.on('connection', socket => {
     attach(room, player);
   });
 
+  voiceHub.attach(socket, ctx, { onTranscript: (room, pid, text) => room.addTranscript(pid, text) });
+
   on('leave', () => {
     const { room, pid } = ctx();
+    voiceHub.leave(socket);
     socket.leave(room.code);
     socket.data.playerId = null;
     room.leave(pid);
@@ -531,6 +551,7 @@ io.on('connection', socket => {
     for (const s of io.sockets.adapter.rooms.get(room.code) || []) {
       const sock = io.sockets.sockets.get(s);
       if (sock?.data.playerId === playerId) {
+        voiceHub.leave(sock);
         sock.data.playerId = null;
         sock.leave(room.code);
         sock.emit('kicked');

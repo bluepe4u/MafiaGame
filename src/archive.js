@@ -76,6 +76,13 @@ class Archive {
     return Archive.nights(this.games.filter(g => g.players.some(p => p.userId === userId)), limit);
   }
 
+  setInsights(id, insights) {
+    const game = this.games.find(g => g.id === id);
+    if (!game) return;
+    game.insights = insights;
+    this.save();
+  }
+
   // Forget accounts that no longer exist (their games stay, without the link to the account).
   prune(userIds) {
     const alive = new Set(userIds);

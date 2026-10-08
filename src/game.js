@@ -45,8 +45,10 @@ const REACT_MIN_GAP_MS = 600;
 const SAVED_FIELDS = [
   'code', 'players', 'spectators', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions', 'lastDoctorTarget',
   'doctorSelfHealUsed', 'speech', 'lastStarterSeat', 'votes', 'voteEndsAt', 'nightEndsAt', 'log', 'privateLog', 'history', 'chat',
-  'revealedRoles', 'ratings', 'winner', 'lastActivity', 'tableId', 'startedAt',
+  'revealedRoles', 'ratings', 'winner', 'lastActivity', 'tableId', 'startedAt', 'transcript', 'insights',
 ];
+const TRANSCRIPT_KEEP = 3000; // lines per game
+const TRANSCRIPT_MAX_CHARS = 600; // per line
 
 const id = (bytes = 6) => crypto.randomBytes(bytes).toString('hex');
 
@@ -129,6 +131,7 @@ class Room {
     this.settings = {
       speechSeconds: 60, voteSeconds: 360, nightSeconds: 240, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null,
       family: false, // gentler words, no likes/dislikes
+      transcripts: false, // speech-to-text of the voice chat (everyone is told), shown after the game
     };
     this.resetGameState();
     this.lastActivity = Date.now();
@@ -157,6 +160,9 @@ class Room {
     // what happened each night and vote: [{ type: 'night', day, actions, killed, saved } | { type: 'vote', day, votes, out }]
     // night entries stay secret until the game ends; votes are open anyway
     this.history = [];
+    // speech-to-text lines from the voice chat (when the host turned transcripts on): secret until the end
+    this.transcript = []; // [{ pid, name, text, at, phase, day, channel }]
+    this.insights = null; // the AI's read of the game, added after it ends
     this.winner = null;
     if (this.timer) this.clearTimer(this.timer);
     this.timer = null;
@@ -403,6 +409,7 @@ class Room {
     if (s.revealRoleOnDeath !== undefined) this.settings.revealRoleOnDeath = !!s.revealRoleOnDeath;
     if (s.firstNightKill !== undefined) this.settings.firstNightKill = !!s.firstNightKill;
     if (s.family !== undefined) this.settings.family = !!s.family;
+    if (s.transcripts !== undefined) this.settings.transcripts = !!s.transcripts;
     if (s.roleCounts !== undefined) {
       if (s.roleCounts === null) {
         this.settings.roleCounts = null;
@@ -872,6 +879,27 @@ class Room {
     });
   }
 
+  // A line of speech recognised on a player's own device (each phone transcribes only its owner).
+  addTranscript(pid, text) {
+    this.assert(this.settings.transcripts, 'err.transcriptsOff');
+    this.assert(this.phase !== PHASES.LOBBY, 'err.gameNotRunning');
+    const m = this.member(pid);
+    this.assert(m, 'err.notInRoom');
+    text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, TRANSCRIPT_MAX_CHARS);
+    if (!text) return;
+    const p = this.player(pid);
+    const channel = !p || !p.alive ? 'dead' : this.phase === PHASES.NIGHT ? (p.role === ROLES.MAFIA ? 'mafia' : 'night') : 'town';
+    this.transcript.push({ pid, name: m.name, text, at: Date.now(), phase: this.phase, day: this.day, channel });
+    if (this.transcript.length > TRANSCRIPT_KEEP) this.transcript.splice(0, this.transcript.length - TRANSCRIPT_KEEP);
+    this.lastActivity = Date.now(); // no broadcast: nobody sees it until the game ends
+  }
+
+  setInsights(gameId, insights) {
+    if (this.gameId !== gameId) return;
+    this.insights = insights;
+    this.touch();
+  }
+
   // A finished game for the archive: who played what, and how the days went.
   archiveRecord(winner) {
     const name = id => this.player(id)?.name || '?';
@@ -881,6 +909,8 @@ class Room {
       players: this.players.filter(p => p.role).map(p => ({
         userId: p.userId || null, name: p.name, role: p.role, team: ROLE_INFO[p.role].team, survived: p.alive, won: ROLE_INFO[p.role].team === winner,
       })),
+      gameId: this.gameId,
+      transcript: this.transcript.map(({ name, text, at, phase, day, channel }) => ({ name, text, at, phase, day, channel })),
       timeline: this.history.map(h => (h.type === 'vote'
         ? { type: 'vote', day: h.day, out: h.out ? name(h.out) : null }
         : { type: 'night', day: h.day, killed: h.killed ? name(h.killed) : null, saved: !!h.saved })),
@@ -952,6 +982,8 @@ class Room {
       log: this.log,
       privateLog: this.privateLog[pid] || [],
       winner: this.winner,
+      transcript: ended ? this.transcript : undefined,
+      insights: ended ? this.insights : undefined,
       history: ended ? this.history : this.history.filter(h => h.type === 'vote'),
       // the Mafia's chat is theirs alone until the game ends
       chat: {

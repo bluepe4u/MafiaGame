@@ -53,6 +53,18 @@ opens registration with the code filled in, optionally seating the newcomer at a
 **Tables:** a group's permanent place (one link that never changes). Whoever starts the next game
 from the table — Mafia or Monopoly — takes everyone at the table into the new room.
 
+**Voice chat:** push-to-talk (or an open mic) straight between the browsers in a room (WebRTC).
+In Mafia the Mafia hear each other at night, and players who are out talk only among themselves —
+each phone simply doesn't send audio to anyone not allowed to hear it. The installer sets up a
+TURN relay (coturn, ports 3478 and 49160–49260/udp) for networks that block direct connections;
+its secret lives in `/etc/mafia.env`.
+
+**Transcripts and AI insights (optional):** with "Voice transcripts" on in a Mafia lobby, each phone
+turns its own player's speech into text (browser speech recognition); the transcript is shown after
+the game and kept in the archive. Add `ANTHROPIC_API_KEY=...` to `/etc/mafia.env` and
+`systemctl restart mafia` to also get a short AI read of each such game (Claude Haiku by default;
+`INSIGHTS_MODEL`, `INSIGHTS_LANG` override).
+
 **Security:** the app sends standard browser protections (Content-Security-Policy, no framing,
 nosniff, a strict referrer policy, HSTS over HTTPS) and rate-limits socket events per connection.
 

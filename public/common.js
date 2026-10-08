@@ -1147,6 +1147,32 @@ async function followTable(call, mine = false) {
   location.href = url;
 }
 
+// ---------- after a Mafia game: the AI's read and the voice transcript ----------
+function insightsHtml(ins) {
+  if (!ins) return '';
+  const line = p => `<li><b>${esc(p.name)}</b> — ${esc(p.line)}${p.accused && p.accused.length ? ` <span class="muted small-text">(${esc(t('insights.accused', { names: p.accused.join(', ') }))})</span>` : ''}</li>`;
+  return `<section class="insights">
+    <h3>✨ ${esc(t('insights.title'))}</h3>
+    <p>${esc(ins.summary)}</p>
+    ${ins.mvp || ins.bestBluff ? `<div class="badge-row">${ins.mvp ? `<span class="badge-chip">🏆 ${esc(t('insights.mvp'))}: ${esc(ins.mvp)}</span>` : ''}${ins.bestBluff ? `<span class="badge-chip">🎭 ${esc(t('insights.bluff'))}: ${esc(ins.bestBluff)}</span>` : ''}</div>` : ''}
+    ${ins.moments.length ? `<ul class="insight-moments">${ins.moments.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
+    ${ins.players.length ? `<ul class="insight-players">${ins.players.map(line).join('')}</ul>` : ''}
+    <p class="muted small-text">${esc(t('insights.note'))}</p>
+  </section>`;
+}
+function transcriptHtml(lines) {
+  if (!lines || !lines.length) return '';
+  const tag = l => (l.channel === 'mafia' ? ` <span class="tag mafia">${esc(t('voice.ch.mafia'))}</span>` : l.channel === 'dead' ? ` <span class="tag">${esc(t('voice.ch.out'))}</span>` : '');
+  let last = '';
+  const rows = lines.map(l => {
+    const head = `${l.phase}:${l.day}`;
+    const sep = head !== last ? `<li class="tr-sep">${esc(t(l.phase === 'night' ? 'archive.night' : 'archive.day', { n: l.day }))}</li>` : '';
+    last = head;
+    return `${sep}<li><b>${esc(l.name)}</b>${tag(l)}: ${esc(l.text)}</li>`;
+  }).join('');
+  return `<details class="transcript"><summary>${esc(t('transcript.title', { n: lines.length }))}</summary><ol class="tr-lines">${rows}</ol></details>`;
+}
+
 // ---------- the game night archive ----------
 document.body.insertAdjacentHTML('beforeend', `<div id="archive" class="overlay hidden" role="dialog" aria-modal="true">
   <div class="sheet player-sheet archive-sheet"><div class="sheet-head"><h2 id="archiveTitle"></h2><button id="archiveClose" class="ghost small" data-i18n="ui.close"></button></div>
@@ -1208,7 +1234,8 @@ function gameHtml(g) {
       : `<li>${esc(t('archive.day', { n: e.day }))}: ${e.out ? esc(t('archive.votedOut', { name: e.out })) : esc(t('archive.noVote'))}</li>`)).join('');
     return `<div class="arch-game"><div class="arch-head">${ico('hat')}<b>${esc(t('site.mafia'))}</b><span class="tag ${g.winner === 'mafia' ? 'mafia' : 'town'}">${esc(win)}</span>
       <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)} · ${esc(t('archive.days', { n: g.days }))}</span></div>
-      <div class="arch-players">${players}</div>${tl ? `<ol class="arch-timeline">${tl}</ol>` : ''}</div>`;
+      <div class="arch-players">${players}</div>${tl ? `<ol class="arch-timeline">${tl}</ol>` : ''}
+      ${insightsHtml(g.insights)}${transcriptHtml(g.transcript)}</div>`;
   }
   const rows = g.players.map(p => `<li><span class="board-rank">${['🥇', '🥈', '🥉'][p.place - 1] || p.place}</span><b>${esc(p.name)}</b><span class="spacer"></span>${p.bankrupt ? `<span class="tag mafia">${esc(t('mono.bankrupt'))}</span>` : `<span>${money(p.netWorth)}</span>`}</li>`).join('');
   return `<div class="arch-game"><div class="arch-head">${ico('dice')}<b>${esc(t('site.monopoly'))}</b>${g.winner ? `<span class="tag town">${esc(t('archive.winner', { name: g.winner }))}</span>` : ''}

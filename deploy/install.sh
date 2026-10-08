@@ -61,6 +61,17 @@ fi
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 ( cd "$APP_DIR" && runuser -u "$APP_USER" -- env HOME="$APP_DIR" "$NPM_BIN" ci --omit=dev --no-audit --no-fund --no-update-notifier --loglevel=error )
 
+# --- Secrets (not in git): /etc/mafia.env --------------------------------------
+# TURN_SECRET / TURN_HOST: the voice relay. Add ANTHROPIC_API_KEY=... here yourself to turn on
+# the AI read of Mafia games with voice transcripts (then: systemctl restart mafia).
+ENV_FILE="/etc/${SERVICE}.env"
+if [[ ! -f $ENV_FILE ]]; then
+  ( umask 077; printf '# Secrets for the %s service (kept out of git)\n' "$SERVICE" > "$ENV_FILE" )
+fi
+grep -q '^TURN_SECRET=' "$ENV_FILE" || echo "TURN_SECRET=$(openssl rand -hex 32)" >> "$ENV_FILE"
+if [[ -n "$DOMAIN" ]] && ! grep -q '^TURN_HOST=' "$ENV_FILE"; then echo "TURN_HOST=$DOMAIN" >> "$ENV_FILE"; fi
+chmod 600 "$ENV_FILE"
+
 # --- systemd service ---------------------------------------------------------
 # Behind Caddy the app only listens on localhost; without a domain it is exposed directly.
 if [[ -n "$DOMAIN" ]]; then BIND=127.0.0.1; else BIND=0.0.0.0; fi
@@ -79,6 +90,7 @@ Environment=NODE_ENV=production
 Environment=PORT=$PORT
 Environment=HOST=$BIND
 Environment=DATA_DIR=/var/lib/$SERVICE
+EnvironmentFile=-$ENV_FILE
 StateDirectory=$SERVICE
 ExecStart=$NODE_BIN $APP_DIR/server.js
 Restart=on-failure
@@ -165,10 +177,49 @@ EOF
   systemctl reload caddy 2>/dev/null || systemctl restart caddy
 fi
 
+# --- Voice relay (TURN) ---------------------------------------------------------
+# Voice chat is browser to browser; some home and mobile networks need a relay in between.
+if [[ -n "$DOMAIN" ]]; then
+  log "Configuring the voice relay (coturn)"
+  command -v turnserver >/dev/null || apt-get install -y -qq coturn >/dev/null
+  TURN_SECRET="$(grep '^TURN_SECRET=' "$ENV_FILE" | cut -d= -f2)"
+  cat > /etc/turnserver.conf <<EOF
+# Written by deploy/install.sh: a TURN relay for the game's voice chat only
+listening-port=3478
+fingerprint
+use-auth-secret
+static-auth-secret=$TURN_SECRET
+realm=$DOMAIN
+min-port=49160
+max-port=49260
+total-quota=200
+user-quota=12
+no-multicast-peers
+no-cli
+no-tlsv1
+no-tlsv1_1
+# never relay into private networks (or this server itself)
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+syslog
+EOF
+  chmod 640 /etc/turnserver.conf
+  chgrp turnserver /etc/turnserver.conf 2>/dev/null || true
+  [[ -f /etc/default/coturn ]] && sed -i 's/^#\?TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
+  systemctl enable coturn >/dev/null 2>&1
+  systemctl restart coturn
+fi
+
 # --- Firewall ----------------------------------------------------------------
 if command -v ufw >/dev/null && ufw status | grep -q 'Status: active'; then
   log "Opening firewall ports (ufw)"
   if [[ -n "$DOMAIN" ]]; then ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null
+    ufw allow 3478/udp >/dev/null; ufw allow 3478/tcp >/dev/null; ufw allow 49160:49260/udp >/dev/null
   else ufw allow "$PORT/tcp" >/dev/null; fi
 fi
 

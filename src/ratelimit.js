@@ -4,12 +4,14 @@
 // minimum gap for events that are only spammy (reactions). Dropped events get an error ack
 // (quiet ones say so, and the client shows nothing).
 
-function limitSocket(socket, { burst = 30, perSecond = 12, gaps = { react: 500 } } = {}) {
+// Voice signalling has its own budget (a burst of connection offers is normal), see voice.js.
+function limitSocket(socket, { burst = 30, perSecond = 12, gaps = { react: 500 }, exempt = ['voice:signal'] } = {}) {
   let tokens = burst;
   let last = Date.now();
   const lastAt = {};
   socket.use((packet, next) => {
     const event = packet[0];
+    if (exempt.includes(event)) return next();
     const now = Date.now();
     tokens = Math.min(burst, tokens + ((now - last) / 1000) * perSecond);
     last = now;
