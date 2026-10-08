@@ -204,3 +204,26 @@ test('recovery code: shown once at registration, resets the password, then rotat
   assert.ok(store.recover('Ann', r.recoveryCode, 'again'));
   assert.strictEqual(store.publicProfile(user).hasRecovery, true);
 });
+
+test('personal touches: admin titles and badges, your own birthday (birthday hat) and theme', () => {
+  const store = new UserStore(tmp());
+  const { user } = reg(store, 'Ann', 'pass');
+  store.setTitle(user, '  Король   блефа ');
+  store.addBadge(user, '🐍', 'Самая хитрая', 'admin');
+  assert.throws(() => store.addBadge(user, '', 'x'), /err\.badgeRequired/);
+  const d = new Date();
+  const today = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  store.setPersonal(user, { birthday: today, theme: 'ocean' });
+  assert.throws(() => store.setPersonal(user, { birthday: '13-40' }), /err\.birthdayInvalid/);
+  assert.throws(() => store.setPersonal(user, { theme: 'neon-pink' }), /err\.invalidTarget/);
+  const p = store.publicProfile(user);
+  assert.strictEqual(p.title, 'Король блефа');
+  assert.strictEqual(p.badges[0].label, 'Самая хитрая');
+  assert.strictEqual(p.birthdayToday, true);
+  assert.strictEqual(p.equipped.hat, 'hat.birthday');
+  assert.strictEqual(p.theme, 'ocean');
+  store.removeBadge(user, p.badges[0].id);
+  store.setPersonal(user, { birthday: null });
+  assert.strictEqual(store.publicProfile(user).badges.length, 0);
+  assert.strictEqual(store.publicProfile(user).equipped.hat, undefined);
+});

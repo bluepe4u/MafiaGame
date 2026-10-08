@@ -117,7 +117,11 @@ function avatar(name, url, cos) {
 // decency status from likes minus dislikes, lowest to highest
 const TIER_MIN = [-Infinity, -9, -4, -1, 2, 5, 10];
 const tierOf = score => TIER_MIN.findLastIndex(min => (score || 0) >= min);
-const statusPill = score => score === null || score === undefined ? '' : `<span class="status t${tierOf(score)}">${esc(t('tier.' + tierOf(score)))}</span>`;
+// (family mode hides decency statuses)
+const statusPill = score => score === null || score === undefined || i18nVariant === 'family' ? '' : `<span class="status t${tierOf(score)}">${esc(t('tier.' + tierOf(score)))}</span>`;
+// an admin-given title, shown under the name
+const titleTag = title => (title ? `<span class="ptitle">${esc(title)}</span>` : '');
+const THEMES = ['ocean', 'violet', 'sunset', 'forest', 'rose', 'mono'];
 
 // ---------- sound and turn alerts ----------
 let alertsOn = store.get(ALERTS_KEY) !== 'off';
@@ -440,6 +444,7 @@ function renderAccount() {
   $('#bootLoader').classList.toggle('hidden', Site.ready);
   $('#profileBtn').classList.toggle('hidden', !account);
   $('#boardBtn').classList.toggle('hidden', !account);
+  document.body.dataset.theme = (account && account.theme) || '';
   if (account) {
     $('#profileBtn').innerHTML = avatar(account.username, account.avatar, account.equipped);
     $('#profileBtn').title = t('profile.open');
@@ -553,9 +558,17 @@ function renderProfile() {
       <input id="avatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/*" hidden></label>` : `<span class="player-avatar">${pic}</span>`}
     <div class="profile-id">
       <div class="profile-name ${nameCls(u.equipped)}">${esc(u.username)}</div>
+      ${titleTag(u.title)}
+      ${u.birthdayToday ? `<span class="bday-pill">🎂 ${esc(t('profile.birthdayToday'))}</span>` : ''}
       ${statusPill(u.score)}
       <div class="karma"><span class="karma-up">${COMMON_ICONS.up}${esc(t('profile.likes', { n: u.likes }))}</span><span class="karma-down">${COMMON_ICONS.down}${esc(t('profile.dislikes', { n: u.dislikes }))}</span></div>
     </div>`;
+  $('#profileTop').insertAdjacentHTML('afterend', '');
+  const badges = (u.badges || []).map(b => `<span class="badge-chip" title="${esc(b.label)}">${esc(b.emoji)} ${esc(b.label)}</span>`).join('');
+  let badgeRow = $('#profileBadges');
+  if (!badgeRow) { $('#profileTop').insertAdjacentHTML('afterend', '<div id="profileBadges" class="badge-row"></div>'); badgeRow = $('#profileBadges'); }
+  badgeRow.innerHTML = badges;
+  badgeRow.classList.toggle('hidden', !badges);
   const tabs = ['mafia', 'mono', ...(self ? ['wardrobe', 'account'] : [])];
   if (!tabs.includes(profileTab)) profileTab = Site.game;
   $('#profileTabs').innerHTML = tabs.map(k => `<button class="${k === profileTab ? 'active' : ''}" data-ptab="${k}">${esc(t('profile.tab.' + k))}</button>`).join('');
@@ -601,6 +614,19 @@ function bindProfileControls() {
       setAccount(null, null);
     };
     $('#adminBtn').onclick = () => { closeOverlay('profile'); openAdmin(); };
+    const savePersonal = async body => {
+      const r = await api('profile', body);
+      if (r.ok) { account = r.user; renderAccount(); renderProfile(); }
+    };
+    const bday = () => {
+      const d = $('#bdayDay').value, m = $('#bdayMonth').value;
+      if ((d && m) || (!d && !m)) savePersonal({ birthday: d && m ? `${m}-${d}` : null });
+    };
+    $('#bdayDay').onchange = bday;
+    $('#bdayMonth').onchange = bday;
+    for (const b of $$('[data-theme-pick]')) b.onclick = () => savePersonal({ theme: b.dataset.themePick || null });
+    $('#myArchiveBtn').onclick = () => { closeOverlay('profile'); openArchive(null); };
+    addPasswordToggles($('#profileBody'));
     $('#recoveryBtn').onclick = async () => {
       if (account.hasRecovery && !(await askConfirm({ title: t('recovery.renew'), text: t('recovery.renewWarn') }))) return;
       const r = await api('recovery', {});
@@ -773,7 +799,22 @@ function wardrobeHtml() {
 }
 
 function accountHtml() {
-  return `<form id="passwordForm" class="password-form" autocomplete="on">
+  const [bm, bd] = (account.birthday || '-').split('-');
+  const months = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { month: 'long' }));
+  return `<section class="player-section">
+      <h3>${esc(t('personal.title'))}</h3>
+      <div class="row bday-row"><span class="muted small-text">${esc(t('personal.birthday'))}</span>
+        <select id="bdayDay"><option value="">—</option>${Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0')).map(d => `<option ${d === bd ? 'selected' : ''}>${d}</option>`).join('')}</select>
+        <select id="bdayMonth"><option value="">—</option>${months.map((m, i) => { const v = String(i + 1).padStart(2, '0'); return `<option value="${v}" ${v === bm ? 'selected' : ''}>${esc(m)}</option>`; }).join('')}</select>
+      </div>
+      <p class="muted small-text">${esc(t('personal.birthdayHint'))}</p>
+      <div class="theme-row"><span class="muted small-text">${esc(t('personal.theme'))}</span>
+        <button class="theme-swatch ${!account.theme ? 'on' : ''}" data-theme-pick="" title="${esc(t('personal.themeDefault'))}"></button>
+        ${THEMES.map(k => `<button class="theme-swatch th-${k} ${account.theme === k ? 'on' : ''}" data-theme-pick="${k}" title="${esc(t('personal.theme.' + k))}"></button>`).join('')}
+      </div>
+    </section>
+    <button id="myArchiveBtn" class="small" type="button">${ico('book')} ${esc(t('archive.mine'))}</button>
+    <form id="passwordForm" class="password-form" autocomplete="on">
       <h3>${esc(t('profile.changePassword'))}</h3>
       <input type="text" name="username" autocomplete="username" value="${esc(account.username)}" hidden>
       <div class="row">
@@ -905,11 +946,16 @@ async function renderAdminUsers() {
       <div class="muted small-text">${esc(t('admin.dislikedBy'))}: ${u.dislikedBy.length ? u.dislikedBy.map(esc).join(', ') : esc(t('admin.nobody'))}</div>
       <div class="admin-items">
         ${u.inventory.map(id => `<span class="admin-item">${itemPreview(id)}${esc(t('item.' + id))}<button class="ghost small" data-take="${id}" aria-label="×">×</button></span>`).join('')}
-        <select data-give><option value="">${esc(t('admin.give'))}</option>${itemIds.filter(id => !u.inventory.includes(id)).map(id => `<option value="${id}">${ITEMS[id].emoji || ''} ${esc(t('item.' + id))}</option>`).join('')}</select>
+        <select data-give><option value="">${esc(t('admin.give'))}</option>${itemIds.filter(id => !u.inventory.includes(id) && !ITEMS[id].auto).map(id => `<option value="${id}">${ITEMS[id].emoji || ''} ${esc(t('item.' + id))}</option>`).join('')}</select>
       </div>
       <div class="admin-controls admin-account">
         <form class="row" data-rename><input value="${esc(u.username)}" maxlength="20" aria-label="${esc(t('admin.rename'))}"><button class="small" type="submit">${esc(t('admin.rename'))}</button></form>
         <button class="ghost small" data-reset>${esc(t('admin.resetPassword'))}</button>
+      </div>
+      <div class="admin-controls admin-touches">
+        <form class="row" data-title><input value="${esc(u.title || '')}" maxlength="32" placeholder="${esc(t('admin.titlePlaceholder'))}"><button class="small" type="submit">${esc(t('admin.setTitle'))}</button></form>
+        <div class="badge-row">${(u.badges || []).map(b => `<span class="badge-chip">${esc(b.emoji)} ${esc(b.label)}<button class="ghost small" data-unbadge="${b.id}" aria-label="×">×</button></span>`).join('')}</div>
+        <form class="row" data-badge><input class="badge-emoji" maxlength="8" placeholder="🏅"><input maxlength="32" placeholder="${esc(t('admin.badgePlaceholder'))}"><button class="small" type="submit">${esc(t('admin.addBadge'))}</button></form>
       </div>
       <div class="temp-pass hidden" data-temp></div>
     </div>`).join('');
@@ -924,6 +970,13 @@ async function renderAdminUsers() {
       after(r);
     });
     for (const b of row.querySelectorAll('[data-take]')) b.onclick = () => api('admin/take', { userId, itemId: b.dataset.take }).then(after);
+    row.querySelector('[data-title]').addEventListener('submit', e => { e.preventDefault(); api('admin/title', { userId, title: e.target.querySelector('input').value }).then(after); });
+    row.querySelector('[data-badge]').addEventListener('submit', e => {
+      e.preventDefault();
+      const [emoji, label] = e.target.querySelectorAll('input');
+      api('admin/badge', { userId, emoji: emoji.value, label: label.value }).then(after);
+    });
+    for (const b of row.querySelectorAll('[data-unbadge]')) b.onclick = () => api('admin/badge', { userId, remove: b.dataset.unbadge }).then(after);
     row.querySelector('[data-rename]').addEventListener('submit', async e => {
       e.preventDefault();
       const r = await api('admin/rename', { userId, username: e.target.querySelector('input').value });
@@ -1007,6 +1060,7 @@ function renderTables() {
       return `<div class="table-card">
         <div class="tc-head"><span class="tc-ico">${ico('table')}</span><span class="tc-title"><b>${esc(tb.name)}</b>
           <span class="muted small-text">${esc(t('table.online', { n: online, total: tb.members.length }))}</span></span>
+          ${tb.games ? `<button class="ghost small" data-tarchive="${tb.id}" title="${esc(t('archive.title'))}">${ico('book')} ${esc(t('archive.short'))}</button>` : ''}
           <button class="ghost small icon-only" data-tmenu="${tb.id}" aria-label="${esc(t('table.settings'))}" title="${esc(t('table.settings'))}">⋯</button></div>
         <div class="tc-members">${tb.members.map(m => `<span class="tc-member ${m.online ? 'on' : ''}" title="${esc(m.username)}">${avatar(m.username, m.avatar, m.equipped)}</span>`).join('')}</div>
         ${cur ? `<a class="tc-now g-${cur.game}" href="${gameUrl(cur.game, cur.code)}" data-go="${cur.game}:${cur.code}"><span class="ag-ico">${gameIcon(cur.game)}</span>
@@ -1053,6 +1107,7 @@ function renderTables() {
     };
   }
   for (const b of box.querySelectorAll('[data-tcopy]')) b.onclick = () => copyText(tableUrl(b.dataset.tcopy));
+  for (const b of box.querySelectorAll('[data-tarchive]')) b.onclick = () => openArchive(b.dataset.tarchive);
   for (const b of box.querySelectorAll('[data-tinvite]')) {
     b.onclick = async () => {
       const r = await api('admin/invites', { maxUses: 1, tableId: b.dataset.tinvite });
@@ -1090,6 +1145,105 @@ async function followTable(call, mine = false) {
   }
   await Site.hooks.leave();
   location.href = url;
+}
+
+// ---------- the game night archive ----------
+document.body.insertAdjacentHTML('beforeend', `<div id="archive" class="overlay hidden" role="dialog" aria-modal="true">
+  <div class="sheet player-sheet archive-sheet"><div class="sheet-head"><h2 id="archiveTitle"></h2><button id="archiveClose" class="ghost small" data-i18n="ui.close"></button></div>
+  <div id="archiveBody" class="sheet-body archive-body"></div></div></div>`);
+$('#archiveClose').onclick = () => closeOverlay('archive');
+$('#archive').addEventListener('pointerdown', e => { if (e.target.id === 'archive') closeOverlay('archive'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeOverlay('archive'); });
+let archiveData = null;
+let archiveOpen = 0; // the night shown expanded
+
+async function openArchive(tableId) {
+  const res = await api('archive' + (tableId ? `?table=${encodeURIComponent(tableId)}` : ''));
+  if (!res.ok) return;
+  archiveData = res;
+  archiveOpen = 0;
+  $('#archiveTitle').textContent = tableId ? t('archive.titleOf', { name: res.table }) : t('archive.mine');
+  renderArchive();
+  $('#archive').classList.remove('hidden');
+}
+
+const fmtNightDate = ts => new Date(ts).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+const fmtTime = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const mins = ms => Math.max(1, Math.round(ms / 60000));
+
+// Facts about one night: the MVP, who kept dying first, the biggest rent, the longest game.
+function nightFacts(night) {
+  const wins = {}, played = {}, firstOut = {};
+  let longest = null, bigRent = null, mafiaWins = 0, townWins = 0;
+  for (const g of night.games) {
+    for (const p of g.players) { played[p.name] = (played[p.name] || 0) + 1; if (p.won) wins[p.name] = (wins[p.name] || 0) + 1; }
+    const len = g.endedAt - (g.startedAt || g.endedAt);
+    if (!longest || len > longest.len) longest = { len, game: g.game };
+    if (g.game === 'mafia') {
+      if (g.winner === 'mafia') mafiaWins++; else townWins++;
+      const first = (g.timeline || []).find(e => e.killed || e.out);
+      if (first) { const n = first.killed || first.out; firstOut[n] = (firstOut[n] || 0) + 1; }
+    }
+    if (g.highlights && g.highlights.rent && (!bigRent || g.highlights.rent.amount > bigRent.amount)) bigRent = g.highlights.rent;
+  }
+  const top = obj => { const best = Math.max(0, ...Object.values(obj)); return best ? [Object.keys(obj).filter(k => obj[k] === best), best] : null; };
+  const facts = [];
+  const mvp = top(wins);
+  if (mvp) facts.push(['🏆', t('archive.mvp'), `${mvp[0].join(', ')} · ${t('archive.wins', { n: mvp[1] })}`]);
+  const unlucky = top(firstOut);
+  if (unlucky && unlucky[1] >= 2) facts.push(['💀', t(i18nVariant === 'family' ? 'archive.firstOutFamily' : 'archive.firstOut'), `${unlucky[0].join(', ')} · ${t('archive.times', { n: unlucky[1] })}`]);
+  if (mafiaWins + townWins) facts.push(['🎩', t('archive.mafiaScore'), t('archive.mafiaScoreLine', { town: townWins, mafia: mafiaWins })]);
+  if (bigRent) facts.push(['💸', t('mono.sum.bigRent'), `${money(bigRent.amount)} · ${bigRent.from} → ${bigRent.to}`]);
+  if (longest && night.games.length > 1) facts.push(['⏱️', t('archive.longest'), `${t(longest.game === 'mono' ? 'site.monopoly' : 'site.mafia')} · ${t('archive.minutes', { n: mins(longest.len) })}`]);
+  return facts;
+}
+
+function gameHtml(g) {
+  const length = t('archive.minutes', { n: mins(g.endedAt - (g.startedAt || g.endedAt)) });
+  if (g.game === 'mafia') {
+    const win = g.winner === 'mafia' ? t('archive.mafiaWon') : t('archive.townWon');
+    const players = g.players.map(p => `<span class="tag ${p.team === 'mafia' ? 'mafia' : 'town'} ${p.won ? '' : 'lost'}" title="${esc(t('role.' + p.role))}">${esc(p.name)} · ${esc(t('role.' + p.role))}${p.survived ? '' : ' ✝'}</span>`).join('');
+    const tl = (g.timeline || []).map(e => (e.type === 'night'
+      ? `<li>${esc(t('archive.night', { n: e.day }))}: ${e.killed ? esc(t(g.family ? 'archive.outFamily' : 'archive.killed', { name: e.killed })) : esc(t(e.saved ? 'archive.saved' : 'archive.quietNight'))}</li>`
+      : `<li>${esc(t('archive.day', { n: e.day }))}: ${e.out ? esc(t('archive.votedOut', { name: e.out })) : esc(t('archive.noVote'))}</li>`)).join('');
+    return `<div class="arch-game"><div class="arch-head">${ico('hat')}<b>${esc(t('site.mafia'))}</b><span class="tag ${g.winner === 'mafia' ? 'mafia' : 'town'}">${esc(win)}</span>
+      <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)} · ${esc(t('archive.days', { n: g.days }))}</span></div>
+      <div class="arch-players">${players}</div>${tl ? `<ol class="arch-timeline">${tl}</ol>` : ''}</div>`;
+  }
+  const rows = g.players.map(p => `<li><span class="board-rank">${['🥇', '🥈', '🥉'][p.place - 1] || p.place}</span><b>${esc(p.name)}</b><span class="spacer"></span>${p.bankrupt ? `<span class="tag mafia">${esc(t('mono.bankrupt'))}</span>` : `<span>${money(p.netWorth)}</span>`}</li>`).join('');
+  return `<div class="arch-game"><div class="arch-head">${ico('dice')}<b>${esc(t('site.monopoly'))}</b>${g.winner ? `<span class="tag town">${esc(t('archive.winner', { name: g.winner }))}</span>` : ''}
+    <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)} · ${esc(t('mono.sum.rounds', { n: g.rounds }))}</span></div>
+    <ol class="arch-standings">${rows}</ol></div>`;
+}
+
+function nightSummaryText(night) {
+  const lines = [`${fmtNightDate(night.start)} — ${t('archive.gamesN', { n: night.games.length })}`];
+  for (const [ico_, label, value] of nightFacts(night)) lines.push(`${ico_} ${label}: ${value}`);
+  for (const g of night.games) lines.push(g.game === 'mafia'
+    ? `🎩 ${t('site.mafia')}: ${g.winner === 'mafia' ? t('archive.mafiaWon') : t('archive.townWon')}`
+    : `🎲 ${t('site.monopoly')}: ${t('archive.winner', { name: g.winner || '—' })}`);
+  return lines.join('\n');
+}
+
+function renderArchive() {
+  const nights = archiveData.nights;
+  if (!nights.length) { $('#archiveBody').innerHTML = `<p class="muted">${esc(t('archive.empty'))}</p>`; return; }
+  $('#archiveBody').innerHTML = nights.map((n, i) => {
+    const open = i === archiveOpen;
+    const facts = nightFacts(n);
+    return `<section class="night ${open ? 'open' : ''}">
+      <button class="night-head" data-night="${i}"><span class="night-date">${esc(fmtNightDate(n.start))}</span>
+        <span class="muted small-text">${fmtTime(n.start)}–${fmtTime(n.end)} · ${esc(t('archive.gamesN', { n: n.games.length }))}</span>
+        <span class="night-icons">${n.games.map(g => gameIcon(g.game)).join('')}</span></button>
+      ${open ? `<div class="night-body">
+        ${facts.length ? `<div class="highlights">${facts.map(([ic, label, value]) => `<div class="hl"><span class="hl-ico">${ic}</span><span class="hl-text"><span class="muted small-text">${esc(label)}</span><b>${esc(value)}</b></span></div>`).join('')}</div>` : ''}
+        ${n.games.slice().reverse().map(gameHtml).join('')}
+        <button class="small" data-copy-night="${i}">${esc(t('archive.copy'))}</button>
+      </div>` : ''}
+    </section>`;
+  }).join('');
+  for (const b of $$('#archiveBody [data-night]')) b.onclick = () => { archiveOpen = archiveOpen === +b.dataset.night ? -1 : +b.dataset.night; renderArchive(); };
+  for (const b of $$('#archiveBody [data-copy-night]')) b.onclick = () => copyText(nightSummaryText(nights[+b.dataset.copyNight]));
 }
 
 // ---------- host renames people (only inside the room; account names stay) ----------

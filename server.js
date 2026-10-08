@@ -12,6 +12,7 @@ const { ITEMS } = require('./src/items');
 const { attachMonopoly } = require('./src/monopoly/server');
 const { limitSocket } = require('./src/ratelimit');
 const { TableStore } = require('./src/tables');
+const { Archive } = require('./src/archive');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -23,6 +24,8 @@ const STATE_FILE = path.join(DATA_DIR, 'rooms.json');
 const users = new UserStore(DATA_DIR);
 const tables = new TableStore(DATA_DIR);
 tables.prune(Object.keys(users.users));
+const archive = new Archive(DATA_DIR);
+archive.prune(Object.keys(users.users));
 // a fresh site: the first account is created with a one-time admin invite left in the data dir
 const boot = users.bootstrapInvite(DATA_DIR);
 if (boot) console.log(`No accounts yet. Admin invite code is in ${boot.file}`);
@@ -289,12 +292,54 @@ app.post('/api/tables/start', api(req => {
   const game = req.body.game;
   if (!GAMES.includes(game)) throw new GameError('err.invalidTarget');
   if (!tableView(table, user).canStart) throw new GameError('err.tableBusy');
-  const code = game === 'mono' ? mono.create() : createRoom().code;
-  if (game === 'mafia') scheduleSave();
+  const saved = tables.settingsFor(table.id, game);
+  let code;
+  if (game === 'mono') code = mono.create(table.id, saved);
+  else {
+    const room = createRoom();
+    room.tableId = table.id;
+    if (saved) for (const k of Object.keys(room.settings)) if (k in saved) room.settings[k] = saved[k];
+    scheduleSave();
+    code = room.code;
+  }
   tables.setCurrent(table, game, code, user.id);
   const call = { tableId: table.id, table: table.name, game, code, by: user.username, byId: user.id };
   for (const sock of allSockets()) if (table.members.includes(sock.data.userId)) sock.emit('tableGame', call);
   return call;
+}));
+
+// ---------- the game night archive ----------
+app.get('/api/archive', api(req => {
+  const user = currentUser(req);
+  if (req.query.table) {
+    const table = tables.get(req.query.table);
+    if (!table.members.includes(user.id) && !user.admin) throw new GameError('err.tableNotFound');
+    return { table: table.name, nights: archive.forTable(table.id) };
+  }
+  return { nights: archive.forUser(user.id) };
+}));
+
+// ---------- personal touches: your birthday and theme; titles and badges from the admin ----------
+app.post('/api/profile', api(req => {
+  const user = currentUser(req);
+  users.setPersonal(user, { birthday: req.body.birthday, theme: req.body.theme });
+  refreshUser(user.id);
+  return { user: users.publicProfile(user) };
+}));
+app.post('/api/admin/title', api(req => {
+  adminUser(req);
+  const u = targetUser(req);
+  users.setTitle(u, req.body.title);
+  refreshUser(u.id);
+  return { user: users.adminView(u) };
+}));
+app.post('/api/admin/badge', api(req => {
+  const admin = adminUser(req);
+  const u = targetUser(req);
+  if (req.body.remove) users.removeBadge(u, req.body.remove);
+  else users.addBadge(u, req.body.emoji, req.body.label, admin.id);
+  refreshUser(u.id);
+  return { user: users.adminView(u) };
 }));
 
 // QR code of the invite link, for players in the same room to scan
@@ -311,7 +356,11 @@ const io = new Server(server);
 
 const rooms = new Map(); // code -> Room
 // Monopoly: its own namespace and rooms, same accounts; room codes are unique across both games
-const mono = attachMonopoly({ io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) });
+const mono = attachMonopoly({
+  io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code),
+  onArchive: record => archive.add(record),
+  onStart: room => room.tableId && tables.saveSettings(room.tableId, 'mono', room.settings),
+});
 
 const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets()];
 const roomSummary = room => ({
@@ -338,6 +387,8 @@ const roomOptions = () => ({
   onChange: onRoomChange,
   profileOf: userId => users.publicProfile(users.users[userId]),
   onGameEnd: results => users.recordGame(results),
+  onArchive: record => archive.add(record),
+  onStart: room => room.tableId && tables.saveSettings(room.tableId, 'mafia', room.settings),
   onRate: (targetUserId, oldValue, newValue, fromUserId) => {
     users.applyRating(targetUserId, oldValue, newValue, fromUserId);
     refreshUser(targetUserId);
@@ -541,6 +592,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     mono.shutdown();
     users.saveNow();
     tables.saveNow();
+    archive.saveNow();
     shuttingDown = true;
     io.close();
     server.close(() => process.exit(0));

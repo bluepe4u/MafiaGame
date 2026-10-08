@@ -509,3 +509,24 @@ test('summary: net worth snapshot each round, biggest rent and deal, the round y
   const view = room.viewFor(by.Ann);
   assert.ok(view.game.worth.length >= 2 && view.game.highlights.rent && view.game.players[by.Ann].stats);
 });
+
+test('round limit: after N rounds the richest player wins; places by net worth; archived', () => {
+  const archived = [];
+  const { room, by, dice } = setup(3, { roundLimit: 5 });
+  room.onArchive = r => archived.push(r);
+  gp(room, by.Bob).cash = 3000;
+  for (let i = 0; i < 15 && room.phase === 'playing'; i++) {
+    dice.push([1, 2]);
+    room.roll(room.current());
+    if (room.g.turn.stage === 'buy') room.decline(room.current());
+    if (room.g.auction) room.closeAuction();
+    if (room.phase === 'playing' && room.g.turn.stage === 'end') room.endTurn(room.current());
+  }
+  assert.strictEqual(room.phase, 'ended');
+  assert.strictEqual(room.g.winner, by.Bob);
+  assert.strictEqual(room.g.round, 5);
+  assert.strictEqual(archived.length, 1);
+  assert.strictEqual(archived[0].winner, 'Bob');
+  assert.deepStrictEqual(archived[0].players.map(p => p.place), [1, 2, 3]);
+  assert.throws(() => setup(2, { roundLimit: 3 }), /err\.mono\.roundRange/);
+});

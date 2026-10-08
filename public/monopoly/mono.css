@@ -411,10 +411,6 @@ body.mono[data-phase="playing"] main, body.mono[data-phase="ended"] main { max-w
 .wc-line { fill: none; stroke: var(--pc); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .wc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: .82rem; }
 .wc-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.highlights { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
-.hl { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
-.hl-ico { font-size: 1.5rem; }
-.hl-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .hl-text b { font-size: 1.05rem; display: inline-flex; align-items: center; gap: 3px; }
 .hl-text .small-text { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .results-sheet { width: min(720px, 100%); }

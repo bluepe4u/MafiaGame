@@ -117,6 +117,18 @@ class TableStore {
     this.save();
   }
 
+  // House rules: the settings a table last played each game with, applied to its next room.
+  saveSettings(id, game, settings) {
+    const table = this.tables[id];
+    if (!table) return;
+    (table.settings ||= {})[game] = { ...settings };
+    this.save();
+  }
+
+  settingsFor(id, game) {
+    return this.tables[id]?.settings?.[game] || null;
+  }
+
   // Forget accounts that no longer exist (e.g. after the admin wipes accounts).
   prune(userIds) {
     const alive = new Set(userIds);

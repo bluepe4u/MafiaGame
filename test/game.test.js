@@ -692,3 +692,11 @@ test('lobby: a disconnected host keeps the role for 30 s; coming back cancels th
   timers.at(-1).fn();
   assert.strictEqual(room.hostId, bob.id);
 });
+
+test('family mode: no likes or dislikes after the game', () => {
+  const room = new Room({ code: 'F', setTimer: () => 0, clearTimer: () => {} });
+  const ann = room.join('Ann');
+  room.updateSettings(ann.id, { family: true });
+  room.phase = 'ended';
+  assert.throws(() => room.rate(ann.id, 'x', 1), /err\.familyNoRatings/);
+});

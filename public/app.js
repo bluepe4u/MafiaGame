@@ -269,6 +269,7 @@ $('#speechSeconds').addEventListener('change', e => send('settings', { speechSec
 $('#voteSeconds').addEventListener('change', e => send('settings', { voteSeconds: parseInt(e.target.value, 10) || 0 }));
 $('#revealRole').addEventListener('change', e => send('settings', { revealRoleOnDeath: e.target.checked }));
 $('#firstNightKill').addEventListener('change', e => send('settings', { firstNightKill: e.target.checked }));
+$('#familyMode').addEventListener('change', e => send('settings', { family: e.target.checked }));
 
 function setIfNotFocused(el, prop, value) {
   if (document.activeElement !== el) el[prop] = value;
@@ -283,7 +284,7 @@ function renderLobby() {
   $('#lobbyPlayers').innerHTML = state.players.map(p => `
     <li class="${p.connected ? '' : 'offline'} ${p.ready ? 'is-ready' : ''}" data-pid="${p.id}">
       <span class="avatar-wrap ${p.userId ? 'clickable' : ''}" data-open-player="${p.userId || ''}">${avatar(p.name, p.avatar, p.cos)}${p.ready ? `<span class="voted ready-mark">${ICONS.check}</span>` : ''}</span>
-      <span class="pname"><b class="${nameCls(p.cos)}">${esc(p.name)}</b>${statusPill(p.score)}${p.id === state.hostId ? tagHtml('tag.host', 'host') : ''}${p.id === state.me.id ? tagHtml('tag.you', 'you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
+      <span class="pname"><b class="${nameCls(p.cos)}">${esc(p.name)}</b>${titleTag(p.title)}${statusPill(p.score)}${p.id === state.hostId ? tagHtml('tag.host', 'host') : ''}${p.id === state.me.id ? tagHtml('tag.you', 'you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
       ${isHost() ? `<button class="ghost small icon-only" data-rename="${p.id}" title="${esc(t('rename.btn'))}" aria-label="${esc(t('rename.btn'))}">✎</button>` : ''}
       ${isHost() && p.id !== state.me.id ? `<button class="ghost small" data-kick="${p.id}">${esc(t('ui.remove'))}</button>` : ''}
     </li>`).join('') + `<li class="empty">${esc(t('ui.emptySeat'))}</li>`.repeat(empty);
@@ -306,7 +307,8 @@ function renderLobby() {
     s.nightSeconds ? t('sum.night', { s: s.nightSeconds }) : t('sum.noNightLimit'),
     t(s.firstNightKill ? 'sum.firstNightKill' : 'sum.noFirstNightKill'),
     t(s.revealRoleOnDeath ? 'sum.reveal' : 'sum.noReveal'),
-  ].map(t => `<li>${esc(t)}</li>`).join('');
+    s.family ? t('sum.family') : '',
+  ].filter(Boolean).map(t => `<li>${esc(t)}</li>`).join('');
   const rce = state.roleCountsError;
   $('#roleError').textContent = state.players.length >= state.minPlayers && rce ? t(rce.key, rce.params) : '';
 
@@ -338,6 +340,7 @@ function renderLobby() {
     setIfNotFocused($('#nightSeconds'), 'value', s.nightSeconds);
     $('#revealRole').checked = s.revealRoleOnDeath;
     $('#firstNightKill').checked = s.firstNightKill;
+    $('#familyMode').checked = !!s.family;
   }
 }
 
@@ -547,7 +550,7 @@ function renderSeats() {
     }
 
     let btn = '';
-    if (state.phase === 'ended' && me.rateable && p.rateable && p.id !== me.id) {
+    if (state.phase === 'ended' && me.rateable && p.rateable && p.id !== me.id && !state.settings.family) {
       const r = state.myRatings[p.id] || 0;
       btn = `<div class="rate">
         <button class="rate-up ${r === 1 ? 'on' : ''}" data-rate="${p.id}" data-value="1" aria-label="${esc(t('rate.like'))}" aria-pressed="${r === 1}">${ICONS.up}</button>
@@ -927,6 +930,7 @@ function tickTimer() {
 setInterval(tickTimer, 250);
 
 function render() {
+  i18nVariant = state && state.me && state.settings && state.settings.family ? 'family' : null;
   // a pending host confirmation is void once the game has moved on or the user is no longer host
   if (pending && (!isHost() || pending.key !== momentKey())) {
     closeModal();
@@ -1073,7 +1077,7 @@ function fxOnState() {
   fxPrev = now;
   if (!prev || prev.gameId !== now.gameId || !now.gameId) return; // first look (page load, new game): no replay
   for (const id of prev.alive) {
-    if (!now.alive.has(id)) { diedAt[id] = Date.now(); sfx('death'); }
+    if (!now.alive.has(id) && !state.settings.family) { diedAt[id] = Date.now(); sfx('death'); }
   }
   if (prev.phase === now.phase && prev.day === now.day) return;
   const lastLog = state.log.at(-1);

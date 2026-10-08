@@ -45,7 +45,7 @@ const REACT_MIN_GAP_MS = 600;
 const SAVED_FIELDS = [
   'code', 'players', 'spectators', 'hostId', 'settings', 'phase', 'day', 'gameId', 'nightActions', 'lastDoctorTarget',
   'doctorSelfHealUsed', 'speech', 'lastStarterSeat', 'votes', 'voteEndsAt', 'nightEndsAt', 'log', 'privateLog', 'history', 'chat',
-  'revealedRoles', 'ratings', 'winner', 'lastActivity',
+  'revealedRoles', 'ratings', 'winner', 'lastActivity', 'tableId', 'startedAt',
 ];
 
 const id = (bytes = 6) => crypto.randomBytes(bytes).toString('hex');
@@ -108,9 +108,12 @@ class Room {
   // profileOf(userId) -> { avatar, score } for display; onRate(targetUserId, oldValue, newValue) records ratings
   constructor({
     code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout,
-    profileOf = () => null, onRate = () => {}, onGameEnd = () => {},
+    profileOf = () => null, onRate = () => {}, onGameEnd = () => {}, onStart = () => {}, onArchive = () => {}, tableId = null,
   } = {}) {
     this.code = code;
+    this.tableId = tableId; // the table that started this room, if any
+    this.onStart = onStart; // (room) when a game starts: the table remembers its settings
+    this.onArchive = onArchive; // (record) a finished game, for the game night archive
     this.profileOf = profileOf;
     this.onRate = onRate;
     this.onGameEnd = onGameEnd; // ([{ userId, role, team, won, survived }]) for profile stats
@@ -125,6 +128,7 @@ class Room {
     // voteSeconds / nightSeconds: 0 means no time limit
     this.settings = {
       speechSeconds: 60, voteSeconds: 360, nightSeconds: 240, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null,
+      family: false, // gentler words, no likes/dislikes
     };
     this.resetGameState();
     this.lastActivity = Date.now();
@@ -398,6 +402,7 @@ class Room {
     }
     if (s.revealRoleOnDeath !== undefined) this.settings.revealRoleOnDeath = !!s.revealRoleOnDeath;
     if (s.firstNightKill !== undefined) this.settings.firstNightKill = !!s.firstNightKill;
+    if (s.family !== undefined) this.settings.family = !!s.family;
     if (s.roleCounts !== undefined) {
       if (s.roleCounts === null) {
         this.settings.roleCounts = null;
@@ -432,7 +437,9 @@ class Room {
     this.cancelCountdown();
     this.gameId = id();
     this.lastStarterSeat = null;
+    this.startedAt = Date.now();
     this.addPublic('log.gameBegun');
+    this.onStart(this);
     this.beginNight();
   }
 
@@ -775,6 +782,7 @@ class Room {
   // ---------- decency ratings, after the game ----------
   rate(pid, targetId, value) {
     this.assert(this.phase === PHASES.ENDED, 'err.rateAfterGame');
+    this.assert(!this.settings.family, 'err.familyNoRatings');
     const p = this.player(pid);
     const target = this.player(targetId);
     this.assert(p && target && pid !== targetId && p.role && target.role, 'err.invalidTarget');
@@ -821,6 +829,7 @@ class Room {
     this.speech = null;
     this.addPublic(winner === 'town' ? 'log.townWins' : 'log.mafiaWins');
     this.onGameEnd(this.gameResults(winner));
+    this.onArchive(this.archiveRecord(winner));
     this.touch();
     return true;
   }
@@ -861,6 +870,21 @@ class Room {
       }
       return r;
     });
+  }
+
+  // A finished game for the archive: who played what, and how the days went.
+  archiveRecord(winner) {
+    const name = id => this.player(id)?.name || '?';
+    return {
+      game: 'mafia', code: this.code, tableId: this.tableId, startedAt: this.startedAt || null, endedAt: Date.now(),
+      days: this.day, winner, family: !!this.settings.family,
+      players: this.players.filter(p => p.role).map(p => ({
+        userId: p.userId || null, name: p.name, role: p.role, team: ROLE_INFO[p.role].team, survived: p.alive, won: ROLE_INFO[p.role].team === winner,
+      })),
+      timeline: this.history.map(h => (h.type === 'vote'
+        ? { type: 'vote', day: h.day, out: h.out ? name(h.out) : null }
+        : { type: 'night', day: h.day, killed: h.killed ? name(h.killed) : null, saved: !!h.saved })),
+    };
   }
 
   // ---------- host renames, in the lobby ----------
@@ -908,13 +932,14 @@ class Room {
           avatar: profile?.avatar || null,
           score: profile ? profile.score : null,
           cos: profile?.equipped || {},
+          title: profile?.title || null,
           rateable: !!p.userId,
           ready: !!p.ready,
         };
       }),
       spectators: this.spectators.map(p => {
         const profile = p.userId ? this.profileOf(p.userId) : null;
-        return { id: p.id, userId: p.userId, name: p.name, connected: p.connected, avatar: profile?.avatar || null, score: profile ? profile.score : null, cos: profile?.equipped || {} };
+        return { id: p.id, userId: p.userId, name: p.name, connected: p.connected, avatar: profile?.avatar || null, score: profile ? profile.score : null, cos: profile?.equipped || {}, title: profile?.title || null };
       }),
       countdownEndsAt: this.countdownEndsAt,
       nightEndsAt: this.phase === PHASES.NIGHT ? this.nightEndsAt : null,

@@ -27,7 +27,7 @@ const TOKENS = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ec4899'
 
 const id = (bytes = 6) => crypto.randomBytes(bytes).toString('hex');
 
-const SAVED_FIELDS = ['code', 'players', 'spectators', 'hostId', 'settings', 'phase', 'g', 'gameId', 'lastActivity'];
+const SAVED_FIELDS = ['code', 'players', 'spectators', 'hostId', 'settings', 'phase', 'g', 'gameId', 'lastActivity', 'tableId'];
 
 function shuffle(arr, rng) {
   const a = arr.slice();
@@ -42,9 +42,12 @@ class MonoRoom {
   // profileOf(userId) -> { avatar, score, equipped } for display; onGameEnd(results) for stats
   constructor({
     code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout,
-    profileOf = () => null, onGameEnd = () => {},
+    profileOf = () => null, onGameEnd = () => {}, onStart = () => {}, onArchive = () => {}, tableId = null,
   } = {}) {
     this.code = code;
+    this.tableId = tableId; // the table that started this room, if any
+    this.onStart = onStart; // (room) when a game starts: the table remembers its settings
+    this.onArchive = onArchive; // (record) a finished game, for the game night archive
     this.rng = rng;
     this.onChange = onChange;
     this.setTimer = setTimer;
@@ -57,6 +60,8 @@ class MonoRoom {
     // mortgageTurns: a mortgaged property goes back to the bank after this many of its owner's turns (0 = never)
     this.settings = {
       startingCash: 1500 * SCALE, doubleGo: true, freeParking: false, auctions: true, noRentInJail: false, turnSeconds: 90, mortgageTurns: 15,
+      roundLimit: 0, // a shorter game: after this many rounds the richest player wins (0 = play to the end)
+      family: false,
     };
     this.phase = 'lobby';
     this.g = null; // the running game, see start()
@@ -231,7 +236,12 @@ class MonoRoom {
       this.assert(Number.isInteger(v) && (v === 0 || (v >= 3 && v <= 50)), 'err.mono.mortgageRange', { min: 3, max: 50 });
       this.settings.mortgageTurns = v;
     }
-    for (const k of ['doubleGo', 'freeParking', 'auctions', 'noRentInJail']) if (s[k] !== undefined) this.settings[k] = !!s[k];
+    if (s.roundLimit !== undefined) {
+      const v = Number(s.roundLimit);
+      this.assert(Number.isInteger(v) && (v === 0 || (v >= 5 && v <= 200)), 'err.mono.roundRange', { min: 5, max: 200 });
+      this.settings.roundLimit = v;
+    }
+    for (const k of ['doubleGo', 'freeParking', 'auctions', 'noRentInJail', 'family']) if (s[k] !== undefined) this.settings[k] = !!s[k];
     this.touch();
   }
 
@@ -275,6 +285,7 @@ class MonoRoom {
     this.phase = 'playing';
     this.addLog('mono.log.started');
     this.snapshotWorth();
+    this.onStart(this);
     this.beginTurn(order[0]);
   }
 
@@ -635,6 +646,7 @@ class MonoRoom {
       if (idx === 0) { g.round += 1; this.snapshotWorth(); }
       if (!this.gp(order[idx]).bankrupt) break;
     }
+    if (this.settings.roundLimit && g.round > this.settings.roundLimit) { this.finishByRounds(); return; }
     g.turnIdx = idx;
     g.lastCard = null;
     this.beginTurn(order[idx]);
@@ -956,10 +968,24 @@ class MonoRoom {
   }
 
   checkWin() {
-    const g = this.g;
     const left = this.active();
     if (left.length > 1) return false;
-    g.winner = left[0] || null;
+    this.endGame(left[0] || null);
+    return true;
+  }
+
+  // The round limit is up: the richest player wins; everyone still in is ranked by net worth.
+  finishByRounds() {
+    const ranked = this.active().sort((a, b) => this.netWorth(b) - this.netWorth(a));
+    ranked.forEach((pid, i) => { this.gp(pid).finalPlace = i + 1; });
+    this.g.round = this.settings.roundLimit;
+    this.addLog('mono.log.roundLimit', { n: this.settings.roundLimit });
+    this.endGame(ranked[0]);
+  }
+
+  endGame(winner) {
+    const g = this.g;
+    g.winner = winner;
     g.ended = true;
     g.auction = null;
     g.debts = [];
@@ -968,8 +994,32 @@ class MonoRoom {
     this.dispose();
     if (g.winner) this.addLog('mono.log.winner', { name: this.nameOf(g.winner) });
     this.onGameEnd(this.gameResults());
+    this.onArchive(this.archiveRecord());
     this.touch();
-    return true;
+  }
+
+  // A finished game for the archive: standings, the money chart and the highlights.
+  archiveRecord() {
+    const g = this.g;
+    const name = pid => this.nameOf(pid);
+    const hl = g.highlights || {};
+    return {
+      game: 'mono', code: this.code, tableId: this.tableId, startedAt: g.startedAt, endedAt: Date.now(),
+      rounds: g.round, winner: g.winner ? name(g.winner) : null, family: !!this.settings.family,
+      players: g.order.map(pid => {
+        const gp = this.gp(pid);
+        return {
+          userId: this.player(pid)?.userId || null, name: name(pid), won: pid === g.winner, bankrupt: gp.bankrupt,
+          place: pid === g.winner ? 1 : gp.finalPlace || (gp.bankruptAt ? gp.bankruptAt + 1 : 2),
+          netWorth: gp.bankrupt ? 0 : this.netWorth(pid), rentCollected: gp.stats.rentCollected,
+        };
+      }).sort((a, b) => a.place - b.place),
+      worth: (g.worth || []).map(p => ({ round: p.round, w: Object.fromEntries(Object.entries(p.w).map(([pid, v]) => [name(pid), v])) })),
+      highlights: {
+        rent: hl.rent ? { from: name(hl.rent.from), to: name(hl.rent.to), amount: hl.rent.amount, square: hl.rent.square } : null,
+        deal: hl.deal ? { from: name(hl.deal.from), to: name(hl.deal.to), value: hl.deal.value } : null,
+      },
+    };
   }
 
   // ---------- trades ----------
@@ -1090,7 +1140,7 @@ class MonoRoom {
       return {
         userId: p.userId,
         won: pid === g.winner,
-        place: pid === g.winner ? 1 : gp.bankruptAt ? gp.bankruptAt + 1 : 2,
+        place: pid === g.winner ? 1 : gp.finalPlace || (gp.bankruptAt ? gp.bankruptAt + 1 : 2),
         players: n,
         bankrupt: gp.bankrupt,
         netWorth: gp.bankrupt ? 0 : this.netWorth(pid),
@@ -1109,7 +1159,7 @@ class MonoRoom {
       const profile = p.userId ? this.profileOf(p.userId) : null;
       return {
         id: p.id, userId: p.userId, name: p.name, connected: p.connected, ready: !!p.ready, piece: p.piece,
-        avatar: profile?.avatar || null, score: profile ? profile.score : null, cos: profile?.equipped || {},
+        avatar: profile?.avatar || null, score: profile ? profile.score : null, cos: profile?.equipped || {}, title: profile?.title || null,
       };
     };
     const view = {

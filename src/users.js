@@ -16,6 +16,11 @@ const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
 const RATING_LOG_KEEP = 5000;
 const LOWEST_SCORE = -10; // the bottom decency status starts here
+const MAX_TITLE = 32;
+const MAX_BADGES = 12;
+const THEMES = ['ocean', 'violet', 'sunset', 'forest', 'rose', 'mono'];
+// "MM-DD" of today, in the server's time zone
+const todayMD = () => { const d = new Date(); return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -239,6 +244,41 @@ class UserStore {
     return password;
   }
 
+  // ---------- personal touches ----------
+  // Titles and badges come from the admin (inside jokes); birthday and theme are your own.
+  setTitle(user, title) {
+    user.title = String(title || '').trim().replace(/\s+/g, ' ').slice(0, MAX_TITLE) || null;
+    this.save();
+  }
+
+  addBadge(user, emoji, label, byId) {
+    emoji = String(emoji || '').trim().slice(0, 8);
+    label = String(label || '').trim().replace(/\s+/g, ' ').slice(0, MAX_TITLE);
+    if (!emoji || !label) throw new GameError('err.badgeRequired');
+    user.badges ||= [];
+    if (user.badges.length >= MAX_BADGES) throw new GameError('err.tooManyBadges', { n: MAX_BADGES });
+    user.badges.push({ id: crypto.randomBytes(4).toString('hex'), emoji, label, by: byId, at: Date.now() });
+    this.save();
+  }
+
+  removeBadge(user, badgeId) {
+    user.badges = (user.badges || []).filter(b => b.id !== badgeId);
+    this.save();
+  }
+
+  setPersonal(user, { birthday, theme }) {
+    if (birthday !== undefined) {
+      const m = /^(\d{2})-(\d{2})$/.exec(String(birthday || ''));
+      if (birthday && (!m || +m[1] < 1 || +m[1] > 12 || +m[2] < 1 || +m[2] > 31)) throw new GameError('err.birthdayInvalid');
+      user.birthday = birthday ? String(birthday) : null; // "MM-DD", no year
+    }
+    if (theme !== undefined) {
+      if (theme && !THEMES.includes(theme)) throw new GameError('err.invalidTarget');
+      user.theme = theme || null;
+    }
+    this.save();
+  }
+
   setAvatar(user, buf) {
     if (buf.length > MAX_AVATAR_BYTES) throw new GameError('err.avatarTooBig');
     const ext = imageType(buf);
@@ -393,11 +433,17 @@ class UserStore {
       admin: !!user.admin,
       hasRecovery: !!user.recovery,
       inventory,
-      equipped: Object.fromEntries(Object.entries(user.equipped || {}).filter(([, i]) => inventory.includes(i))),
+      // on your birthday everyone sees you in a birthday hat
+      equipped: { ...Object.fromEntries(Object.entries(user.equipped || {}).filter(([, i]) => inventory.includes(i))), ...(user.birthday === todayMD() ? { hat: 'hat.birthday' } : {}) },
+      title: user.title || null,
+      badges: user.badges || [],
+      birthday: user.birthday || null,
+      birthdayToday: !!user.birthday && user.birthday === todayMD(),
+      theme: user.theme || null,
       reactions: inventory.filter(i => ITEMS[i].slot === 'reaction').map(i => ITEMS[i].emoji),
       gifts: (user.gifts || []).filter(i => inventory.includes(i)),
     };
   }
 }
 
-module.exports = { UserStore, imageType };
+module.exports = { UserStore, imageType, THEMES };

@@ -11,7 +11,7 @@ const { limitSocket } = require('../ratelimit');
 
 const ROOM_IDLE_MS = 60 * 60 * 1000;
 
-function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken }) {
+function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, onArchive = () => {}, onStart = () => {} }) {
   const nsp = io.of('/monopoly');
   const rooms = new Map(); // code -> MonoRoom
   const stateFile = path.join(dataDir, 'monopoly-rooms.json');
@@ -43,6 +43,8 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken }
     onChange: room => { broadcast(room); scheduleSave(); },
     profileOf: userId => users.publicProfile(users.users[userId]),
     onGameEnd: results => users.recordMonoGame(results),
+    onArchive,
+    onStart,
   });
 
   function newCode() {
@@ -201,8 +203,10 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken }
     list: () => [...rooms.values()].map(summary),
     info: code => (rooms.has(code) ? summary(rooms.get(code)) : null),
     // an empty room for a table's next game: the first one in becomes the host
-    create: () => {
-      const room = new MonoRoom({ code: newCode(), ...roomOptions() });
+    create: (tableId = null, settings = null) => {
+      const room = new MonoRoom({ code: newCode(), tableId, ...roomOptions() });
+      // the table's house rules from last time (only settings this version knows)
+      if (settings) for (const k of Object.keys(room.settings)) if (k in settings) room.settings[k] = settings[k];
       rooms.set(room.code, room);
       scheduleSave();
       return room.code;

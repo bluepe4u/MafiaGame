@@ -12,6 +12,8 @@ const ITEMS = {
   'hat.helmet': { slot: 'hat', emoji: '🪖' },
   'hat.pumpkin': { slot: 'hat', emoji: '🎃' },
   'hat.rose': { slot: 'hat', emoji: '🌹' },
+  // worn automatically on your birthday (not given by the admin)
+  'hat.birthday': { slot: 'hat', emoji: '🎂', auto: true },
   // animated rings around the avatar
   'frame.gold': { slot: 'frame' },
   'frame.fire': { slot: 'frame' },

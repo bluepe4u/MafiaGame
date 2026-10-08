@@ -122,6 +122,7 @@ function show(screen) {
 }
 
 function render() {
+  i18nVariant = state && state.me && state.settings && state.settings.family ? 'family' : null;
   const inRoom = !!(state && state.me) && !homeView;
   document.body.dataset.phase = inRoom ? state.phase : 'home';
   $('#topRoom').classList.toggle('hidden', !inRoom);
@@ -138,10 +139,17 @@ function render() {
 }
 
 // ---------- lobby ----------
-for (const input of $$('[data-rule]')) input.addEventListener('change', () => send('settings', { [input.dataset.rule]: input.checked }));
+for (const input of $$('[data-rule]')) {
+  input.addEventListener('change', () => send('settings', {
+    [input.dataset.rule]: input.checked,
+    // family mode comes with a shorter game unless the host already chose a length
+    ...(input.dataset.rule === 'family' && input.checked && !state.settings.roundLimit ? { roundLimit: 20 } : {}),
+  }));
+}
 $('#startingCash').addEventListener('change', e => send('settings', { startingCash: parseInt(e.target.value, 10) }));
 $('#turnSeconds').addEventListener('change', e => send('settings', { turnSeconds: parseInt(e.target.value, 10) || 0 }));
 $('#mortgageTurns').addEventListener('change', e => send('settings', { mortgageTurns: parseInt(e.target.value, 10) || 0 }));
+$('#roundLimit').addEventListener('change', e => send('settings', { roundLimit: parseInt(e.target.value, 10) || 0 }));
 $('#startBtn').onclick = () => send('start');
 $('#readyBtn').onclick = () => {
   const mine = state.players.find(p => p.id === state.me.id);
@@ -156,7 +164,7 @@ function renderLobby() {
   $('#lobbyPlayers').innerHTML = state.players.map(p => `
     <li class="${p.connected ? '' : 'offline'} ${p.ready ? 'is-ready' : ''}" data-pid="${p.id}">
       <span class="avatar-wrap clickable pc-wrap" style="--pc:${colorOf(p.id)}" data-open-player="${p.userId || ''}">${avatar(p.name, p.avatar, p.cos)}${p.ready ? '<span class="voted ready-mark">✓</span>' : ''}</span>
-      <span class="pname"><b class="${nameCls(p.cos)}">${esc(p.name)}</b>${statusPill(p.score)}${p.id === state.hostId ? `<span class="tag host">${esc(t('tag.host'))}</span>` : ''}</span>
+      <span class="pname"><b class="${nameCls(p.cos)}">${esc(p.name)}</b>${titleTag(p.title)}${statusPill(p.score)}${p.id === state.hostId ? `<span class="tag host">${esc(t('tag.host'))}</span>` : ''}</span>
       ${isHost() ? `<button class="ghost small icon-only" data-rename="${p.id}" title="${esc(t('rename.btn'))}" aria-label="${esc(t('rename.btn'))}">✎</button>` : ''}
       ${isHost() && p.id !== state.me.id ? `<button class="ghost small" data-kick="${p.id}">${esc(t('ui.remove'))}</button>` : ''}
     </li>`).join('');
@@ -184,7 +192,9 @@ function renderLobby() {
     `${t('mono.startingCash')}: ${money(s.startingCash)}`,
     s.turnSeconds ? `${t('mono.turnTime').split('(')[0].trim()}: ${s.turnSeconds} s` : t('mono.turnTime').split('(')[0].trim() + ': ∞',
     s.mortgageTurns ? `${t('mono.mortgageTurns').split('(')[0].trim()}: ${s.mortgageTurns}` : '',
+    s.roundLimit ? t('mono.sumRounds', { n: s.roundLimit }) : '',
     ...['doubleGo', 'auctions', 'freeParking', 'noRentInJail'].filter(k => s[k]).map(k => t('mono.rule.' + k)),
+    s.family ? t('ui.family') : '',
   ].filter(Boolean).map(x => `<li>${esc(x)}</li>`).join('');
   $('#hostSettings').classList.toggle('hidden', !isHost());
   $('#startBtn').classList.toggle('hidden', !isHost());
@@ -195,6 +205,7 @@ function renderLobby() {
     setIfNotFocused($('#startingCash'), s.startingCash);
     setIfNotFocused($('#turnSeconds'), s.turnSeconds);
     setIfNotFocused($('#mortgageTurns'), s.mortgageTurns);
+    setIfNotFocused($('#roundLimit'), s.roundLimit || 0);
     for (const input of $$('[data-rule]')) input.checked = !!s[input.dataset.rule];
   }
 }
