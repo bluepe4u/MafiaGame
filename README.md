@@ -76,13 +76,6 @@ nosniff, a strict referrer policy, HSTS over HTTPS) and rate-limits socket event
 
 **Docker alternative:** `docker compose up -d --build` serves on port 3000 (put your own HTTPS proxy in front).
 
-## The hub
-
-`/` is the home for every game: login, your tables (with the next-game picker), the games you're in,
-a card per game (create a room, rules, leaderboard), one "join by code" box for any game, the
-combined leaderboard and the archive. The games live at `/mafia/` and `/monopoly/` and show rooms
-only — leaving a room goes back to the hub. Old `/?room=CODE` links and QR codes still work.
-
 **Streamer mode (Mafia, gear menu):** the game window looks the same whatever your role — no role
 card, no teammates, no night buttons or picks, no private results, no Mafia or graveyard chat, the
 night blurred, no "your night move" alerts, room codes masked and kept out of the address bar.

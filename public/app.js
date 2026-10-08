@@ -69,7 +69,7 @@ const progress = (done, total) => `<div class="bar-track"><div class="bar-fill" 
 const roleTag = r => r ? `<span class="tag ${state.roleInfo[r].team}">${esc(roleName(r))}</span>` : '';
 // identifies "the moment" a host action was requested for; if it changes, the action is stale
 const momentKey = () => state ? `${state.phase}:${state.day}:${state.speech ? state.speech.index : ''}` : '';
-const inviteUrl = () => `${location.origin}/mafia/?room=${state.code}`;
+const inviteUrl = () => `${location.origin}/?room=${state.code}`;
 
 // ---------- host confirmation (dialog + press-and-hold) ----------
 let pending = null;
@@ -129,7 +129,7 @@ document.addEventListener('keydown', e => {
   if (pending) closeModal();
   closeMarkMenu();
   closeRename();
-  $('#recap').classList.add('hidden');
+  for (const id of ['recap', 'board']) $('#' + id).classList.add('hidden');
 });
 
 // ---------- socket ----------
@@ -139,7 +139,7 @@ socket.on('connect', () => {
   $('#offline').classList.add('hidden');
   const s = loadSession();
   // an invite link to a different room wins over resuming the old one
-  if (s && !Site.creating && (!urlRoom || urlRoom === s.code)) { // not when the hub asked for a new room
+  if (s && (!urlRoom || urlRoom === s.code)) {
     socket.emit('resume', s, res => {
       if (!res.ok) { saveSession(null); state = null; render(); }
     });
@@ -153,8 +153,8 @@ socket.on('state', s => {
   render();
 });
 socket.on('kicked', r => {
-  saveSession(null);
-  toHub(t(r && r.closed ? 'toast.roomClosed' : 'toast.kicked'));
+  leftRoom();
+  toast(t(r && r.closed ? 'toast.roomClosed' : 'toast.kicked'));
 });
 
 function leftRoom() {
@@ -163,7 +163,7 @@ function leftRoom() {
   urlRoom = '';
   chatSeen.town = chatSeen.mafia = chatSeen.dead = null;
   chatRendered = '';
-  history.replaceState(null, '', '/mafia/');
+  history.replaceState(null, '', '/');
   render();
 }
 
@@ -174,7 +174,7 @@ $('#joinBtn').onclick = () => send('join', { code: $('#joinCode').value });
 $('#watchBtn').onclick = () => send('join', { code: $('#joinCode').value, spectate: true });
 $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joinBtn').click(); });
 
-$('#homeBtn').onclick = () => { location.href = '/'; }; // your seat stays: the hub shows "back to the game"
+$('#homeBtn').onclick = () => { homeView = true; render(); };
 
 // ---------- voice chat: who hears whom ----------
 // Lobby and after the game: everyone. By day the living speak to everyone; at night only the
@@ -1012,12 +1012,12 @@ $('#streamerBtn').onclick = () => {
   store.set(STREAMER_KEY, streamerOn() ? null : 'on');
   renderStreamerBtn();
   if (streamerOn()) toast(t('streamer.on'), 'info');
-  if (state && state.me) { history.replaceState(null, '', streamerOn() ? '/mafia/' : `/mafia/?room=${state.code}`); render(); }
+  if (state && state.me) { history.replaceState(null, '', streamerOn() ? '/' : `/?room=${state.code}`); render(); }
 };
 
 function openSecret() {
   if (secretOpen()) { secretWin.focus(); return; }
-  secretWin = window.open('/mafia/secret.html', 'mafiaSecret', 'popup=yes,width=480,height=760');
+  secretWin = window.open('/secret.html', 'mafiaSecret', 'popup=yes,width=480,height=760');
   if (!secretWin) { toast(t('streamer.popupBlocked')); return; }
   secretWin.addEventListener('load', () => { secretBuilt = false; renderSecret(); });
 }
@@ -1167,10 +1167,10 @@ function render() {
   document.body.classList.toggle('streamer', streamerOn());
   document.body.classList.toggle('streamer-night', hideSecrets() && state.phase === 'night');
   renderStreamerBtn();
-  if (inRoom && streamerOn() && location.search.includes('room=')) history.replaceState(null, '', '/mafia/'); // keep the code off screen
+  if (inRoom && streamerOn() && location.search.includes('room=')) history.replaceState(null, '', '/'); // keep the code off screen
   if (inRoom && urlRoom !== state.code) {
     urlRoom = state.code;
-    history.replaceState(null, '', streamerOn() ? '/mafia/' : `/mafia/?room=${state.code}`); // streamers: no room code in the address bar
+    history.replaceState(null, '', streamerOn() ? '/' : `/?room=${state.code}`); // streamers: no room code in the address bar
   }
   if (!inRoom || state.phase === 'lobby' || state.phase === 'ended') $('#reveal').classList.add('hidden');
   if (!inRoom || state.phase !== 'ended') $('#recap').classList.add('hidden');
@@ -1377,7 +1377,45 @@ socket.on('reaction', r => {
   if (anchor) { anchor.classList.remove('reacted'); void anchor.offsetWidth; anchor.classList.add('reacted'); }
 });
 
-$('#homeBoard').onclick = () => openLeaderboard('mafia');
+// ---------- leaderboard ----------
+const MIN_GAMES_FOR_RATE = 3;
+let boardTab = 'wins';
+let boardUsers = [];
+async function openBoard() {
+  const res = await api('leaderboard');
+  if (!res.ok) return;
+  boardUsers = res.users;
+  $('#board').classList.remove('hidden');
+  renderBoard();
+}
+function renderBoard() {
+  for (const b of $$('[data-board]')) b.classList.toggle('active', b.dataset.board === boardTab);
+  const metric = {
+    wins: u => [u.stats.wins, u.stats.wins],
+    winrate: u => [u.stats.games >= MIN_GAMES_FOR_RATE ? pctOf(u.stats.wins, u.stats.games) : -1, `${pctOf(u.stats.wins, u.stats.games)}%`],
+    decency: u => [u.score, u.score > 0 ? `+${u.score}` : u.score],
+    games: u => [u.stats.games, u.stats.games],
+  }[boardTab];
+  const rows = boardUsers.map(u => ({ u, m: metric(u) })).filter(r => r.m[0] >= 0 && (boardTab === 'decency' || r.u.stats.games > 0))
+    .sort((a, b) => b.m[0] - a.m[0] || b.u.stats.wins - a.u.stats.wins || a.u.username.localeCompare(b.u.username));
+  const medal = i => ['🥇', '🥈', '🥉'][i] || `<span class="rank">${i + 1}</span>`;
+  $('#boardList').innerHTML = rows.length ? rows.map(({ u, m }, i) => `
+    <li class="board-row ${account && u.id === account.id ? 'me' : ''}" data-player="${u.id}">
+      <span class="board-rank">${medal(i)}</span>
+      ${avatar(u.username, u.avatar, u.equipped)}
+      <span class="board-id"><b class="${nameCls(u.equipped)}">${esc(u.username)}</b>${statusPill(u.score)}
+        <span class="muted small-text">${esc(t('board.sub', { g: u.stats.games, w: u.stats.wins }))}</span></span>
+      <span class="board-metric">${m[1]}</span>
+    </li>`).join('') : `<p class="muted small-text">${esc(t('board.empty'))}</p>`;
+  $('#boardNote').textContent = boardTab === 'winrate' ? t('board.minGames', { n: MIN_GAMES_FOR_RATE }) : '';
+  for (const row of $$('#boardList [data-player]')) row.onclick = () => openPlayer(row.dataset.player);
+}
+for (const b of $$('[data-board]')) b.onclick = () => { boardTab = b.dataset.board; renderBoard(); };
+$('#boardBtn').innerHTML = COMMON_ICONS.trophy;
+$('#boardBtn').onclick = openBoard;
+$('#homeBoard').onclick = openBoard;
+$('#boardClose').onclick = () => $('#board').classList.add('hidden');
+$('#board').addEventListener('pointerdown', e => { if (e.target.id === 'board') $('#board').classList.add('hidden'); });
 
 applyStaticTranslations();
 applySpooky();

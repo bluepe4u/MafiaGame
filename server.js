@@ -66,12 +66,6 @@ app.use((req, res, next) => {
 });
 // browsers re-check the page's files on every load (cheap: unchanged files answer 304), so
 // nobody keeps running an old version after an update
-// Old links and QR codes pointed at /?room=CODE (Mafia lived at /): send them to the game the room belongs to.
-app.get('/', (req, res, next) => {
-  const code = String(req.query.room || '').toUpperCase();
-  if (!/^[A-Z]{4}$/.test(code)) return next();
-  res.redirect(302, `${mono.has(code) ? '/monopoly/' : '/mafia/'}?room=${code}`);
-});
 app.use(express.static(path.join(__dirname, 'public'), { setHeaders: res => res.setHeader('Cache-Control', 'no-cache') }));
 app.use('/avatars', express.static(users.avatarDir, { maxAge: '30d', immutable: true, index: false }));
 app.get('/health', (_req, res) => res.send('ok'));
@@ -136,14 +130,6 @@ app.post('/api/equip', api(req => {
   return { user: users.publicProfile(user) };
 }));
 app.post('/api/gifts/seen', api(req => { users.giftsSeen(currentUser(req)); return {}; }));
-// which game a room code belongs to (the hub's "join by code" box)
-app.get('/api/room/:code', api(req => {
-  currentUser(req);
-  const code = String(req.params.code || '').toUpperCase().trim();
-  if (rooms.has(code)) return { game: 'mafia', code };
-  if (mono.has(code)) return { game: 'mono', code };
-  throw new GameError('err.roomNotFound');
-}));
 // rooms this account is still in, in either game: the "back to my game" button
 app.get('/api/active', api(req => {
   const user = currentUser(req);
@@ -446,7 +432,7 @@ app.post('/api/admin/badge', api(req => {
 app.get('/qr.svg', async (req, res) => {
   const code = String(req.query.room || '').toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) return res.status(400).end();
-  const page = req.query.game === 'mono' ? '/monopoly/' : '/mafia/';
+  const page = req.query.game === 'mono' ? '/monopoly/' : '/';
   const svg = await QRCode.toString(`${req.protocol}://${req.get('host')}${page}?room=${code}`, { type: 'svg', margin: 1 });
   res.type('image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(svg);
 });

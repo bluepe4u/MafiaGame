@@ -23,9 +23,8 @@
         <svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
       </button>
       <nav id="siteMenu" class="site-menu hidden">
-        <a href="/"><span class="site-ico"></span><span data-i18n="site.hub"></span></a>
-        <a href="/mafia/"><span class="site-ico"></span><span data-i18n="site.mafia"></span></a>
-        <a href="/monopoly/" class="current"><span class="site-ico"></span><span data-i18n="site.monopoly"></span></a>
+        <a href="/"><span class="site-ico">🎩</span><span data-i18n="site.mafia"></span></a>
+        <a href="/monopoly/" class="current"><span class="site-ico">🎲</span><span data-i18n="site.monopoly"></span></a>
       </nav>
     </div>
     <button id="topRoom" class="room-pill hidden" type="button"><span data-i18n="ui.room"></span> <span id="topCode" class="code"></span></button>
@@ -189,6 +188,27 @@
     <div class="sheet results-sheet">
       <div class="sheet-head"><h2 data-i18n="mono.results"></h2><button id="resultsClose" class="ghost small" data-i18n="ui.close"></button></div>
       <div id="resultsBody" class="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- leaderboard and player page -->
+  <div id="boardSheet" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet board-sheet">
+      <div class="sheet-head">
+        <h2><span class="trophy">🏆</span> <span data-i18n="mono.board.title"></span></h2>
+        <button id="boardClose" class="ghost small" data-i18n="ui.close"></button>
+      </div>
+      <div class="sheet-body">
+        <div class="tabs board-tabs" role="tablist">
+          <button data-board="wins" data-i18n="mono.board.tab.wins"></button>
+          <button data-board="winrate" data-i18n="mono.board.tab.winrate"></button>
+          <button data-board="worth" data-i18n="mono.board.tab.worth"></button>
+          <button data-board="rent" data-i18n="mono.board.tab.rent"></button>
+          <button data-board="games" data-i18n="mono.board.tab.games"></button>
+        </div>
+        <ol id="boardList" class="board-list"></ol>
+        <p id="boardNote" class="muted small-text"></p>
+      </div>
     </div>
   </div>
 
