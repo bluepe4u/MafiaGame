@@ -342,20 +342,91 @@ const ICONS = {
 };
 const iconFor = (sq, i) => ICONS[sq.type] || (sq.type === 'utility' ? (i === 12 ? ICONS.electric : ICONS.water) : '');
 
+// Full-colour drawings for the special squares, in the spirit of the classic board.
+const ART = {
+  chance: `<svg class="art art-chance" viewBox="0 0 40 48" aria-hidden="true">
+    <text x="20" y="41" text-anchor="middle" font-size="46" font-weight="900" font-family="Georgia, 'Times New Roman', serif"
+      fill="#f97316" stroke="#7c2d12" stroke-width="1.6" paint-order="stroke">?</text></svg>`,
+  chest: `<svg class="art art-chest" viewBox="0 0 48 40" aria-hidden="true">
+    <path d="M5 17V12a8 8 0 0 1 8-8h22a8 8 0 0 1 8 8v5z" fill="#2563eb" stroke="#0b1d4a" stroke-width="2"/>
+    <rect x="5" y="17" width="38" height="20" rx="2" fill="#1d4ed8" stroke="#0b1d4a" stroke-width="2"/>
+    <rect x="11" y="4.6" width="5" height="32" fill="#f5c542" stroke="#7a5b00" stroke-width="1"/>
+    <rect x="32" y="4.6" width="5" height="32" fill="#f5c542" stroke="#7a5b00" stroke-width="1"/>
+    <rect x="5" y="16" width="38" height="3.5" fill="#f5c542" stroke="#7a5b00" stroke-width="1"/>
+    <rect x="20" y="14" width="8" height="10" rx="1.5" fill="#fde68a" stroke="#7a5b00" stroke-width="1.2"/>
+    <circle cx="24" cy="18.5" r="1.5" fill="#7a5b00"/><rect x="23.3" y="19" width="1.4" height="3" fill="#7a5b00"/></svg>`,
+  car: `<svg class="art art-car" viewBox="0 0 66 38" aria-hidden="true">
+    <path d="M5 26q0-7 7-8l8-1q6-9 15-9h8q7 0 11 9l5 1q5 1 5 8v3H5z" fill="#dc2626" stroke="#450a0a" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M23 17q5-7 12-7h4v7z M42 10h1q5 0 8 7h-9z" fill="#bae6fd" stroke="#450a0a" stroke-width="1.5"/>
+    <circle cx="18" cy="29" r="6" fill="#111827"/><circle cx="18" cy="29" r="2.4" fill="#d1d5db"/>
+    <circle cx="50" cy="29" r="6" fill="#111827"/><circle cx="50" cy="29" r="2.4" fill="#d1d5db"/>
+    <rect x="57" y="21" width="5" height="3" rx="1" fill="#fde047"/></svg>`,
+  police: `<svg class="art art-police" viewBox="0 0 48 40" aria-hidden="true">
+    <path d="M8 21Q7 7 24 5q17 2 16 16z" fill="#1e3a8a" stroke="#0b1d4a" stroke-width="2"/>
+    <rect x="8" y="20" width="32" height="6" fill="#111827"/>
+    <path d="M5 26h38q-4 9-19 9T5 26z" fill="#0f172a"/>
+    <path d="M24 9l2 4.2 4.6.6-3.4 3.2.9 4.5L24 19.3l-4.1 2.2.9-4.5-3.4-3.2 4.6-.6z" fill="#f5c542" stroke="#7a5b00" stroke-width=".8"/></svg>`,
+  train: `<svg class="art art-train" viewBox="0 0 66 42" aria-hidden="true">
+    <circle cx="16" cy="6" r="3.2" fill="#cbd5e1"/><circle cx="21" cy="3.5" r="2.4" fill="#e2e8f0"/>
+    <path d="M13 10h7l-1 6h-5z" fill="#111827"/>
+    <rect x="8" y="15" width="34" height="14" rx="6" fill="#111827"/>
+    <rect x="40" y="7" width="17" height="22" rx="1.5" fill="#1f2937"/>
+    <rect x="44" y="10" width="9" height="7" rx="1" fill="#fde68a"/>
+    <path d="M8 23l-6 6h8z" fill="#374151"/><rect x="5" y="19" width="5" height="4" rx="1" fill="#fbbf24"/>
+    <rect x="6" y="29" width="54" height="3" fill="#374151"/>
+    <circle cx="17" cy="34" r="5" fill="#111827" stroke="#9ca3af" stroke-width="1.5"/>
+    <circle cx="30" cy="34" r="5" fill="#111827" stroke="#9ca3af" stroke-width="1.5"/>
+    <circle cx="48" cy="33" r="6" fill="#111827" stroke="#9ca3af" stroke-width="1.5"/>
+    <path d="M17 34h31" stroke="#9ca3af" stroke-width="1.6"/></svg>`,
+  bulb: `<svg class="art art-bulb" viewBox="0 0 40 48" aria-hidden="true">
+    <path d="M20 4a13 13 0 0 0-8 23c2 2 3 4 3 6h10c0-2 1-4 3-6A13 13 0 0 0 20 4z" fill="#fde047" stroke="#a16207" stroke-width="2"/>
+    <path d="M16 26q4-8 8 0" fill="none" stroke="#a16207" stroke-width="1.6"/>
+    <rect x="14" y="33" width="12" height="4" rx="1" fill="#9ca3af" stroke="#4b5563"/><rect x="15" y="37" width="10" height="4" rx="1" fill="#6b7280" stroke="#374151"/>
+    <rect x="17" y="41" width="6" height="3" rx="1" fill="#374151"/>
+    <path d="M3 17h4M33 17h4M7 5l3 3M33 5l-3 3" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/></svg>`,
+  tap: `<svg class="art art-tap" viewBox="0 0 48 44" aria-hidden="true">
+    <rect x="18" y="4" width="12" height="4" rx="2" fill="#6b7280" stroke="#374151"/><rect x="22.5" y="7" width="3" height="6" fill="#6b7280"/>
+    <path d="M4 14h26a8 8 0 0 1 8 8v4h-8v-4H4z" fill="#9ca3af" stroke="#374151" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M34 30c0 0-4 5-4 8a4 4 0 0 0 8 0c0-3-4-8-4-8z" fill="#38bdf8" stroke="#0369a1" stroke-width="1.5"/></svg>`,
+  coins: `<svg class="art art-coins" viewBox="0 0 48 40" aria-hidden="true">
+    ${[30, 24, 18, 12].map((y, k) => `<ellipse cx="${k % 2 ? 22 : 20}" cy="${y}" rx="13" ry="4.5" fill="#f5c542" stroke="#7a5b00" stroke-width="1.5"/>`).join('')}
+    <ellipse cx="34" cy="31" rx="10" ry="3.6" fill="#fcd34d" stroke="#7a5b00" stroke-width="1.5"/>
+    <text x="20" y="14.2" text-anchor="middle" font-size="7" font-weight="900" fill="#7a5b00">₽</text></svg>`,
+  ring: `<svg class="art art-ring" viewBox="0 0 40 44" aria-hidden="true">
+    <circle cx="20" cy="29" r="11" fill="none" stroke="#d4a017" stroke-width="4"/>
+    <path d="M13 12l7-8 7 8-7 9z" fill="#bae6fd" stroke="#0369a1" stroke-width="1.5"/>
+    <path d="M13 12h14M20 4v17M16.5 8l3.5 4 3.5-4" fill="none" stroke="#0369a1" stroke-width=".8"/></svg>`,
+  arrow: `<svg class="art art-arrow" viewBox="0 0 64 34" aria-hidden="true">
+    <path d="M62 11H24V2L2 17l22 15v-9h38z" fill="#dc2626" stroke="#7f1d1d" stroke-width="2" stroke-linejoin="round"/></svg>`,
+  bars: `<svg class="art art-bars" viewBox="0 0 40 40" aria-hidden="true">
+    <rect x="1" y="1" width="38" height="38" fill="#f97316" stroke="#111827" stroke-width="2"/>
+    <circle cx="20" cy="17" r="6" fill="#fde68a" stroke="#111827" stroke-width="1.5"/>
+    <path d="M12 39v-8q8-7 16 0v8z" fill="#111827"/>
+    ${[8, 16, 24, 32].map(x => `<rect x="${x - 1.4}" y="1" width="2.8" height="38" fill="#111827"/>`).join('')}</svg>`,
+};
+
+function cellHtml(sq, i) {
+  if (sq.type === 'go') return `<span class="corner-art go-art"><span class="go-word">${esc(sqShort(i))}</span>${ART.arrow}<span class="go-sal">+${money(200)}</span></span>`;
+  if (sq.type === 'jail') return `<span class="jail-art"><span class="jail-cell">${ART.bars}<b>${esc(sqShort(i))}</b></span>
+    <span class="visit visit-l">${esc(t('mono.visit1'))}</span><span class="visit visit-b">${esc(t('mono.visit2'))}</span></span>`;
+  if (sq.type === 'parking') return `<span class="corner-art">${ART.car}<b class="corner-name">${esc(sqShort(i))}</b></span>`;
+  if (sq.type === 'gotojail') return `<span class="corner-art">${ART.police}<b class="corner-name">${esc(sqShort(i))}</b></span>`;
+  // Chance and the Chest: everyone knows the picture, no caption needed
+  if (sq.type === 'chance') return `<span class="sq-body only-art">${ART.chance}</span>`;
+  if (sq.type === 'chest') return `<span class="sq-body only-art">${ART.chest}</span>`;
+  if (sq.type === 'tax') return `<span class="sq-body only-art">${i === 4 ? ART.coins : ART.ring}</span><span class="tag-price tax">${tagMoney(sq.amount)}</span>`;
+  if (sq.type === 'utility') return `<span class="sq-body only-art">${i === 12 ? ART.bulb : ART.tap}</span><span class="tag-price">${tagMoney(sq.price)}</span><span class="lock">${ICONS.lock}</span>`;
+  if (sq.type === 'railway') return `<span class="sq-body">${ART.train}<span class="sq-name">${esc(sqShort(i))}</span></span><span class="tag-price">${tagMoney(sq.price)}</span><span class="lock">${ICONS.lock}</span>`;
+  return `<span class="strip"><span class="bldg"></span></span>
+    <span class="sq-body"><span class="sq-name">${esc(sqShort(i))}</span></span>
+    <span class="tag-price">${tagMoney(sq.price)}</span><span class="lock">${ICONS.lock}</span>`;
+}
+
 function buildBoard() {
   if (!BOARD) return;
   $('#squares').innerHTML = BOARD.squares.map((sq, i) => {
     const [row, col, side] = gridPos(i);
-    const icon = sq.group ? '' : iconFor(sq, i);
-    return `<button class="sq ${side} t-${sq.type} ${sq.group ? 'g-' + sq.group : ''}" style="grid-row:${row};grid-column:${col}" data-sq="${i}">
-      ${sq.group ? '<span class="strip"><span class="bldg"></span></span>' : ''}
-      <span class="sq-body">
-        ${icon ? `<span class="sq-icon">${icon}</span>` : ''}
-        <span class="sq-name">${esc(sqShort(i))}</span>
-      </span>
-      ${sq.price ? `<span class="tag-price">${tagMoney(sq.price)}</span>` : sq.amount ? `<span class="tag-price tax">${tagMoney(sq.amount)}</span>` : ''}
-      <span class="lock">${ICONS.lock}</span>
-    </button>`;
+    return `<button class="sq ${side} t-${sq.type} ${sq.group ? 'g-' + sq.group : ''}" style="grid-row:${row};grid-column:${col}" data-sq="${i}" aria-label="${esc(sqName(i))}">${cellHtml(sq, i)}</button>`;
   }).join('');
   for (const b of $$('#squares [data-sq]')) b.onclick = () => openSquare(Number(b.dataset.sq));
 }
@@ -387,7 +458,8 @@ function updateBoard() {
     if (bldg) bldg.innerHTML = !pr || !pr.houses ? '' : pr.houses === 5 ? '<i class="hotel"></i>' : '<i class="house"></i>'.repeat(pr.houses);
     const tag = el.querySelector('.tag-price');
     if (tag && sq.price) tag.textContent = pr && pr.mortgaged ? (pr.mortgageLeft || '') : tagMoney(pr ? rentNow(i) : sq.price);
-    el.querySelector('.sq-name').textContent = sqShort(i);
+    const nm = el.querySelector('.sq-name');
+    if (nm) nm.textContent = sqShort(i);
   }
   renderTokens();
 }
@@ -526,7 +598,9 @@ function renderGame() {
   renderDeal();
   if (deal && !$('#tradeModal').classList.contains('hidden')) renderTrade();
   if (!$('#sqInfo').classList.contains('hidden') && openSq !== null) openSquare(openSq, true);
-  $('#bankInfo').textContent = t('mono.bankSupply', { h: g.housesLeft, t: g.hotelsLeft }) + (state.settings.freeParking ? ` · ${t('mono.pot', { n: g.pot })}` : '');
+  $('#bankInfo').innerHTML = `<span class="bank-item" title="${esc(t('mono.bankSupply', { h: g.housesLeft, t: g.hotelsLeft }))}"><i class="house"></i>${g.housesLeft}</span>
+    <span class="bank-item"><i class="hotel"></i>${g.hotelsLeft}</span>
+    ${state.settings.freeParking ? `<span class="bank-item" title="${esc(t('mono.pot', { n: g.pot }))}">${ART.car}${money(g.pot)}</span>` : ''}`;
   const playing = state.phase === 'playing' && !state.me.spectator && gp(state.me.id) && !gp(state.me.id).bankrupt;
   $('#resignBtn').classList.toggle('hidden', !playing);
   $('#restartBtn').classList.toggle('hidden', !(isHost() && state.phase === 'ended'));
@@ -569,8 +643,8 @@ function renderCenter() {
       <div class="auction-title">${esc(t('mono.auctionTitle', { square: sqName(a.square) }))}</div>
       <div class="auction-bid">${a.bidder ? esc(t('mono.auctionBid', { amount: a.bid, name: nameOf(a.bidder) })) : esc(t('mono.auctionNoBid'))}</div>
       ${canBid ? `<div class="row center bid-row">
-        ${a.bidder ? [100, 500, 1000].map(x => `<button class="small" data-bid="${a.bid + x}">+${x}</button>`).join('') : `<button class="small" data-bid="${a.min}">${money(a.min)}</button>`}
-        <input id="bidInput" type="number" step="100" min="${a.bidder ? a.bid + 1 : a.min}" value="${a.bidder ? a.bid + 100 : a.min}">
+        ${a.bidder ? [10, 50, 100].map(x => `<button class="small" data-bid="${a.bid + x}">+${x}</button>`).join('') : `<button class="small" data-bid="${a.min}">${money(a.min)}</button>`}
+        <input id="bidInput" type="number" step="10" min="${a.bidder ? a.bid + 1 : a.min}" value="${a.bidder ? a.bid + 10 : a.min}">
         <button id="bidBtn" class="primary small">${esc(t('mono.bid'))}</button>
       </div>` : ''}
     </div>`;
@@ -588,7 +662,7 @@ function renderCenter() {
       html = myGp.inJail
         ? `<div class="muted small-text">${esc(t('mono.inJail', { n: myGp.jailTurns + 1 }))}</div><div class="row center">
             <button id="rollBtn" class="primary big-roll">${esc(t('mono.roll'))}</button>
-            <button id="bailBtn" ${myGp.cash < 500 ? 'disabled' : ''}>${esc(t('mono.payBail', { n: 500 }))}</button>
+            <button id="bailBtn" ${myGp.cash < 50 ? 'disabled' : ''}>${esc(t('mono.payBail', { n: 50 }))}</button>
             ${myGp.jailCards ? `<button id="cardBtn">${esc(t('mono.useCard'))}</button>` : ''}</div>`
         : `<button id="rollBtn" class="primary big-roll">${esc(t('mono.roll'))}</button>`;
     } else if (st === 'buy') {
@@ -616,7 +690,11 @@ function renderCenter() {
   for (const b of $$('[data-bid]')) b.onclick = () => send('bid', { amount: Number(b.dataset.bid) });
 
   // the last few events, newest at the bottom
-  $('#feed').innerHTML = g.log.slice(-5).map((e, i, arr) => `<li style="--age:${arr.length - 1 - i}">${esc(fmtLog(e))}</li>`).join('');
+  const byName = name => [...state.players, ...state.spectators].find(p => p.name === name);
+  $('#feed').innerHTML = g.log.slice(-5).map((e, i, arr) => {
+    const who = e.params && byName(e.params.name);
+    return `<li style="--age:${arr.length - 1 - i}">${who ? `<span class="pdot" style="--pc:${colorOf(who.id)}"></span>` : ''}${esc(fmtLog(e))}</li>`;
+  }).join('');
 
   // the card just drawn
   const card = g.lastCard;
@@ -745,7 +823,11 @@ document.addEventListener('pointerdown', e => { if (!e.target.closest('#playerMe
 
 // ---------- trade window ----------
 // Mirrors the server's fairness rules so players see the problem before sending.
-const JAIL_CARD_VALUE = 500;
+const JAIL_CARD_VALUE = 50;
+const sideValue = x => {
+  const g = state.game;
+  return x.props.reduce((tt, sq) => tt + (g.props[sq] && g.props[sq].mortgaged ? BOARD.squares[sq].price / 2 : BOARD.squares[sq].price), 0) + x.cash + x.cards * JAIL_CARD_VALUE;
+};
 function tradeCheck(from, to, give, take) {
   const g = state.game;
   const val = sq => (g.props[sq].mortgaged ? BOARD.squares[sq].price / 2 : BOARD.squares[sq].price);
@@ -783,10 +865,12 @@ function renderTrade() {
   const side = (pid, key) => {
     const set = deal[key];
     const cashKey = key + 'Cash', cardKey = key + 'Cards';
+    const v = sideValue({ props: [...set], cash: deal[cashKey], cards: deal[cardKey] });
     return `<div class="trade-side">
-      <h4>${esc(t(key === 'give' ? 'mono.trade.give' : 'mono.trade.get'))} <span class="muted">· ${esc(nameOf(pid))} ${money(gp(pid).cash)}</span></h4>
+      <div class="side-head"><h4>${esc(t(key === 'give' ? 'mono.trade.give' : 'mono.trade.get'))}</h4><span class="side-value">${money(v)}</span></div>
+      <div class="side-who">${pieceOf(pid)}<span>${esc(nameOf(pid))}</span><span class="muted">${money(gp(pid).cash)}</span></div>
       <div class="deed-grid">${tradeable(pid).map(sq => tile(sq, set, key)).join('') || '<span class="muted small-text">—</span>'}</div>
-      <label class="tcash">${esc(t('mono.trade.cash'))} <input type="number" min="0" step="100" max="${gp(pid).cash}" data-num="${cashKey}" value="${deal[cashKey]}"></label>
+      <label class="tcash">${esc(t('mono.trade.cash'))} <input type="number" min="0" step="10" max="${gp(pid).cash}" data-num="${cashKey}" value="${deal[cashKey]}"></label>
       ${gp(pid).jailCards ? `<label class="tcash">${esc(t('mono.trade.cards'))} <input type="number" min="0" max="${gp(pid).jailCards}" data-num="${cardKey}" value="${deal[cardKey]}"></label>` : ''}
     </div>`;
   };
@@ -815,7 +899,7 @@ function renderDeal() {
   const tr = state.phase === 'playing' && g.trades.length ? g.trades[g.trades.length - 1] : null;
   if (!tr) { box.classList.add('hidden'); box.dataset.id = ''; return; }
   const me = state.me.id;
-  const sideHtml = (pid, x) => `<div class="deal-side"><div class="deal-who">${pieceOf(pid)}<b>${esc(t('mono.deal.gives', { name: nameOf(pid) }))}</b></div>
+  const sideHtml = (pid, x) => `<div class="deal-side"><div class="deal-who">${pieceOf(pid)}<b>${esc(t('mono.deal.gives', { name: nameOf(pid) }))}</b><span class="side-value">${money(sideValue(x))}</span></div>
     <div class="deal-items">${x.props.map(sq => `<span class="deal-prop g-${BOARD.squares[sq].group || BOARD.squares[sq].type}"><i></i>${esc(sqShort(sq))}</span>`).join('')}
     ${x.cash ? `<span class="deal-cash">${money(x.cash)}</span>` : ''}${x.cards ? `<span class="deal-cash">${esc(t('mono.trade.cards'))} ×${x.cards}</span>` : ''}
     ${!x.props.length && !x.cash && !x.cards ? `<span class="muted">${esc(t('mono.trade.nothing'))}</span>` : ''}</div></div>`;

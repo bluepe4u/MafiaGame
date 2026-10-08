@@ -98,6 +98,56 @@ body.mono[data-phase="playing"] main, body.mono[data-phase="ended"] main { max-w
 .sq.mortgaged .sq-body { opacity: .5; }
 .sq.mortgaged .tag-price { background: #6b7280; }
 
+/* ---------- drawings on the special squares ---------- */
+.art { display: block; width: auto; flex: none; }
+.only-art { padding: 0 !important; }
+.sq.bottom .only-art, .sq.top .only-art { padding: 10% 0 22% !important; }
+.sq.top .only-art { padding: 22% 0 10% !important; }
+.sq.left .only-art { padding: 0 6% 18% !important; } .sq.right .only-art { padding: 0 6% 18% !important; }
+.t-chance .only-art, .t-chest .only-art { padding: 6% !important; }
+.art-chance { height: 74%; max-height: 78px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, .15)); }
+.sq.left .art-chance, .sq.right .art-chance { height: 82%; }
+.art-chest { width: 72%; max-width: 70px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, .15)); }
+.sq.left .art-chest, .sq.right .art-chest { width: auto; height: 74%; }
+.art-bulb, .art-tap, .art-coins, .art-ring { height: 56%; max-height: 54px; }
+.sq.left .art-bulb, .sq.right .art-bulb, .sq.left .art-tap, .sq.right .art-tap,
+.sq.left .art-coins, .sq.right .art-coins, .sq.left .art-ring, .sq.right .art-ring { height: 62%; }
+.t-railway .sq-body { gap: 2px; }
+.art-train { width: 76%; max-width: 64px; }
+.sq.left .art-train, .sq.right .art-train { width: auto; height: 46%; }
+/* corners */
+.corner-art { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6%; padding: 8%; }
+.corner-name { font-weight: 800; text-transform: uppercase; font-size: .95em; line-height: 1.05; }
+.art-car { width: 78%; } .art-police { width: 62%; }
+.t-parking .corner-name { color: #b91c1c; } .t-gotojail .corner-name { color: #1e3a8a; }
+.go-art { transform: rotate(-45deg); gap: 2px; }
+.go-word { font-weight: 900; font-size: 1.7em; color: #b91c1c; letter-spacing: .02em; line-height: 1; }
+.art-arrow { width: 74%; }
+.go-sal { font-family: var(--mono); font-weight: 700; font-size: .95em; color: #166534; }
+/* jail: the barred cell in the inner corner, "just visiting" round the outer edges */
+.jail-art { position: absolute; inset: 0; }
+.jail-cell { position: absolute; top: 0; right: 0; width: 70%; height: 70%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: #fed7aa; border-left: 1.5px solid #3c4a41; border-bottom: 1.5px solid #3c4a41; }
+.jail-cell .art-bars { width: 62%; }
+.jail-cell b { font-weight: 900; text-transform: uppercase; font-size: .9em; color: #7c2d12; }
+.visit { position: absolute; font-weight: 800; text-transform: uppercase; font-size: .78em; color: #374151; letter-spacing: .04em; white-space: nowrap; }
+.visit-l { left: 0; top: 0; width: 30%; height: 70%; writing-mode: vertical-rl; transform: rotate(180deg); display: flex; align-items: center; justify-content: center; }
+.visit-b { bottom: 0; left: 30%; right: 0; height: 30%; display: flex; align-items: center; justify-content: center; }
+.t-chance:hover, .t-chest:hover { background: #fffaf0; }
+
+/* trade window / deal: each side's total */
+.side-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.side-value { font-family: var(--mono); font-weight: 700; color: var(--gold); background: rgba(245, 197, 66, .12); padding: 2px 9px; border-radius: 99px; font-size: .9rem; }
+.side-who { display: flex; align-items: center; gap: 8px; font-size: .86rem; }
+.deal-who .side-value { margin-left: auto; color: #166534; background: #dcfce7; }
+
+/* bank and feed */
+.bank-info { display: flex; gap: 14px; align-items: center; color: var(--muted); font-family: var(--mono); font-weight: 600; }
+.bank-item { display: inline-flex; align-items: center; gap: 6px; }
+.bank-item .house { width: 11px; height: 11px; }
+.bank-item .hotel { width: 20px; height: 10px; }
+.bank-item .art-car { width: 26px; }
+.pdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--pc); margin-right: 7px; vertical-align: 1px; box-shadow: 0 0 0 1.5px #fff; }
+
 /* ---------- centre of the board ---------- */
 .board-center {
   position: absolute; left: 13.9%; right: 13.9%; top: 13.9%; bottom: 13.9%;

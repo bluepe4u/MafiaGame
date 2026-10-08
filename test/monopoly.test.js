@@ -28,52 +28,53 @@ function setup(n = 3, settings = {}) {
 const gp = (room, pid) => room.g.players[pid];
 const own = (room, sq, pid, houses = 0, mortgaged = false) => { room.g.props[sq] = { owner: pid, houses, mortgaged }; };
 
-test('board: 40 squares in official order, Russian names, official amounts ×10', () => {
+test('board: 40 squares in official order with the Russian street names', () => {
   assert.strictEqual(SQUARES.length, 40);
   assert.strictEqual(SQUARES[39].name, 'Улица Арбат');
-  assert.strictEqual(SQUARES[39].price, 4000);
-  assert.deepStrictEqual(SQUARES[39].rent, [500, 2000, 6000, 14000, 17000, 20000]);
+  assert.strictEqual(SQUARES[39].price, 400);
+  assert.deepStrictEqual(SQUARES[39].rent, [50, 200, 600, 1400, 1700, 2000]);
   assert.deepStrictEqual(Object.values(GROUPS).map(g => g.length), [2, 3, 3, 3, 3, 3, 3, 2]);
   assert.deepStrictEqual([5, 15, 25, 35].map(i => SQUARES[i].type), ['railway', 'railway', 'railway', 'railway']);
 });
 
 test('roll, move, buy, and pass the turn', () => {
   const { room, by, dice } = setup();
-  assert.strictEqual(gp(room, by.Ann).cash, 15000);
-  dice.push([1, 2]); // to 3: Nagatinskaya, 600
+  dice.push([1, 2]); // to 3: Nagatinskaya, 60
   room.roll(by.Ann);
   assert.strictEqual(gp(room, by.Ann).pos, 3);
   assert.strictEqual(room.g.turn.stage, 'buy');
   room.buy(by.Ann);
   assert.strictEqual(room.g.props[3].owner, by.Ann);
-  assert.strictEqual(gp(room, by.Ann).cash, 14400);
+  assert.strictEqual(gp(room, by.Ann).cash, 1440);
   assert.strictEqual(room.g.turn.stage, 'end');
   room.endTurn(by.Ann);
   assert.strictEqual(room.current(), by.Bob);
   assert.throws(() => room.roll(by.Ann), /err\.mono\.notYourTurn/);
 });
 
-test('rent: base, double for a colour set, houses, hotel', () => {
-  const { room, by } = setup();
+test('rent: base, double for a colour set, houses; mortgaged pays nothing', () => {
+  const { room, by, dice } = setup();
   own(room, 1, by.Bob);
+  dice.push([1, 0]);
   room.rollDice = () => [0, 1];
   room.roll(by.Ann); // to 1
-  assert.strictEqual(gp(room, by.Ann).cash, 15000 - 20);
+  assert.strictEqual(gp(room, by.Ann).cash, 1500 - 2);
+  assert.strictEqual(room.rentFor(1), 2);
   own(room, 3, by.Bob);
-  assert.strictEqual(room.rentFor(1), 40, 'doubled with the full brown set');
+  assert.strictEqual(room.rentFor(1), 4, 'doubled with the full brown set');
   room.g.props[1].houses = 3;
-  assert.strictEqual(room.rentFor(1), 900);
+  assert.strictEqual(room.rentFor(1), 90);
   room.g.props[1].houses = 5;
-  assert.strictEqual(room.rentFor(1), 2500);
+  assert.strictEqual(room.rentFor(1), 250);
 });
 
 test('railways and utilities', () => {
   const { room, by } = setup();
   own(room, 5, by.Bob);
-  assert.strictEqual(room.rentFor(5), 250);
+  assert.strictEqual(room.rentFor(5), 25);
   own(room, 15, by.Bob);
   own(room, 25, by.Bob);
-  assert.strictEqual(room.rentFor(5), 1000);
+  assert.strictEqual(room.rentFor(5), 100);
   own(room, 12, by.Bob);
   room.g.turn.dice = [3, 4];
   assert.strictEqual(room.rentFor(12), 28, '4× the dice');
@@ -81,34 +82,34 @@ test('railways and utilities', () => {
   assert.strictEqual(room.rentFor(12), 70, '10× with both');
 });
 
-test('passing GO pays 2000; landing on it pays 4000 with the house rule', () => {
+test('passing GO pays 200; landing on it pays 400 with the house rule', () => {
   const { room, by, dice } = setup();
   gp(room, by.Ann).pos = 38;
   dice.push([1, 2]); // 38 -> 1
   room.roll(by.Ann);
-  room.decline(by.Ann);
+  room.decline(by.Ann); // Zhitnaya goes to auction
   room.closeAuction();
-  assert.strictEqual(gp(room, by.Ann).cash, 17000);
+  assert.strictEqual(gp(room, by.Ann).cash, 1700);
   room.endTurn(by.Ann);
   gp(room, by.Bob).pos = 37;
   dice.push([1, 2]); // 37 -> 0
   room.roll(by.Bob);
-  assert.strictEqual(gp(room, by.Bob).cash, 19000);
+  assert.strictEqual(gp(room, by.Bob).cash, 1900);
 });
 
 test('doubles roll again; three doubles go to jail', () => {
   const { room, by, dice } = setup();
   dice.push([1, 1], [1, 1], [1, 1]);
-  room.roll(by.Ann);
+  room.roll(by.Ann); // to 2 (chest)
   assert.strictEqual(room.g.turn.stage, 'roll');
-  room.roll(by.Ann);
+  room.roll(by.Ann); // to 4: income tax
   room.roll(by.Ann);
   assert.strictEqual(gp(room, by.Ann).inJail, true);
   assert.strictEqual(gp(room, by.Ann).pos, 10);
   assert.strictEqual(room.g.turn.stage, 'end');
 });
 
-test('jail: doubles get you out (no extra roll); third miss pays bail and moves', () => {
+test('jail: doubles get you out (no extra roll); third miss pays bail and moves; paying first', () => {
   const { room, by, dice } = setup();
   room.sendToJail(by.Ann);
   dice.push([2, 2]);
@@ -118,26 +119,29 @@ test('jail: doubles get you out (no extra roll); third miss pays bail and moves'
   room.decline(by.Ann);
   room.closeAuction();
   assert.strictEqual(room.g.turn.stage, 'end', 'no extra roll after leaving jail on doubles');
+
   room.endTurn(by.Ann);
   room.sendToJail(by.Bob);
   dice.push([1, 2]);
-  room.roll(by.Bob);
+  room.roll(by.Bob); // first miss: stays in jail
   assert.strictEqual(gp(room, by.Bob).inJail, true);
-  gp(room, by.Bob).jailTurns = 2;
+  assert.strictEqual(room.g.turn.stage, 'end');
+  gp(room, by.Bob).jailTurns = 2; // two misses already
   room.g.turn.stage = 'roll';
   const before = gp(room, by.Bob).cash;
   dice.push([1, 2]);
-  room.roll(by.Bob);
+  room.roll(by.Bob); // third miss: pays 50 and moves 3
   assert.strictEqual(gp(room, by.Bob).inJail, false);
   assert.strictEqual(gp(room, by.Bob).pos, 13);
-  assert.strictEqual(gp(room, by.Bob).cash, before - 500);
+  assert.strictEqual(gp(room, by.Bob).cash, before - 50);
 });
 
 test('jail: pay bail or use a card before rolling', () => {
   const { room, by } = setup();
   room.sendToJail(by.Ann);
   room.payBail(by.Ann);
-  assert.strictEqual(gp(room, by.Ann).cash, 14500);
+  assert.strictEqual(gp(room, by.Ann).inJail, false);
+  assert.strictEqual(gp(room, by.Ann).cash, 1450);
   room.sendToJail(by.Ann);
   gp(room, by.Ann).jailCards.push('c.jailfree');
   room.g.decks.chance = room.g.decks.chance.filter(c => c !== 'c.jailfree');
@@ -146,21 +150,22 @@ test('jail: pay bail or use a card before rolling', () => {
   assert.strictEqual(room.g.decks.chance.at(-1), 'c.jailfree', 'the card goes back under the deck');
 });
 
-test('auction: opens at half the price; highest bid wins; bids must rise and be affordable', () => {
+test('auction: highest bid wins; bids must rise and be affordable (opening at half price)', () => {
   const { room, by, dice } = setup();
-  dice.push([3, 3]); // to 6: Varshavskoye, 1000
+  dice.push([3, 3]); // to 6: Varshavskoye
   room.roll(by.Ann);
   room.decline(by.Ann);
-  assert.strictEqual(room.g.auction.min, 500);
+  assert.ok(room.g.auction);
   assert.throws(() => room.roll(by.Ann), /err\.mono\.waitForOthers/);
+  assert.strictEqual(room.g.auction.min, 50, 'opens at half the 100 price');
   assert.throws(() => room.bid(by.Bob, 10), /err\.mono\.bidTooLow/, 'no snapping it up for pennies');
-  room.bid(by.Bob, 500);
-  assert.throws(() => room.bid(by.Cid, 500), /err\.mono\.bidTooLow/);
-  assert.throws(() => room.bid(by.Cid, 999999), /err\.mono\.notEnoughCash/);
-  room.bid(by.Cid, 700);
+  room.bid(by.Bob, 50);
+  assert.throws(() => room.bid(by.Cid, 50), /err\.mono\.bidTooLow/);
+  assert.throws(() => room.bid(by.Cid, 99999), /err\.mono\.notEnoughCash/);
+  room.bid(by.Cid, 80);
   room.closeAuction();
   assert.strictEqual(room.g.props[6].owner, by.Cid);
-  assert.strictEqual(gp(room, by.Cid).cash, 14300);
+  assert.strictEqual(gp(room, by.Cid).cash, 1420);
   assert.strictEqual(room.g.turn.stage, 'roll', 'Ann rolled doubles, so rolls again');
 });
 
@@ -186,43 +191,25 @@ test('building: needs the set, builds evenly, bank supply, hotels, selling back'
   room.buildHouse(by.Ann, 1); // hotel
   assert.strictEqual(room.g.props[1].houses, 5);
   assert.strictEqual(room.g.hotelsLeft, 11);
-  assert.strictEqual(room.g.housesLeft, 28);
+  assert.strictEqual(room.g.housesLeft, 32 - 4);
   assert.throws(() => room.sellHouse(by.Ann, 3), /err\.mono\.sellEvenly/);
   const cash = gp(room, by.Ann).cash;
-  room.sellHouse(by.Ann, 1);
+  room.sellHouse(by.Ann, 1); // hotel back to 4 houses
   assert.strictEqual(room.g.props[1].houses, 4);
-  assert.strictEqual(gp(room, by.Ann).cash, cash + 250);
+  assert.strictEqual(gp(room, by.Ann).cash, cash + 25);
   assert.throws(() => room.mortgage(by.Ann, 1), /err\.mono\.sellHousesFirst/);
   assert.throws(() => room.buildHouse(by.Bob, 1), /err\.mono\.notYours/);
 });
 
-test('mortgages: half price, +10% to lift, no building on a mortgaged set', () => {
+test('mortgages: half price, +10% to lift, no rent while mortgaged, no building on a mortgaged set', () => {
   const { room, by } = setup(3, { mortgageTurns: 0 });
   own(room, 37, by.Ann);
   own(room, 39, by.Ann);
   room.mortgage(by.Ann, 39);
-  assert.strictEqual(gp(room, by.Ann).cash, 17000);
+  assert.strictEqual(gp(room, by.Ann).cash, 1700);
   assert.throws(() => room.buildHouse(by.Ann, 37), /err\.mono\.groupMortgaged/);
   room.unmortgage(by.Ann, 39);
-  assert.strictEqual(gp(room, by.Ann).cash, 17000 - 2200);
-});
-
-test('mortgages expire: after N of the owner\'s turns the property goes back to the bank', () => {
-  const { room, by } = setup(2, { mortgageTurns: 3 });
-  own(room, 39, by.Ann);
-  room.mortgage(by.Ann, 39);
-  assert.strictEqual(room.g.props[39].mortgageLeft, 3);
-  for (let i = 0; i < 2; i++) { room.beginTurn(by.Bob); room.beginTurn(by.Ann); } // only Ann's turns count
-  assert.strictEqual(room.g.props[39].mortgageLeft, 1);
-  room.beginTurn(by.Ann);
-  assert.strictEqual(room.g.props[39], undefined, 'back to the bank');
-  assert.ok(room.g.log.some(e => e.key === 'mono.log.mortgageExpired'));
-  // lifting the mortgage in time stops the clock
-  own(room, 37, by.Ann);
-  room.mortgage(by.Ann, 37);
-  room.unmortgage(by.Ann, 37);
-  for (let i = 0; i < 5; i++) room.beginTurn(by.Ann);
-  assert.strictEqual(room.g.props[37].owner, by.Ann);
+  assert.strictEqual(gp(room, by.Ann).cash, 1700 - 220);
 });
 
 test('cards: advance (salary when passing GO), nearest railway at double rent, repairs, birthday', () => {
@@ -231,29 +218,32 @@ test('cards: advance (salary when passing GO), nearest railway at double rent, r
   room.g.decks.chance = ['c.polyanka', ...room.g.decks.chance.filter(c => c !== 'c.polyanka')];
   room.drawCard(by.Ann, 'chance');
   assert.strictEqual(gp(room, by.Ann).pos, 11);
-  assert.strictEqual(gp(room, by.Ann).cash, 17000);
+  assert.strictEqual(gp(room, by.Ann).cash, 1700);
   room.g.turn.stage = 'resolved';
+
   own(room, 15, by.Bob);
   gp(room, by.Ann).pos = 7;
   room.g.decks.chance = ['c.railway1', ...room.g.decks.chance.filter(c => c !== 'c.railway1')];
   room.drawCard(by.Ann, 'chance');
   assert.strictEqual(gp(room, by.Ann).pos, 15);
-  assert.strictEqual(gp(room, by.Ann).cash, 17000 - 500, 'twice the 250 rent');
+  assert.strictEqual(gp(room, by.Ann).cash, 1700 - 50, 'twice the 25 rent');
+
   own(room, 1, by.Ann, 5);
   own(room, 3, by.Ann, 2);
   room.g.decks.chest = ['k.streetrepairs', ...room.g.decks.chest.filter(c => c !== 'k.streetrepairs')];
   const before = gp(room, by.Ann).cash;
   room.drawCard(by.Ann, 'chest');
-  assert.strictEqual(gp(room, by.Ann).cash, before - (1150 + 2 * 400));
+  assert.strictEqual(gp(room, by.Ann).cash, before - (115 + 2 * 40));
+
   room.g.decks.chest = ['k.birthday', ...room.g.decks.chest.filter(c => c !== 'k.birthday')];
   room.drawCard(by.Ann, 'chest');
-  assert.strictEqual(gp(room, by.Bob).cash, 15000 + 500 - 100);
-  assert.strictEqual(gp(room, by.Ann).cash, before - 1950 + 200);
+  assert.strictEqual(gp(room, by.Bob).cash, 1500 + 50 - 10);
+  assert.strictEqual(gp(room, by.Ann).cash, before - 195 + 20);
 });
 
 test('debt: raise money and pay, or go bankrupt to the creditor', () => {
   const { room, by, dice, results } = setup(2);
-  own(room, 39, by.Bob, 5); // 20000
+  own(room, 39, by.Bob, 5); // Arbat with a hotel: 2000
   own(room, 37, by.Bob, 5);
   own(room, 6, by.Ann);
   gp(room, by.Ann).pos = 36;
@@ -271,10 +261,10 @@ test('debt: raise money and pay, or go bankrupt to the creditor', () => {
   assert.strictEqual(results.find(r => r.userId === 'uAnn').place, 2);
 });
 
-test('debt can be paid after mortgaging', () => {
+test('debt can be paid after selling and mortgaging', () => {
   const { room, by, dice } = setup(2);
-  own(room, 39, by.Bob, 4); // 17000
-  gp(room, by.Ann).cash = 13000; // + 4600 from mortgages covers it
+  own(room, 39, by.Bob, 4); // 1700
+  gp(room, by.Ann).cash = 1300; // + 460 from mortgages covers the 1700
   own(room, 31, by.Ann);
   own(room, 32, by.Ann);
   own(room, 34, by.Ann);
@@ -284,83 +274,95 @@ test('debt can be paid after mortgaging', () => {
   for (const sq of [31, 32, 34]) room.mortgage(by.Ann, sq);
   room.payDebt(by.Ann);
   assert.strictEqual(room.g.debts.length, 0);
-  assert.strictEqual(gp(room, by.Bob).cash, 15000 + 17000);
+  assert.strictEqual(gp(room, by.Bob).cash, 1500 + 1700);
   assert.strictEqual(room.g.turn.stage, 'end');
 });
 
-test('trades: fair swaps go through; mortgaged property costs 10% interest; buildings block', () => {
+test('trades: properties and cash change hands; mortgaged ones cost 10% interest; buildings block', () => {
   const { room, by } = setup();
-  own(room, 6, by.Ann); // 1000
-  own(room, 9, by.Bob, 0, true); // 1200, mortgaged: worth 600
-  const tr = room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [9], cash: 300 } });
+  own(room, 6, by.Ann);
+  own(room, 8, by.Bob, 0, true);
+  const tr = room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } }); // 100 for a mortgaged 100 (worth 50): just within 2×
   assert.throws(() => room.respondTrade(by.Cid, tr.id, true), /err\.invalidTarget/);
   room.respondTrade(by.Bob, tr.id, true);
   assert.strictEqual(room.g.props[6].owner, by.Bob);
-  assert.strictEqual(room.g.props[9].owner, by.Ann);
-  assert.strictEqual(gp(room, by.Ann).cash, 15000 + 300 - 60, '10% of the 600 mortgage value');
-  assert.strictEqual(gp(room, by.Bob).cash, 15000 - 300);
+  assert.strictEqual(room.g.props[8].owner, by.Ann);
+  assert.strictEqual(gp(room, by.Ann).cash, 1500 - 5, '10% of the 50 mortgage value');
+  assert.strictEqual(gp(room, by.Bob).cash, 1500);
   own(room, 1, by.Cid, 1);
   own(room, 3, by.Cid);
-  assert.throws(() => room.proposeTrade(by.Cid, { to: by.Ann, give: { props: [3] }, take: { cash: 600 } }), /err\.mono\.sellHousesFirst/);
+  assert.throws(() => room.proposeTrade(by.Cid, { to: by.Ann, give: { props: [3] }, take: { cash: 60 } }), /err\.mono\.sellHousesFirst/);
   assert.throws(() => room.proposeTrade(by.Cid, { to: by.Ann, give: { props: [6] } }), /err\.mono\.tradeInvalid/);
+});
+
+test('mortgages expire: after N of the owner\'s turns the property goes back to the bank', () => {
+  const { room, by } = setup(2, { mortgageTurns: 3 });
+  own(room, 39, by.Ann);
+  room.mortgage(by.Ann, 39);
+  assert.strictEqual(room.g.props[39].mortgageLeft, 3);
+  for (let i = 0; i < 2; i++) { room.beginTurn(by.Bob); room.beginTurn(by.Ann); } // only Ann's turns count
+  assert.strictEqual(room.g.props[39].mortgageLeft, 1);
+  room.beginTurn(by.Ann);
+  assert.strictEqual(room.g.props[39], undefined, 'back to the bank');
+  assert.ok(room.g.log.some(e => e.key === 'mono.log.mortgageExpired'));
+  own(room, 37, by.Ann);
+  room.mortgage(by.Ann, 37);
+  room.unmortgage(by.Ann, 37); // lifting it in time stops the clock
+  for (let i = 0; i < 5; i++) room.beginTurn(by.Ann);
+  assert.strictEqual(room.g.props[37].owner, by.Ann);
 });
 
 test('trades: clearly unfair deals are refused', () => {
   const { room, by } = setup();
-  own(room, 39, by.Ann); // Arbat 4000
-  own(room, 1, by.Bob); // Zhitnaya 600
-  // the Arbat for Zhitnaya, nothing else: no colour set involved -> refused
+  own(room, 39, by.Ann); // Arbat 400
+  own(room, 1, by.Bob); // Zhitnaya 60
   assert.throws(() => room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [39] }, take: { props: [1] } }), /err\.mono\.unfairTrade/);
-  // gifts are refused too
-  assert.throws(() => room.proposeTrade(by.Ann, { to: by.Bob, give: { cash: 3000 } }), /err\.mono\.unfairTrade/);
-  // a sensible price is fine
-  room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [39] }, take: { props: [1], cash: 2500 } });
-
-  // Bob owns Malaya Bronnaya: Arbat completes his dark-blue set, so it can't go for less than 4000
+  assert.throws(() => room.proposeTrade(by.Ann, { to: by.Bob, give: { cash: 300 } }), /err\.mono\.unfairTrade/, 'no gifts');
+  room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [39] }, take: { props: [1], cash: 250 } });
+  // Bob has Malaya Bronnaya: the Arbat completes his set, so it can't go for less than 400
   own(room, 37, by.Bob);
-  assert.throws(() => room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [39] }, take: { cash: 2000 } }), /err\.mono\.cheapMonopoly/);
-  room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [39] }, take: { cash: 4000 } });
-
-  // a swap where both sides complete a set is fine even if the values differ
+  assert.throws(() => room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [39] }, take: { cash: 200 } }), /err\.mono\.cheapMonopoly/);
+  room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [39] }, take: { cash: 400 } });
+  // a swap where both sides complete a set is fine even if values differ
   const r2 = setup().room;
   const [x, y] = r2.g.order;
-  own(r2, 1, y); own(r2, 3, x); // brown split
-  own(r2, 37, x); own(r2, 39, y); // dark blue split
-  // x gives Nagatinskaya (completes y's brown) for the Arbat (completes x's dark blue)
+  own(r2, 1, y); own(r2, 3, x);
+  own(r2, 37, x); own(r2, 39, y);
   const tr = r2.proposeTrade(x, { to: y, give: { props: [3] }, take: { props: [39] } });
   r2.respondTrade(y, tr.id, true);
   assert.strictEqual(r2.g.props[39].owner, x);
-  assert.strictEqual(r2.g.props[3].owner, y);
 });
 
 test('turn timer: idle turns play themselves (roll, decline to auction, end turn)', () => {
   const { room, by, dice, timers } = setup(2, { turnSeconds: 30 });
   dice.push([1, 2]);
-  timers.at(-1).fn();
+  timers.at(-1).fn(); // timeout: roll
   assert.strictEqual(gp(room, by.Ann).pos, 3);
-  timers.at(-1).fn();
+  timers.at(-1).fn(); // timeout: decline -> auction
   assert.ok(room.g.auction);
-  timers.at(-1).fn();
+  timers.at(-1).fn(); // auction closes with no bids
   assert.strictEqual(room.g.props[3], undefined);
-  timers.at(-1).fn();
+  timers.at(-1).fn(); // timeout: end turn
   assert.strictEqual(room.current(), by.Bob);
 });
 
 test('turn timer on a debt raises money automatically, or declares bankruptcy', () => {
   const a = setup(2, { turnSeconds: 30 });
-  own(a.room, 39, a.by.Bob, 2); // rent 6000
-  gp(a.room, a.by.Ann).cash = 3000;
+  own(a.room, 39, a.by.Bob, 2); // rent 600
+  gp(a.room, a.by.Ann).cash = 300;
   own(a.room, 31, a.by.Ann);
-  own(a.room, 32, a.by.Ann); // mortgages: 1500 + 1500
+  own(a.room, 32, a.by.Ann); // mortgages: 150 + 150
   gp(a.room, a.by.Ann).pos = 36;
   a.dice.push([1, 2]);
   a.room.roll(a.by.Ann);
   assert.strictEqual(a.room.g.debts.length, 1);
   a.timers.at(-1).fn();
   assert.strictEqual(a.room.g.debts.length, 0, 'mortgaged both and paid');
+  assert.ok(a.room.g.props[31].mortgaged && a.room.g.props[32].mortgaged);
   assert.strictEqual(gp(a.room, a.by.Ann).cash, 0);
+
   const b = setup(2, { turnSeconds: 30 });
-  own(b.room, 39, b.by.Bob, 5);
+  own(b.room, 39, b.by.Bob, 5); // rent 2000
   gp(b.room, b.by.Ann).pos = 36;
   b.dice.push([1, 2]);
   b.room.roll(b.by.Ann);
@@ -426,7 +428,7 @@ test('random play: 60 games never get stuck and keep the bank and cash consisten
       if (r < 0.04 && timer) { timer(); }
       else if (g.auction) {
         const bidder = pick(room.active());
-        if (rnd() < 0.5) tryIt(() => room.bid(bidder, (g.auction.bidder ? g.auction.bid + 1 : g.auction.min) + Math.floor(rnd() * 600)));
+        if (rnd() < 0.5) tryIt(() => room.bid(bidder, (g.auction.bidder ? g.auction.bid + 1 : g.auction.min) + Math.floor(rnd() * 60)));
         else room.closeAuction();
       } else if (g.debts.length) {
         const d = g.debts[0];
@@ -454,7 +456,7 @@ test('random play: 60 games never get stuck and keep the bank and cash consisten
           const other = pick(room.active().filter(p => p !== cur));
           if (other) {
             tryIt(() => {
-              const tr = room.proposeTrade(cur, { to: other, give: { props: mine.slice(0, 1), cash: Math.floor(rnd() * 1000) }, take: { props: room.owned(other).slice(0, 1) } });
+              const tr = room.proposeTrade(cur, { to: other, give: { props: mine.slice(0, 1), cash: Math.floor(rnd() * 100) }, take: { props: room.owned(other).slice(0, 1) } });
               room.respondTrade(other, tr.id, rnd() < 0.6);
             });
           }

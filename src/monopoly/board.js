@@ -4,8 +4,8 @@
 // Russian edition (Moscow streets). Amounts are in ₽ at the official values.
 //
 // rent: [base, 1 house, 2, 3, 4, hotel]; mortgage is half the price; unmortgaging costs +10%.
-// All money is the official amount ×10 (easier to read: 15 000 ₽ to start, 2 000 ₽ salary).
-const SCALE = 10;
+// Money is at the official amounts (SCALE stays here in case the group wants bigger numbers).
+const SCALE = 1;
 
 const street = (name, en, group, price, rent, house) => ({ type: 'street', name, en, group, price: price * SCALE, rent: rent.map(r => r * SCALE), house: house * SCALE });
 const railway = (name, en) => ({ type: 'railway', name, en, price: 200 * SCALE });
@@ -104,10 +104,12 @@ const CHEST = [
 // Short names for drawing on the board (full names are on the title-deed cards).
 const SHORT = {
   'Общественная казна': ['Казна', 'Chest'],
+  'Бесплатная стоянка': ['Стоянка', 'Parking'],
+  'Отправляйтесь в тюрьму': ['В тюрьму!', 'Go to jail'],
   'Житная улица': ['Житная', 'Zhitnaya'],
   'Нагатинская улица': ['Нагатинская', 'Nagatinskaya'],
   'Подоходный налог': ['Подоходный налог', 'Income Tax'],
-  'Рижская железная дорога': ['Рижская ж/д', 'Riga Rly'],
+  'Рижская железная дорога': ['Рижская', 'Riga'],
   'Варшавское шоссе': ['Варшавское ш.', 'Varshavskoye'],
   'Улица Огарёва': ['Огарёва', 'Ogaryova'],
   '1-я Парковая улица': ['1-я Парковая', '1st Parkovaya'],
@@ -115,14 +117,14 @@ const SHORT = {
   'Электростанция': ['Электро­станция', 'Electric Co'],
   'Улица Сретенка': ['Сретенка', 'Sretenka'],
   'Ростовская набережная': ['Ростовская наб.', 'Rostovskaya Emb'],
-  'Курская железная дорога': ['Курская ж/д', 'Kursk Rly'],
+  'Курская железная дорога': ['Курская', 'Kursk'],
   'Рязанский проспект': ['Рязанский пр.', 'Ryazansky Ave'],
   'Улица Вавилова': ['Вавилова', 'Vavilova'],
   'Рублёвское шоссе': ['Рублёвское ш.', 'Rublyovka'],
   'Улица Тверская': ['Тверская', 'Tverskaya'],
   'Пушкинская улица': ['Пушкинская', 'Pushkinskaya'],
   'Площадь Маяковского': ['Пл. Маяковского', 'Mayakovsky Sq'],
-  'Казанская железная дорога': ['Казанская ж/д', 'Kazan Rly'],
+  'Казанская железная дорога': ['Казанская', 'Kazan'],
   'Улица Грузинский Вал': ['Грузинский Вал', 'Gruzinsky Val'],
   'Новинский бульвар': ['Новинский б-р', 'Novinsky Blvd'],
   'Водопровод': ['Водопровод', 'Water Works'],
@@ -130,7 +132,7 @@ const SHORT = {
   'Улица Щусева': ['Щусева', 'Shchuseva'],
   'Гоголевский бульвар': ['Гоголевский б-р', 'Gogolevsky Blvd'],
   'Кутузовский проспект': ['Кутузовский пр.', 'Kutuzovsky Ave'],
-  'Ленинградская железная дорога': ['Ленинградская ж/д', 'Leningrad Rly'],
+  'Ленинградская железная дорога': ['Ленинградская', 'Leningrad'],
   'Улица Малая Бронная': ['Малая Бронная', 'Malaya Bronnaya'],
   'Сверхналог': ['Сверхналог', 'Luxury Tax'],
   'Улица Арбат': ['Арбат', 'Arbat'],
