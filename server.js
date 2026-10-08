@@ -21,7 +21,9 @@ const users = new UserStore(DATA_DIR);
 
 const app = express();
 app.set('trust proxy', 'loopback'); // behind Caddy: use its X-Forwarded-Proto/Host for invite links
-app.use(express.static(path.join(__dirname, 'public')));
+// browsers re-check the page's files on every load (cheap: unchanged files answer 304), so
+// nobody keeps running an old version after an update
+app.use(express.static(path.join(__dirname, 'public'), { setHeaders: res => res.setHeader('Cache-Control', 'no-cache') }));
 app.use('/avatars', express.static(users.avatarDir, { maxAge: '30d', immutable: true, index: false }));
 app.get('/health', (_req, res) => res.send('ok'));
 

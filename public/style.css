@@ -334,10 +334,14 @@ body[data-phase="ended"] .phase-icon { color: var(--good); }
 @keyframes toast { from { opacity: 0; transform: translate(-50%, 12px); } }
 
 .lang-select {
-  font: inherit; font-size: .8rem; color: var(--text); cursor: pointer; background: var(--surface-2);
+  font: inherit; font-size: .8rem; color: var(--text); cursor: pointer; background: #1b1b24;
   border: 1px solid var(--border); border-radius: 9px; padding: 6px 10px;
 }
 .lang-select:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(139, 124, 255, .45); }
+/* the open dropdown list is drawn by the browser: give it a solid dark background, or Chrome
+   shows our light text on its default white list */
+select { color-scheme: dark; }
+select option, select optgroup { background: #1b1b24; color: #f1f1f4; }
 
 /* ---------- quality-of-life additions ---------- */
 .icon-btn { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; border-radius: 10px; background: var(--surface-2); color: var(--muted); }
@@ -821,7 +825,7 @@ body.halloween .gift-title { font-family: var(--display); color: #ffb35c; }
 .admin-item .item-name { font-size: .8rem; }
 .admin-item .cos .avatar { width: 16px; height: 16px; font-size: 0; }
 .admin-item button { padding: 0 6px; }
-.admin-items select { font: inherit; font-size: .8rem; color: var(--text); background: var(--surface-3); border: 1px solid var(--border); border-radius: 9px; padding: 5px 8px; }
+.admin-items select { font: inherit; font-size: .8rem; color: var(--text); background: #24242e; border: 1px solid var(--border); border-radius: 9px; padding: 5px 8px; }
 
 /* narrow screens: stacked */
 @media (max-width: 1000px) {
@@ -856,5 +860,8 @@ body.halloween .gift-title { font-family: var(--display); color: #ffb35c; }
   .big { font-size: 1.8rem; }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  *:not(.reaction), *::before, *::after { animation: none !important; transition: none !important; }
+  /* reactions still show with reduced motion: a gentle fade in place instead of floating */
+  .reaction { animation: react-fade 1.8s ease both; }
 }
+@keyframes react-fade { 0% { opacity: 0; } 15%, 70% { opacity: 1; } 100% { opacity: 0; } }

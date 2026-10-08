@@ -1389,7 +1389,6 @@ function renderReactBar() {
 }
 
 socket.on('reaction', r => {
-  if (reducedMotion()) return;
   const anchor = [...$$(`[data-pid="${r.from}"]`)].find(el => el.offsetParent);
   const rect = anchor ? anchor.getBoundingClientRect() : { left: innerWidth / 2, width: 0, top: innerHeight / 2 };
   const el = document.createElement('span');
@@ -1401,6 +1400,7 @@ socket.on('reaction', r => {
   el.style.setProperty('--rot', `${Math.round(Math.random() * 30 - 15)}deg`);
   reactLayer.append(el);
   el.addEventListener('animationend', () => el.remove());
+  setTimeout(() => el.remove(), 2500); // in case the animation never runs
   if (anchor) { anchor.classList.remove('reacted'); void anchor.offsetWidth; anchor.classList.add('reacted'); }
 });
 
