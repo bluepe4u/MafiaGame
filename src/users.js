@@ -41,6 +41,8 @@ const emptyStats = () => ({
   games: 0, wins: 0, survived: 0, mafiaGames: 0, mafiaWins: 0, townGames: 0, townWins: 0, roles: {}, roleWins: {},
   // detailed numbers, recorded since the player page was added (detailedGames counts those games)
   detailedGames: 0, votes: 0, townVotes: 0, votesOnMafia: 0, votesMatched: 0, kills: 0, saves: 0, copHits: 0, messages: 0,
+  // ballots include "skip"; decisive = votes without which the day's result would have changed
+  ballots: 0, decisive: 0, mafiaVotedOut: 0,
   streak: 0, bestStreak: 0, recent: [],
 });
 
@@ -241,7 +243,9 @@ class UserStore {
         s.kills += r.kills;
         s.saves += r.saves;
         s.copHits += r.copHits;
-        s.messages += r.messages;
+        s.ballots += r.ballots || 0;
+        s.decisive += r.decisive || 0;
+        s.mafiaVotedOut += r.mafiaVotedOut || 0;
       }
       s.recent = [{ at: r.at || Date.now(), role: r.role, won: r.won, survived: r.survived, players: r.players }, ...s.recent].slice(0, RECENT_KEEP);
     }

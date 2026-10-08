@@ -867,6 +867,7 @@ body.halloween .gift-title { font-family: var(--display); color: #ffb35c; }
 .radar-value { fill: var(--muted); font-size: 12px; font-weight: 500; font-family: var(--mono); }
 .radar-help { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: .8rem; color: var(--muted); }
 .radar-help b { color: var(--text); font-weight: 600; }
+.need-more { display: inline-block; margin-left: 4px; font-size: .7rem; color: var(--warn); }
 .role-bars { display: grid; gap: 8px; }
 .role-bar { display: grid; grid-template-columns: 120px 1fr auto; gap: 10px; align-items: center; }
 .role-bar .tag { margin: 0; justify-self: start; }

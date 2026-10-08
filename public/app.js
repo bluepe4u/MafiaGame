@@ -1574,15 +1574,18 @@ $('#boardClose').onclick = () => $('#board').classList.add('hidden');
 $('#board').addEventListener('pointerdown', e => { if (e.target.id === 'board') $('#board').classList.add('hidden'); });
 
 // ---------- player page: lifetime stats and the playstyle pentagon ----------
-// Five axes, each 0..1 (null when there's no data yet).
+// Five axes, each 0..1, built only from explicit in-app actions (final votes, night moves,
+// game outcomes): never from timing or chat, since the talking happens in voice.
+// An axis stays empty (null) until there's enough data for it to mean something.
+const AXIS_MIN = { survival: 3, deception: 2, intuition: 5, influence: 5, town: 3 };
 function playstyle(st) {
-  const ratio = (a, b) => (b ? a / b : null);
+  const axis = (key, part, whole) => [key, whole >= AXIS_MIN[key] ? part / whole : null, whole];
   return [
-    ['survival', ratio(st.survived, st.games)],
-    ['deception', ratio(st.mafiaWins, st.mafiaGames)],
-    ['intuition', ratio(st.votesOnMafia, st.townVotes)],
-    ['influence', ratio(st.votesMatched, st.votes)],
-    ['town', ratio(st.townWins, st.townGames)],
+    axis('survival', st.survived, st.games),
+    axis('deception', st.mafiaWins, st.mafiaGames),
+    axis('intuition', st.votesOnMafia, st.townVotes),
+    axis('influence', st.decisive, st.ballots),
+    axis('town', st.townWins, st.townGames),
   ];
 }
 
@@ -1641,9 +1644,10 @@ async function openPlayer(userId) {
     <section class="player-section">
       <h3>${esc(t('player.playstyle'))}</h3>
       <div class="radar-wrap">${radarSvg(axes)}
-        <ul class="radar-help">${axes.map(([k]) => `<li><b>${esc(t('player.axis.' + k))}</b> — ${esc(t('player.help.' + k))}</li>`).join('')}</ul>
+        <ul class="radar-help">${axes.map(([k, v, n]) => `<li><b>${esc(t('player.axis.' + k))}</b> — ${esc(t('player.help.' + k))}
+          ${v === null ? `<span class="need-more">${esc(t('player.needMore.' + (k === 'intuition' || k === 'influence' ? 'votes' : 'games'), { n: AXIS_MIN[k] - n }))}</span>` : ''}</li>`).join('')}</ul>
       </div>
-      <p class="muted small-text">${esc(st.detailedGames ? t('player.basedOn', { n: st.detailedGames }) : t('player.noDetail'))}</p>
+      <p class="muted small-text">${esc(t('player.reliability'))}</p>
     </section>
     <section class="player-section">
       <h3>${esc(t('player.roles'))}</h3>
@@ -1660,7 +1664,7 @@ async function openPlayer(userId) {
         ${tile(st.kills, t('player.kills'))}
         ${tile(st.saves, t('player.saves'))}
         ${tile(st.copHits, t('player.copHits'))}
-        ${tile(st.detailedGames ? (st.messages / st.detailedGames).toFixed(1) : '—', t('player.chatty'))}
+        ${tile(st.mafiaVotedOut, t('player.mafiaVotedOut'))}
       </div>
       <div class="highlight-line">
         ${roleRows[0] ? `<span class="muted small-text">${esc(t('player.favRole'))}:</span> <span class="tag ${roleRows[0][0] === 'mafia' ? 'mafia' : 'town'}">${esc(roleName(roleRows[0][0]))}</span>` : ''}

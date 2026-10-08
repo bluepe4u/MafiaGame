@@ -131,11 +131,11 @@ test('detailed game numbers add up; old stats without them still load', () => {
   const store = new UserStore(tmp());
   const { user } = store.register('Luca', 'pass');
   user.stats = { games: 3, wins: 2, survived: 1, mafiaGames: 1, mafiaWins: 1, townGames: 2, townWins: 1, roles: { mafia: 1, citizen: 2 } };
-  store.recordGame([{ userId: user.id, role: 'citizen', team: 'town', won: true, survived: true, votes: 2, votesOnMafia: 1, votesMatched: 2, kills: 0, saves: 0, copHits: 0, messages: 7, players: 8 }]);
-  store.recordGame([{ userId: user.id, role: 'mafia', team: 'mafia', won: true, survived: false, votes: 1, votesOnMafia: 0, votesMatched: 0, kills: 2, saves: 0, copHits: 0, messages: 3, players: 8 }]);
+  store.recordGame([{ userId: user.id, role: 'citizen', team: 'town', won: true, survived: true, votes: 2, votesOnMafia: 1, votesMatched: 2, ballots: 3, decisive: 1, mafiaVotedOut: 1, kills: 0, saves: 0, copHits: 0, players: 8 }]);
+  store.recordGame([{ userId: user.id, role: 'mafia', team: 'mafia', won: true, survived: false, votes: 1, votesOnMafia: 0, votesMatched: 0, ballots: 1, decisive: 0, mafiaVotedOut: 0, kills: 2, saves: 0, copHits: 0, players: 8 }]);
   const st = store.publicProfile(user).stats;
   assert.deepStrictEqual(
-    [st.games, st.detailedGames, st.votes, st.townVotes, st.votesOnMafia, st.votesMatched, st.kills, st.messages, st.streak, st.roleWins],
-    [5, 2, 3, 2, 1, 2, 2, 10, 2, { citizen: 1, mafia: 1 }],
+    [st.games, st.detailedGames, st.votes, st.townVotes, st.votesOnMafia, st.ballots, st.decisive, st.mafiaVotedOut, st.kills, st.streak, st.roleWins],
+    [5, 2, 3, 2, 1, 4, 1, 1, 2, 2, { citizen: 1, mafia: 1 }],
   );
 });

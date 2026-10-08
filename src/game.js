@@ -80,6 +80,20 @@ function validateRoleCounts(counts, n) {
   return null;
 }
 
+// The day-vote rule: the top target leaves only with strictly more votes than anyone else and
+// than "skip"; otherwise nobody does. Returns the eliminated player's id, or null.
+function voteOutcome(votes) {
+  const tally = {};
+  let skips = 0;
+  for (const t of Object.values(votes)) {
+    if (t === 'skip') skips++;
+    else tally[t] = (tally[t] || 0) + 1;
+  }
+  const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+  const top = ranked[0];
+  return top && top[1] > skips && (ranked.length === 1 || top[1] > ranked[1][1]) ? top[0] : null;
+}
+
 // Errors carry a translation key (also used as the message) and its parameters.
 class GameError extends Error {
   constructor(key, params = {}) {
@@ -695,11 +709,10 @@ class Room {
     }
     const ranked = Object.entries(tally).sort((a, b) => b[1] - a[1]);
     const tallyParam = ranked.map(([t, c]) => [this.player(t).name, c]);
-    const top = ranked[0];
-    const clear = top && top[1] > skips && (ranked.length === 1 || top[1] > ranked[1][1]);
-    this.history.push({ type: 'vote', day: this.day, votes: { ...this.votes }, out: clear ? top[0] : null });
-    if (clear) {
-      const out = this.player(top[0]);
+    const outId = voteOutcome(this.votes);
+    this.history.push({ type: 'vote', day: this.day, votes: { ...this.votes }, out: outId });
+    if (outId) {
+      const out = this.player(outId);
       out.alive = false;
       this.addPublic('log.votedOut', { name: out.name, role: this.revealedRole(out), tally: tallyParam, skips });
     } else {
@@ -809,16 +822,24 @@ class Room {
     return this.players.filter(p => p.userId && p.role).map(p => {
       const r = {
         userId: p.userId, role: p.role, team: ROLE_INFO[p.role].team, won: ROLE_INFO[p.role].team === winner, survived: p.alive,
-        votes: 0, votesOnMafia: 0, votesMatched: 0, kills: 0, saves: 0, copHits: 0, players: this.players.length, at,
-        messages: [...this.chat.town, ...this.chat.dead].filter(m => m.from === p.id && !m.kind).length,
+        votes: 0, votesOnMafia: 0, votesMatched: 0, ballots: 0, decisive: 0, mafiaVotedOut: 0,
+        kills: 0, saves: 0, copHits: 0, players: this.players.length, at,
       };
       for (const h of this.history) {
         if (h.type === 'vote') {
+          // Only the final vote counts, so simultaneous voting and changed minds don't matter.
           const target = h.votes[p.id];
-          if (!target || target === NOBODY || target === 'skip') continue;
+          if (!target) continue;
+          r.ballots += 1;
+          // decisive: without this vote the result would have been different
+          const without = { ...h.votes };
+          delete without[p.id];
+          if (voteOutcome(without) !== h.out) r.decisive += 1;
+          if (target === 'skip') continue;
           r.votes += 1;
           if (roleOf(target) === ROLES.MAFIA) r.votesOnMafia += 1; // only counted for Town players' intuition
           if (target === h.out) r.votesMatched += 1;
+          if (target === h.out && roleOf(target) === ROLES.MAFIA && r.team === 'town') r.mafiaVotedOut += 1;
         } else {
           for (const a of h.actions) {
             if (a.actor !== p.id || a.blocked) continue;
@@ -931,4 +952,4 @@ class Room {
   }
 }
 
-module.exports = { REACTIONS, NOBODY, Room, GameError, ROLES, ROLE_INFO, PHASES, defaultRoleCounts, validateRoleCounts, MIN_PLAYERS, MAX_PLAYERS, EXTEND_MS };
+module.exports = { voteOutcome, REACTIONS, NOBODY, Room, GameError, ROLES, ROLE_INFO, PHASES, defaultRoleCounts, validateRoleCounts, MIN_PLAYERS, MAX_PLAYERS, EXTEND_MS };

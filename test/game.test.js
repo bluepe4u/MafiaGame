@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { Room, PHASES, defaultRoleCounts, validateRoleCounts, EXTEND_MS, REACTIONS } = require('../src/game');
+const { Room, PHASES, defaultRoleCounts, validateRoleCounts, EXTEND_MS, REACTIONS, voteOutcome } = require('../src/game');
 
 // Deterministic room: no real timers, roles dealt in a known order.
 function setup(names, roles) {
@@ -640,4 +640,37 @@ test('game results: kills, saves and cop finds are credited', () => {
   assert.strictEqual(by.mafia.kills, 1);
   assert.strictEqual(by.doctor.saves, 1);
   assert.strictEqual(by.cop.copHits, 1);
+});
+
+test('decisive votes: only votes without which the result would differ', () => {
+  // 3 vs 2: each of the 3 is decisive (without one it's a 2-2 tie); the 2 are not
+  const v = { a: 'X', b: 'X', c: 'X', d: 'Y', e: 'Y' };
+  assert.strictEqual(voteOutcome(v), 'X');
+  const decisive = voter => { const w = { ...v }; delete w[voter]; return voteOutcome(w) !== voteOutcome(v); };
+  assert.deepStrictEqual(['a', 'b', 'c', 'd', 'e'].map(decisive), [true, true, true, false, false]);
+  // a landslide: nobody alone decides it
+  const big = { a: 'X', b: 'X', c: 'X', d: 'X', e: 'Y' };
+  assert.ok(!Object.keys(big).some(k => { const w = { ...big }; delete w[k]; return voteOutcome(w) !== 'X'; }));
+  // a skip that saves someone is decisive too
+  const saved = { a: 'X', b: 'skip' };
+  assert.strictEqual(voteOutcome(saved), null);
+  const w = { ...saved }; delete w.b;
+  assert.strictEqual(voteOutcome(w), 'X');
+});
+
+test('game results count decisive votes and Mafia voted out by Town', () => {
+  const results = [];
+  const room = new Room({ code: 'D', setTimer: () => 0, clearTimer: () => {}, rng: () => 0, onGameEnd: r => results.push(...r) });
+  const ps = SIX.map(n => room.join(n, { userId: 'u' + n }));
+  room.updateSettings(ps[0].id, { roleCounts: { mafia: 1, cop: 0, doctor: 0, hooker: 0 } });
+  room.start(ps[0].id);
+  const mafia = room.players.find(p => p.role === 'mafia');
+  room.forceEndNight(ps[0].id);
+  room.skipToVote(ps[0].id);
+  const town = room.alive().filter(p => p.id !== mafia.id);
+  // 3 town vote the mafia, 2 skip: 3 > 2, so each of the 3 is decisive
+  town.forEach((p, i) => room.vote(p.id, i < 3 ? mafia.id : 'skip'));
+  room.forceEndVote(ps[0].id);
+  const r = results.filter(x => x.team === 'town');
+  assert.deepStrictEqual(r.map(x => [x.decisive, x.mafiaVotedOut]).sort(), [[0, 0], [0, 0], [1, 1], [1, 1], [1, 1]]);
 });
