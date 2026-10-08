@@ -57,7 +57,7 @@ app.use((req, res, next) => {
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'same-origin',
-    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    'Permissions-Policy': 'camera=(), microphone=(self), geolocation=(), payment=()', // the mic: voice chat on our own pages only
     'Cross-Origin-Opener-Policy': 'same-origin',
   });
   if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000');
