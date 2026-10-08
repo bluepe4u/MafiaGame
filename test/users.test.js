@@ -87,3 +87,39 @@ test('game results add up into profile stats', () => {
     games: 2, wins: 1, survived: 1, mafiaGames: 1, mafiaWins: 1, townGames: 1, townWins: 0, roles: { mafia: 1, cop: 1 },
   });
 });
+
+test('decency bonus, dislike shield, lowest status, and who disliked whom', () => {
+  const store = new UserStore(tmp());
+  const dan = store.register('Данил', 'pass').user;
+  const a = store.register('Ann', 'pass').user;
+  const b = store.register('Bob', 'pass').user;
+  store.applyRating(dan.id, 0, -1, a.id);
+  store.applyRating(dan.id, 0, -1, b.id);
+  store.applyRating(dan.id, -1, 1, b.id); // B changed their mind
+  assert.deepStrictEqual(store.dislikedBy(dan.id), ['Ann']);
+  store.setKarma(dan, { dislikeShield: true, bonus: 5 });
+  const p = store.publicProfile(dan);
+  assert.deepStrictEqual([p.likes, p.dislikes, p.score], [2, 1, 6], 'each dislike adds a like; base +5');
+  store.applyRating(a.id, 0, 1, b.id);
+  store.setKarma(a, { lowest: true });
+  assert.strictEqual(store.publicProfile(a).score, -10);
+});
+
+test('items: gift, equip, take back; reactions unlocked; unknown items refused', () => {
+  const store = new UserStore(tmp());
+  const u = store.register('Kay', 'pass').user;
+  assert.throws(() => store.gift(u, 'hat.nope'), /err\.invalidTarget/);
+  assert.throws(() => store.equip(u, 'hat', 'hat.crown'), /err\.invalidTarget/, 'must own it first');
+  store.gift(u, 'hat.crown');
+  store.gift(u, 'react.knife');
+  store.equip(u, 'hat', 'hat.crown');
+  assert.throws(() => store.equip(u, 'frame', 'hat.crown'), /err\.invalidTarget/, 'wrong slot');
+  let p = store.publicProfile(u);
+  assert.deepStrictEqual(p.equipped, { hat: 'hat.crown' });
+  assert.deepStrictEqual(p.reactions, ['🔪']);
+  assert.deepStrictEqual(p.gifts, ['hat.crown', 'react.knife']);
+  store.giftsSeen(u);
+  store.takeBack(u, 'hat.crown');
+  p = store.publicProfile(u);
+  assert.deepStrictEqual([p.equipped, p.inventory, p.gifts], [{}, ['react.knife'], []]);
+});

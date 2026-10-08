@@ -754,6 +754,75 @@ body.halloween .countdown-num { font-family: var(--display); color: #ffb35c; }
 .stat-roles .tag { margin: 0; }
 @media (min-width: 480px) { .stat.mafia, .stat.town { grid-column: span 1; } .stat-grid { grid-template-columns: repeat(5, 1fr); } }
 
+/* ---------- cosmetics: hats, frames, name colours ---------- */
+.cos { position: relative; display: inline-flex; flex: none; border-radius: 50%; }
+.cos > .avatar { position: relative; z-index: 1; }
+.cos .hat { position: absolute; left: 50%; top: 0; width: 80%; z-index: 2; pointer-events: none; transform: translate(-50%, -60%) rotate(-10deg); filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .55)); }
+.cos .hat svg { display: block; width: 100%; overflow: visible; }
+.cos[class*="frame-"]::before { content: ''; position: absolute; inset: -3px; border-radius: 50%; z-index: 0; }
+.cos.frame-gold::before { background: conic-gradient(#fff3b0, #f5c542, #b8860b, #f5c542, #fff3b0); box-shadow: 0 0 12px rgba(245, 197, 66, .6); animation: spin 6s linear infinite; }
+.cos.frame-fire::before { background: conic-gradient(#ff3d00, #ffb300, #ff6d00, #ffea00, #ff3d00); filter: blur(1px); box-shadow: 0 0 14px 2px rgba(255, 109, 0, .75); animation: spin 2.4s linear infinite, flicker 1.3s ease-in-out infinite; }
+.cos.frame-neon::before { background: conic-gradient(#00f0ff, #b400ff, #ff00c8, #00f0ff); box-shadow: 0 0 14px rgba(180, 0, 255, .7); animation: spin 4s linear infinite, hue 5s linear infinite; }
+.cos.frame-blood::before { background: radial-gradient(circle at 50% 100%, #ff1f3d, #6d0010 70%); box-shadow: 0 0 12px rgba(255, 31, 61, .65); animation: pulse-ring 1.6s ease-in-out infinite; }
+.cos.frame-ice::before { background: conic-gradient(#e0f7ff, #7fd8ff, #ffffff, #4fc3f7, #e0f7ff); box-shadow: 0 0 12px rgba(127, 216, 255, .7); animation: spin 9s linear infinite; }
+@keyframes flicker { 50% { filter: blur(1.6px) brightness(1.25); } }
+@keyframes hue { to { filter: hue-rotate(360deg); } }
+@keyframes pulse-ring { 50% { box-shadow: 0 0 22px 3px rgba(255, 31, 61, .85); } }
+.nm.name-gold { background: linear-gradient(90deg, #fff3b0, #f5c542, #d4a017); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.nm.name-blood { color: #ff3b4f; text-shadow: 0 0 10px rgba(255, 30, 60, .55); }
+.nm.name-toxic { color: #7dff4a; text-shadow: 0 0 10px rgba(125, 255, 74, .55); }
+.nm.name-rainbow { background: linear-gradient(90deg, #ff5f6d, #ffc371, #7dff4a, #3ec5ff, #b06bff, #ff5f6d); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: rainbow 4s linear infinite; }
+@keyframes rainbow { to { background-position: 200% 0; } }
+
+/* wardrobe */
+.wardrobe { display: flex; flex-direction: column; gap: 12px; }
+.ward-slot { display: flex; flex-direction: column; gap: 6px; }
+.ward-items { display: flex; flex-wrap: wrap; gap: 8px; }
+.ward-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 88px; padding: 12px 6px 8px; border-radius: 14px; }
+.ward-item.on { border-color: var(--good); background: var(--good-soft); }
+.ward-item:disabled { opacity: 1; cursor: default; }
+.ward-label { font-size: .68rem; color: var(--muted); text-align: center; line-height: 1.2; }
+.ward-on { position: absolute; top: 4px; right: 4px; font-size: .56rem; font-weight: 700; text-transform: uppercase; color: var(--good); }
+.item-emoji { font-size: 1.8rem; line-height: 1; }
+.item-name { font-size: 1.3rem; font-weight: 700; line-height: 1; }
+.ward-item .cos .avatar { width: 30px; height: 30px; font-size: .8rem; }
+
+/* gift unboxing */
+.gift-overlay { z-index: 30; }
+.gift-stage { display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center; }
+.gift-title { font-family: var(--serif); font-size: clamp(2.2rem, 7vw, 3.4rem); line-height: 1; }
+body.halloween .gift-title { font-family: var(--display); color: #ffb35c; }
+.gift-present { font-size: 7rem; line-height: 1; background: none; border: 0; padding: 0; cursor: pointer; animation: gift-wiggle 1.4s ease-in-out infinite; filter: drop-shadow(0 18px 30px rgba(0, 0, 0, .6)); }
+.gift-present:hover:not(:disabled) { background: none; border: 0; }
+.gift-present.opening { animation: gift-open .65s cubic-bezier(.5, -0.4, .5, 1.4) forwards; }
+@keyframes gift-wiggle { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-9deg) scale(1.05); } 80% { transform: rotate(8deg) scale(1.05); } 90% { transform: rotate(-4deg); } }
+@keyframes gift-open { 40% { transform: scale(.85) rotate(-6deg); } 100% { transform: scale(1.8); opacity: 0; filter: blur(6px) brightness(2); } }
+.gift-item { animation: gift-reveal .7s cubic-bezier(.2, 1.4, .4, 1) both; }
+.gift-item .item-emoji { font-size: 6rem; }
+.gift-item .item-name { font-size: 3.2rem; }
+.gift-item .cos .avatar { width: 120px; height: 120px; font-size: 2.4rem; }
+@keyframes gift-reveal { from { transform: scale(.2) rotate(-20deg); opacity: 0; } }
+.gift-name { font-size: 1.1rem; color: rgba(255, 255, 255, .85); min-height: 1.5em; }
+
+/* admin */
+.admin-sheet { width: min(860px, 100%); }
+.admin-body { display: flex; flex-direction: column; gap: 10px; }
+.admin-user { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); }
+.admin-head { display: flex; align-items: center; gap: 12px; }
+.admin-head .avatar { width: 40px; height: 40px; }
+.admin-id { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.admin-id .status { margin: 0; }
+.admin-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.admin-bonus { display: inline-flex; align-items: center; gap: 8px; font-size: .82rem; color: var(--muted); }
+.admin-bonus input { width: 80px; padding: 6px 8px; }
+.admin-items { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.admin-item { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; padding: 3px 4px 3px 8px; border-radius: 99px; background: var(--surface-3); }
+.admin-item .item-emoji { font-size: 1rem; }
+.admin-item .item-name { font-size: .8rem; }
+.admin-item .cos .avatar { width: 16px; height: 16px; font-size: 0; }
+.admin-item button { padding: 0 6px; }
+.admin-items select { font: inherit; font-size: .8rem; color: var(--text); background: var(--surface-3); border: 1px solid var(--border); border-radius: 9px; padding: 5px 8px; }
+
 /* narrow screens: stacked */
 @media (max-width: 1000px) {
   main { padding: 16px; }

@@ -761,7 +761,7 @@ class Room {
     const old = mine[targetId] || 0;
     if (old === value) return;
     if (value) mine[targetId] = value; else delete mine[targetId];
-    this.onRate(target.userId, old, value);
+    this.onRate(target.userId, old, value, p.userId);
     this.touch();
   }
 
@@ -770,7 +770,9 @@ class Room {
   // a game (they could hint at roles), and nobody reacts at night.
   react(pid, emoji) {
     const p = this.member(pid);
-    this.assert(p && REACTIONS.includes(emoji), 'err.invalidTarget');
+    // the base set, plus any reaction items this player owns
+    const owned = (p && p.userId && this.profileOf(p.userId)?.reactions) || [];
+    this.assert(p && (REACTIONS.includes(emoji) || owned.includes(emoji)), 'err.invalidTarget');
     const open = this.phase === PHASES.LOBBY || this.phase === PHASES.ENDED
       || ((this.phase === PHASES.SPEECH || this.phase === PHASES.VOTE) && p.alive === true);
     this.assert(open, 'err.reactClosed');
@@ -832,13 +834,14 @@ class Room {
           role: roleVisible(p) ? p.role : null,
           avatar: profile?.avatar || null,
           score: profile ? profile.score : null,
+          cos: profile?.equipped || {},
           rateable: !!p.userId,
           ready: !!p.ready,
         };
       }),
       spectators: this.spectators.map(p => {
         const profile = p.userId ? this.profileOf(p.userId) : null;
-        return { id: p.id, name: p.name, connected: p.connected, avatar: profile?.avatar || null, score: profile ? profile.score : null };
+        return { id: p.id, name: p.name, connected: p.connected, avatar: profile?.avatar || null, score: profile ? profile.score : null, cos: profile?.equipped || {} };
       }),
       countdownEndsAt: this.countdownEndsAt,
       nightEndsAt: this.phase === PHASES.NIGHT ? this.nightEndsAt : null,

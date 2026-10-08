@@ -233,6 +233,10 @@
           <h3 data-i18n="profile.stats"></h3>
           <div id="profileStats" class="stats"></div>
         </div>
+        <div id="wardrobeBox">
+          <h3 data-i18n="wardrobe.title"></h3>
+          <div id="wardrobe" class="wardrobe"></div>
+        </div>
         <p class="muted small-text" data-i18n="profile.decencyHint"></p>
         <div id="tierLadder" class="tier-ladder"></div>
         <form id="passwordForm" class="password-form" autocomplete="on">
@@ -244,8 +248,31 @@
             <button type="submit" data-i18n="profile.save"></button>
           </div>
         </form>
-        <button id="logoutBtn" class="danger" data-i18n="profile.logout"></button>
+        <div class="row">
+          <button id="logoutBtn" class="danger" data-i18n="profile.logout"></button>
+          <button id="adminBtn" class="ghost hidden" data-i18n="admin.open"></button>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <div id="admin" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet admin-sheet">
+      <div class="sheet-head">
+        <h2 data-i18n="admin.title"></h2>
+        <button id="adminClose" class="ghost small" data-i18n="ui.close"></button>
+      </div>
+      <div id="adminBody" class="sheet-body admin-body"></div>
+    </div>
+  </div>
+
+  <div id="giftBox" class="overlay gift-overlay hidden" role="dialog" aria-modal="true">
+    <div class="gift-stage">
+      <div class="gift-title" data-i18n="gift.title"></div>
+      <button id="giftPresent" class="gift-present" type="button" aria-label="Open">🎁</button>
+      <div id="giftItem" class="gift-item hidden"></div>
+      <div id="giftName" class="gift-name"></div>
+      <button id="giftDone" class="primary hidden" data-i18n="gift.done"></button>
     </div>
   </div>
 

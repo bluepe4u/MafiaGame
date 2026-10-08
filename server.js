@@ -8,6 +8,7 @@ const QRCode = require('qrcode');
 const { Server } = require('socket.io');
 const { Room, GameError } = require('./src/game');
 const { UserStore } = require('./src/users');
+const { ITEMS } = require('./src/items');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -57,6 +58,54 @@ app.post('/api/password', api(req => {
   const token = users.changePassword(currentUser(req), req.body.oldPassword, req.body.newPassword);
   return { token };
 }));
+app.get('/api/items', (_req, res) => res.json({ ok: true, items: ITEMS }));
+app.post('/api/equip', api(req => {
+  const user = currentUser(req);
+  users.equip(user, req.body.slot, req.body.itemId || null);
+  refreshUser(user.id);
+  return { user: users.publicProfile(user) };
+}));
+app.post('/api/gifts/seen', api(req => { users.giftsSeen(currentUser(req)); return {}; }));
+
+// ---------- admin: decency and gifts ----------
+const adminUser = req => {
+  const user = currentUser(req);
+  if (!user.admin) throw new GameError('err.adminOnly');
+  return user;
+};
+const targetUser = req => {
+  const u = users.users[req.body.userId];
+  if (!u) throw new GameError('err.invalidTarget');
+  return u;
+};
+app.get('/api/admin/users', api(req => {
+  adminUser(req);
+  return { users: Object.values(users.users).map(u => users.adminView(u)).sort((a, b) => a.username.localeCompare(b.username)) };
+}));
+app.post('/api/admin/karma', api(req => {
+  adminUser(req);
+  const u = targetUser(req);
+  users.setKarma(u, req.body);
+  refreshUser(u.id);
+  return { user: users.adminView(u) };
+}));
+app.post('/api/admin/gift', api(req => {
+  adminUser(req);
+  const u = targetUser(req);
+  users.gift(u, req.body.itemId);
+  refreshUser(u.id);
+  // pop the present open right away if they're online
+  for (const sock of io.sockets.sockets.values()) if (sock.data.userId === u.id) sock.emit('gift', { itemId: req.body.itemId });
+  return { user: users.adminView(u) };
+}));
+app.post('/api/admin/take', api(req => {
+  adminUser(req);
+  const u = targetUser(req);
+  users.takeBack(u, req.body.itemId);
+  refreshUser(u.id);
+  return { user: users.adminView(u) };
+}));
+
 // avatar arrives as a data URL, already cropped and shrunk in the browser
 app.post('/api/avatar', api(req => {
   const user = currentUser(req);
@@ -98,8 +147,8 @@ const roomOptions = () => ({
   onChange: onRoomChange,
   profileOf: userId => users.publicProfile(users.users[userId]),
   onGameEnd: results => users.recordGame(results),
-  onRate: (targetUserId, oldValue, newValue) => {
-    users.applyRating(targetUserId, oldValue, newValue);
+  onRate: (targetUserId, oldValue, newValue, fromUserId) => {
+    users.applyRating(targetUserId, oldValue, newValue, fromUserId);
     refreshUser(targetUserId);
   },
 });

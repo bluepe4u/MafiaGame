@@ -457,7 +457,7 @@ test('ratings: only after the game, between account holders, changeable, reporte
   room.rate(ps[0].id, ps[1].id, 1); // same again: no change
   room.rate(ps[0].id, ps[1].id, -1);
   room.rate(ps[0].id, ps[1].id, 0);
-  assert.deepStrictEqual(changes, [['uB', 0, 1], ['uB', 1, -1], ['uB', -1, 0]]);
+  assert.deepStrictEqual(changes, [['uB', 0, 1, 'uA'], ['uB', 1, -1, 'uA'], ['uB', -1, 0, 'uA']]);
   assert.throws(() => room.rate(ps[0].id, ps[0].id, 1), /err\.invalidTarget/);
   assert.throws(() => room.rate(ps[0].id, ps[5].id, 1), /err\.rateAccounts/);
   room.rate(ps[2].id, ps[3].id, -1);

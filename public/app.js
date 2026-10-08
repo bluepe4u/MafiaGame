@@ -60,7 +60,20 @@ const isHost = () => !!(state && state.me && state.hostId === state.me.id);
 const roleName = r => t('role.' + r);
 const tagHtml = (key, cls = '') => `<span class="tag ${cls}">${esc(t(key))}</span>`;
 // initials on a colour derived from the name, so each player is recognisable at a glance
-function avatar(name, url) {
+// cosmetics: { hat, frame, name } item ids from the catalog (gifts from the admin)
+let ITEMS = {};
+fetch('/api/items').then(r => r.json()).then(d => { ITEMS = d.items || {}; render(); renderAccount(); }).catch(() => {});
+const nameCls = cos => (cos && cos.name ? `nm ${cos.name.replace('.', '-')}` : '');
+function avatar(name, url, cos) {
+  const inner = avatarCore(name, url);
+  // the hat is drawn in a tiny SVG so it scales with whatever size the avatar is
+  const hat = cos && cos.hat && ITEMS[cos.hat]
+    ? `<span class="hat"><svg viewBox="0 0 10 10" aria-hidden="true"><text x="5" y="8.6" font-size="8.6" text-anchor="middle">${ITEMS[cos.hat].emoji}</text></svg></span>`
+    : '';
+  const frame = cos && cos.frame ? cos.frame.replace('.', '-') : '';
+  return hat || frame ? `<span class="cos ${frame}">${inner}${hat}</span>` : inner;
+}
+function avatarCore(name, url) {
   if (url) return `<img class="avatar" src="${esc(url)}" alt="" loading="lazy">`;
   let h = 0;
   for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
@@ -244,12 +257,17 @@ function renderAccount() {
   $('#playCard').classList.toggle('hidden', !account);
   $('#profileBtn').classList.toggle('hidden', !account);
   if (!account) return;
-  $('#profileBtn').innerHTML = avatar(account.username, account.avatar);
+  $('#profileBtn').innerHTML = avatar(account.username, account.avatar, account.equipped);
   $('#profileBtn').title = t('profile.open');
-  $('#homeProfile').innerHTML = `${avatar(account.username, account.avatar)}
-    <span class="me-text"><b>${esc(account.username)}</b>${statusPill(account.score)}</span>`;
-  $('#profileAvatar').innerHTML = avatar(account.username, account.avatar);
+  $('#homeProfile').innerHTML = `${avatar(account.username, account.avatar, account.equipped)}
+    <span class="me-text"><b class="${nameCls(account.equipped)}">${esc(account.username)}</b>${statusPill(account.score)}</span>`;
+  $('#profileAvatar').innerHTML = avatar(account.username, account.avatar, account.equipped);
   $('#profileName').textContent = account.username;
+  $('#profileName').className = `profile-name ${nameCls(account.equipped)}`;
+  renderWardrobe();
+  $('#adminBtn').classList.toggle('hidden', !account.admin);
+  renderReactButtons();
+  queueGifts(account.gifts);
   $('#profileStatus').innerHTML = statusPill(account.score);
   $('#profileLikes').innerHTML = `${ICONS.up}${esc(t('profile.likes', { n: account.likes }))}`;
   $('#profileDislikes').innerHTML = `${ICONS.down}${esc(t('profile.dislikes', { n: account.dislikes }))}`;
@@ -493,8 +511,8 @@ function renderLobby() {
   const empty = Math.max(0, state.minPlayers - state.players.length);
   $('#lobbyPlayers').innerHTML = state.players.map(p => `
     <li class="${p.connected ? '' : 'offline'} ${p.ready ? 'is-ready' : ''}" data-pid="${p.id}">
-      <span class="avatar-wrap">${avatar(p.name, p.avatar)}${p.ready ? `<span class="voted ready-mark">${ICONS.check}</span>` : ''}</span>
-      <span class="pname"><b>${esc(p.name)}</b>${statusPill(p.score)}${p.id === state.hostId ? tagHtml('tag.host', 'host') : ''}${p.id === state.me.id ? tagHtml('tag.you', 'you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
+      <span class="avatar-wrap">${avatar(p.name, p.avatar, p.cos)}${p.ready ? `<span class="voted ready-mark">${ICONS.check}</span>` : ''}</span>
+      <span class="pname"><b class="${nameCls(p.cos)}">${esc(p.name)}</b>${statusPill(p.score)}${p.id === state.hostId ? tagHtml('tag.host', 'host') : ''}${p.id === state.me.id ? tagHtml('tag.you', 'you') : ''}${p.connected ? '' : tagHtml('tag.offline')}</span>
       ${isHost() && p.id !== state.me.id ? `<button class="ghost small" data-kick="${p.id}">${esc(t('ui.remove'))}</button>` : ''}
     </li>`).join('') + `<li class="empty">${esc(t('ui.emptySeat'))}</li>`.repeat(empty);
   for (const b of $$('[data-kick]')) {
@@ -532,7 +550,7 @@ function renderLobby() {
   $('#readyBtn').innerHTML = `${ICONS.check}<span>${esc(t(mine && mine.ready ? 'ui.ready' : 'ui.unready'))}</span>`;
   $('#watchToggle').textContent = t(state.me.spectator ? 'ui.playInstead' : 'ui.watchInstead');
   $('#spectatorBox').classList.toggle('hidden', !state.spectators.length);
-  $('#spectatorList').innerHTML = state.spectators.map(w => `<span class="spectator ${w.connected ? '' : 'offline'}" data-pid="${w.id}">${avatar(w.name, w.avatar)}<b>${esc(w.name)}</b>${statusPill(w.score)}${
+  $('#spectatorList').innerHTML = state.spectators.map(w => `<span class="spectator ${w.connected ? '' : 'offline'}" data-pid="${w.id}">${avatar(w.name, w.avatar, w.cos)}<b>${esc(w.name)}</b>${statusPill(w.score)}${
     isHost() && w.id !== state.me.id ? `<button class="ghost small" data-kick="${w.id}">${esc(t('ui.remove'))}</button>` : ''}</span>`).join('');
   for (const b of $$('#spectatorList [data-kick]')) {
     b.onclick = () => confirmHost({ title: t('host.kick.title', { name: (state.spectators.find(w => w.id === b.dataset.kick) || {}).name }), text: t('host.kick.text'), event: 'kick', payload: { playerId: b.dataset.kick } });
@@ -777,8 +795,8 @@ function renderSeats() {
     return `<div class="${cls}" data-pid="${p.id}" style="left:${pos.left}%;top:${pos.top}%;${fx.style}">
       <span class="num">${p.seat + 1}</span>
       ${markBtn}
-      <span class="avatar-wrap" title="${p.score === null ? '' : esc(t('tier.' + tierOf(p.score)))}">${avatar(p.name, p.avatar)}${voted}</span>
-      <div class="name">${esc(p.name)}</div>
+      <span class="avatar-wrap" title="${p.score === null ? '' : esc(t('tier.' + tierOf(p.score)))}">${avatar(p.name, p.avatar, p.cos)}${voted}</span>
+      <div class="name ${nameCls(p.cos)}">${esc(p.name)}</div>
       ${(showRole && p.role) || meta.length || p.id === me.id || checked || markTag ? `<div class="meta">${p.id === me.id ? tagHtml('tag.you', 'you') : ''}${markTag}${showRole ? roleTag(p.role) : ''}${checked} ${esc(meta.join(' · '))}</div>` : ''}
       ${note ? `<div class="seat-note">${esc(note)}</div>` : ''}
       ${extra ? `<div class="votes">${esc(extra)}</div>` : ''}
@@ -1022,7 +1040,7 @@ function renderChat() {
     const sec = chatSection(m);
     if (sec !== section) { html += `<div class="chat-sep"><span>${esc(sec)}</span></div>`; section = sec; prev = null; }
     if (m.kind === 'reveal') {
-      html += `<div class="msg-reveal ${isNew(m)}">${avatar(m.name, (playerById(m.from) || {}).avatar)}<span><b>${esc(m.name)}</b> ${esc(t('chat.revealed'))}</span>${roleTag(m.role)}</div>`;
+      html += `<div class="msg-reveal ${isNew(m)}">${avatar(m.name, (playerById(m.from) || {}).avatar, (playerById(m.from) || {}).cos)}<span><b>${esc(m.name)}</b> ${esc(t('chat.revealed'))}</span>${roleTag(m.role)}</div>`;
       prev = null;
       continue;
     }
@@ -1030,9 +1048,9 @@ function renderChat() {
     const grouped = prev && prev.from === m.from && m.at - prev.at < 5 * 60 * 1000;
     const time = new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     html += `<div class="msg ${mine ? 'mine' : ''} ${grouped ? 'grouped' : ''} ${isNew(m)}">
-      ${mine || grouped ? '<span class="msg-gap"></span>' : avatar(m.name, (playerById(m.from) || {}).avatar)}
+      ${mine || grouped ? '<span class="msg-gap"></span>' : avatar(m.name, (playerById(m.from) || {}).avatar, (playerById(m.from) || {}).cos)}
       <div class="msg-body">
-        ${mine || grouped ? '' : `<div class="msg-name">${esc(m.name)}</div>`}
+        ${mine || grouped ? '' : `<div class="msg-name ${nameCls((playerById(m.from) || {}).cos)}">${esc(m.name)}</div>`}
         <div class="bubble">${esc(m.text)}<time>${esc(time)}</time></div>
       </div>
     </div>`;
@@ -1061,7 +1079,7 @@ $('#chatForm').addEventListener('submit', async e => {
 // ---------- end-of-game recap ----------
 function openRecap() {
   const roleOf = id => (playerById(id) || {}).role;
-  const roles = state.players.map(p => `<span class="recap-player">${avatar(p.name, p.avatar)}<b>${esc(p.name)}</b>${roleTag(p.role)}</span>`).join('');
+  const roles = state.players.map(p => `<span class="recap-player">${avatar(p.name, p.avatar, p.cos)}<b>${esc(p.name)}</b>${roleTag(p.role)}</span>`).join('');
   const sections = state.history.map(h => {
     if (h.type === 'night') {
       const lines = [];
@@ -1345,8 +1363,13 @@ function seatFx(p, i) {
 // ---------- emoji reactions: float up from the sender's seat ----------
 const REACTIONS = ['👍', '👎', '😂', '🤔', '😱', '🤥', '🔥', '💀', '❤️', '👀'];
 const reactBar = $('#reactBar');
-reactBar.innerHTML = REACTIONS.map(e => `<button class="react-btn" data-react="${e}" aria-label="${e}">${e}</button>`).join('');
-for (const b of $$('[data-react]')) b.onclick = () => send('react', { emoji: b.dataset.react });
+// the base set plus any reaction items the player owns
+function renderReactButtons() {
+  const list = [...REACTIONS, ...((account && account.reactions) || [])];
+  reactBar.innerHTML = list.map(e => `<button class="react-btn" data-react="${e}" aria-label="${e}">${e}</button>`).join('');
+  for (const b of reactBar.querySelectorAll('[data-react]')) b.onclick = () => send('react', { emoji: b.dataset.react });
+}
+renderReactButtons();
 const reactLayer = document.createElement('div');
 reactLayer.className = 'react-layer';
 reactLayer.setAttribute('aria-hidden', 'true');
@@ -1380,6 +1403,127 @@ socket.on('reaction', r => {
   el.addEventListener('animationend', () => el.remove());
   if (anchor) { anchor.classList.remove('reacted'); void anchor.offsetWidth; anchor.classList.add('reacted'); }
 });
+
+// ---------- wardrobe: equip gifted items ----------
+const SLOT_ORDER = ['hat', 'frame', 'name', 'reaction'];
+function itemPreview(id) {
+  const it = ITEMS[id] || {};
+  if (it.slot === 'hat' || it.slot === 'reaction') return `<span class="item-emoji">${it.emoji}</span>`;
+  if (it.slot === 'frame') return `<span class="cos ${id.replace('.', '-')}"><span class="avatar" style="--h:260">★</span></span>`;
+  return `<span class="item-name ${nameCls({ name: id })}">Aa</span>`;
+}
+function renderWardrobe() {
+  const box = $('#wardrobe');
+  const inv = (account && account.inventory) || [];
+  if (!inv.length) { box.innerHTML = `<p class="muted small-text">${esc(t('wardrobe.empty'))}</p>`; return; }
+  box.innerHTML = SLOT_ORDER.map(slot => {
+    const items = inv.filter(id => (ITEMS[id] || {}).slot === slot);
+    if (!items.length) return '';
+    return `<div class="ward-slot"><span class="muted small-text">${esc(t('wardrobe.slot.' + slot))}</span><div class="ward-items">${items.map(id => {
+      const on = slot === 'reaction' || account.equipped[slot] === id;
+      return `<button class="ward-item ${on ? 'on' : ''}" ${slot === 'reaction' ? 'disabled' : ''} data-equip="${id}" data-slot="${slot}" title="${esc(t('item.' + id))}">
+        ${itemPreview(id)}<span class="ward-label">${esc(t('item.' + id))}</span>
+        ${on ? `<span class="ward-on">${esc(t(slot === 'reaction' ? 'wardrobe.unlocked' : 'wardrobe.equipped'))}</span>` : ''}
+      </button>`;
+    }).join('')}</div></div>`;
+  }).join('');
+  for (const b of box.querySelectorAll('[data-equip]')) {
+    b.onclick = async () => {
+      const slot = b.dataset.slot;
+      const res = await api('equip', { slot, itemId: account.equipped[slot] === b.dataset.equip ? null : b.dataset.equip });
+      if (res.ok) { account = res.user; renderAccount(); }
+    };
+  }
+}
+
+// ---------- gifts: an unboxing when something new arrives ----------
+let giftShowing = null;
+let giftOpening = false;
+const giftQueue = []; // several gifts open one after another
+function queueGifts(ids) {
+  for (const id of ids || []) if (ITEMS[id] && id !== giftShowing && !giftQueue.includes(id)) giftQueue.push(id);
+  if (!giftShowing && giftQueue.length) showGift(giftQueue.shift());
+}
+function showGift(itemId) {
+  giftShowing = itemId;
+  giftOpening = false;
+  $('#giftPresent').classList.remove('hidden', 'opening');
+  $('#giftItem').classList.add('hidden');
+  $('#giftDone').classList.add('hidden');
+  $('#giftName').textContent = t('gift.tap');
+  $('#giftBox').classList.remove('hidden');
+  if (alertsOn && audioCtx) [523, 659, 784].forEach((f, i) => tone({ f, at: i * 0.09, dur: 0.4, vol: 0.06, type: 'triangle' }));
+}
+$('#giftPresent').onclick = () => {
+  const id = giftShowing;
+  if (!id || giftOpening) return;
+  giftOpening = true;
+  $('#giftPresent').classList.add('opening');
+  setTimeout(() => {
+    $('#giftPresent').classList.add('hidden');
+    $('#giftItem').innerHTML = (ITEMS[id] || {}).slot === 'hat'
+      ? avatar(account.username, account.avatar, { hat: id })
+      : itemPreview(id);
+    $('#giftItem').classList.remove('hidden');
+    $('#giftName').textContent = t('item.' + id);
+    $('#giftDone').classList.remove('hidden');
+    if (!reducedMotion()) celebrate('town');
+    if (alertsOn && audioCtx) [784, 988, 1175, 1568].forEach((f, i) => tone({ f, at: i * 0.07, dur: 0.5, vol: 0.06, type: 'triangle' }));
+  }, 650);
+};
+$('#giftDone').onclick = async () => {
+  giftShowing = null;
+  if (giftQueue.length) { showGift(giftQueue.shift()); return; }
+  $('#giftBox').classList.add('hidden');
+  await api('gifts/seen', {});
+  const res = await api('me');
+  if (res.ok) { account = { ...res.user, gifts: [] }; renderAccount(); }
+};
+socket.on('gift', async () => {
+  const res = await api('me');
+  if (res.ok) { account = res.user; renderAccount(); }
+});
+
+// ---------- admin panel (decency and gifts) ----------
+async function renderAdmin() {
+  const res = await api('admin/users');
+  if (!res.ok) return;
+  const body = $('#adminBody');
+  const itemIds = Object.keys(ITEMS);
+  body.innerHTML = res.users.map(u => `
+    <div class="admin-user" data-user="${u.id}">
+      <div class="admin-head">
+        ${avatar(u.username, u.avatar, u.equipped)}
+        <div class="admin-id"><b class="${nameCls(u.equipped)}">${esc(u.username)}</b>${statusPill(u.score)}
+          <span class="muted small-text">${u.likes} 👍 · ${u.dislikes} 👎 · ${esc(t('admin.raw', { l: u.rawLikes, d: u.rawDislikes }))}</span></div>
+      </div>
+      <div class="admin-controls">
+        <label class="admin-bonus">${esc(t('admin.bonus'))} <input type="number" value="${u.bonus}" data-bonus></label>
+        <label class="check"><input type="checkbox" class="switch" data-shield ${u.dislikeShield ? 'checked' : ''}> ${esc(t('admin.shield'))}</label>
+        <button class="danger small" data-lowest>${esc(t('admin.lowest'))}</button>
+      </div>
+      <div class="muted small-text">${esc(t('admin.dislikedBy'))}: ${u.dislikedBy.length ? u.dislikedBy.map(esc).join(', ') : esc(t('admin.nobody'))}</div>
+      <div class="admin-items">
+        ${u.inventory.map(id => `<span class="admin-item">${itemPreview(id)}${esc(t('item.' + id))}<button class="ghost small" data-take="${id}" aria-label="×">×</button></span>`).join('')}
+        <select data-give><option value="">${esc(t('admin.give'))}</option>${itemIds.filter(id => !u.inventory.includes(id)).map(id => `<option value="${id}">${ITEMS[id].emoji || ''} ${esc(t('item.' + id))}</option>`).join('')}</select>
+      </div>
+    </div>`).join('');
+  for (const row of body.querySelectorAll('[data-user]')) {
+    const userId = row.dataset.user;
+    const after = r => { if (r.ok) renderAdmin(); };
+    row.querySelector('[data-bonus]').onchange = e => api('admin/karma', { userId, bonus: e.target.value }).then(after);
+    row.querySelector('[data-shield]').onchange = e => api('admin/karma', { userId, dislikeShield: e.target.checked }).then(after);
+    row.querySelector('[data-lowest]').onclick = () => api('admin/karma', { userId, lowest: true }).then(after);
+    row.querySelector('[data-give]').onchange = e => e.target.value && api('admin/gift', { userId, itemId: e.target.value }).then(r => {
+      if (r.ok) toast(t('admin.gifted', { name: r.user.username }), 'info');
+      after(r);
+    });
+    for (const b of row.querySelectorAll('[data-take]')) b.onclick = () => api('admin/take', { userId, itemId: b.dataset.take }).then(after);
+  }
+}
+$('#adminBtn').onclick = () => { $('#profile').classList.add('hidden'); $('#admin').classList.remove('hidden'); renderAdmin(); };
+$('#adminClose').onclick = () => $('#admin').classList.add('hidden');
+$('#admin').addEventListener('pointerdown', e => { if (e.target.id === 'admin') $('#admin').classList.add('hidden'); });
 
 // ---------- language ----------
 const langSelect = $('#langSelect');

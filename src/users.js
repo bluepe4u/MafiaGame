@@ -7,12 +7,15 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { GameError } = require('./game');
+const { ITEMS, EQUIP_SLOTS } = require('./items');
 
 const USERNAME_RE = /^[\p{L}\p{N} _.-]{2,20}$/u;
 const MIN_PASSWORD = 4;
 const MAX_AVATAR_BYTES = 1024 * 1024;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
+const RATING_LOG_KEEP = 5000;
+const LOWEST_SCORE = -10; // the bottom decency status starts here
 
 const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -41,12 +44,14 @@ class UserStore {
     this.avatarDir = path.join(dir, 'avatars');
     this.users = {}; // id -> { id, username, salt, hash, avatar, likes, dislikes, createdAt }
     this.sessions = {}; // sha256(token) -> userId
+    this.ratingLog = []; // [{ from, to, value, at }]: who rated whom, for the admin
     this.failures = new Map(); // username (lowercase) -> [timestamps]
     this.saveTimer = null;
     try {
       const data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
       this.users = data.users || {};
       this.sessions = data.sessions || {};
+      this.ratingLog = data.ratingLog || [];
     } catch (e) {
       if (e.code !== 'ENOENT') console.error('Could not read users:', e.message);
     }
@@ -58,7 +63,7 @@ class UserStore {
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const tmp = `${this.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ users: this.users, sessions: this.sessions }));
+      fs.writeFileSync(tmp, JSON.stringify({ users: this.users, sessions: this.sessions, ratingLog: this.ratingLog }));
       fs.renameSync(tmp, this.file);
     } catch (e) {
       console.error('Saving users failed:', e.message);
@@ -138,11 +143,72 @@ class UserStore {
   }
 
   // Apply a change of one player's rating of another: old/new are -1, 0 or 1.
-  applyRating(targetId, oldValue, newValue) {
+  applyRating(targetId, oldValue, newValue, fromId = null) {
     const u = this.users[targetId];
     if (!u) return;
     u.likes += (newValue === 1) - (oldValue === 1);
     u.dislikes += (newValue === -1) - (oldValue === -1);
+    if (fromId) {
+      this.ratingLog.push({ from: fromId, to: targetId, value: newValue, at: Date.now() });
+      if (this.ratingLog.length > RATING_LOG_KEEP) this.ratingLog.splice(0, this.ratingLog.length - RATING_LOG_KEEP);
+    }
+    this.save();
+  }
+
+  // Who currently dislikes this user: each rater's latest rating per game counts, as logged.
+  dislikedBy(userId) {
+    const latest = new Map();
+    for (const r of this.ratingLog) if (r.to === userId) latest.set(r.from, r.value);
+    return [...latest].filter(([, v]) => v === -1).map(([from]) => this.users[from]?.username).filter(Boolean);
+  }
+
+  // ---------- admin ----------
+  adminView(user) {
+    return {
+      ...this.publicProfile(user),
+      rawLikes: user.likes, rawDislikes: user.dislikes,
+      bonus: user.bonus || 0, dislikeShield: !!user.dislikeShield, admin: !!user.admin,
+      dislikedBy: this.dislikedBy(user.id),
+    };
+  }
+
+  setKarma(user, { bonus, dislikeShield, lowest }) {
+    if (bonus !== undefined) user.bonus = Math.max(-1000, Math.min(1000, Math.round(Number(bonus) || 0)));
+    if (dislikeShield !== undefined) user.dislikeShield = !!dislikeShield;
+    // put the user right at the start of the lowest status, whatever their ratings
+    if (lowest) user.bonus = LOWEST_SCORE - (this.publicProfile({ ...user, bonus: 0 }).score);
+    this.save();
+  }
+
+  gift(user, itemId) {
+    if (!ITEMS[itemId]) throw new GameError('err.invalidTarget');
+    user.inventory ||= [];
+    if (user.inventory.includes(itemId)) return;
+    user.inventory.push(itemId);
+    (user.gifts ||= []).push(itemId); // shown with an unboxing the next time they look
+    this.save();
+  }
+
+  takeBack(user, itemId) {
+    user.inventory = (user.inventory || []).filter(i => i !== itemId);
+    user.gifts = (user.gifts || []).filter(i => i !== itemId);
+    for (const slot of EQUIP_SLOTS) if (user.equipped?.[slot] === itemId) delete user.equipped[slot];
+    this.save();
+  }
+
+  equip(user, slot, itemId) {
+    if (!EQUIP_SLOTS.includes(slot)) throw new GameError('err.invalidTarget');
+    user.equipped ||= {};
+    if (!itemId) delete user.equipped[slot];
+    else {
+      if (!(user.inventory || []).includes(itemId) || ITEMS[itemId]?.slot !== slot) throw new GameError('err.invalidTarget');
+      user.equipped[slot] = itemId;
+    }
+    this.save();
+  }
+
+  giftsSeen(user) {
+    user.gifts = [];
     this.save();
   }
 
@@ -165,14 +231,22 @@ class UserStore {
   // What other players (and the user) get to see.
   publicProfile(user) {
     if (!user) return null;
+    // with the dislike shield, every dislike comes with a like, so dislikes never lower the score
+    const likes = user.likes + (user.dislikeShield ? user.dislikes : 0);
+    const inventory = (user.inventory || []).filter(i => ITEMS[i]);
     return {
       id: user.id,
       username: user.username,
       avatar: user.avatar ? `/avatars/${user.avatar}` : null,
-      likes: user.likes,
+      likes,
       dislikes: user.dislikes,
-      score: user.likes - user.dislikes,
+      score: likes - user.dislikes + (user.bonus || 0),
       stats: user.stats || emptyStats(),
+      admin: !!user.admin,
+      inventory,
+      equipped: Object.fromEntries(Object.entries(user.equipped || {}).filter(([, i]) => inventory.includes(i))),
+      reactions: inventory.filter(i => ITEMS[i].slot === 'reaction').map(i => ITEMS[i].emoji),
+      gifts: (user.gifts || []).filter(i => inventory.includes(i)),
     };
   }
 }
