@@ -4,17 +4,19 @@
 // Russian edition (Moscow streets). Amounts are in ₽ at the official values.
 //
 // rent: [base, 1 house, 2, 3, 4, hotel]; mortgage is half the price; unmortgaging costs +10%.
+// All money is the official amount ×10 (easier to read: 15 000 ₽ to start, 2 000 ₽ salary).
+const SCALE = 10;
 
-const street = (name, en, group, price, rent, house) => ({ type: 'street', name, en, group, price, rent, house });
-const railway = (name, en) => ({ type: 'railway', name, en, price: 200 });
-const utility = (name, en) => ({ type: 'utility', name, en, price: 150 });
+const street = (name, en, group, price, rent, house) => ({ type: 'street', name, en, group, price: price * SCALE, rent: rent.map(r => r * SCALE), house: house * SCALE });
+const railway = (name, en) => ({ type: 'railway', name, en, price: 200 * SCALE });
+const utility = (name, en) => ({ type: 'utility', name, en, price: 150 * SCALE });
 
 const SQUARES = [
   { type: 'go', name: 'Вперёд', en: 'GO' },
   street('Житная улица', 'Zhitnaya St', 'brown', 60, [2, 10, 30, 90, 160, 250], 50),
   { type: 'chest', name: 'Общественная казна', en: 'Community Chest' },
   street('Нагатинская улица', 'Nagatinskaya St', 'brown', 60, [4, 20, 60, 180, 320, 450], 50),
-  { type: 'tax', name: 'Подоходный налог', en: 'Income Tax', amount: 200 },
+  { type: 'tax', name: 'Подоходный налог', en: 'Income Tax', amount: 200 * SCALE },
   railway('Рижская железная дорога', 'Riga Railway'),
   street('Варшавское шоссе', 'Varshavskoye Hwy', 'lightblue', 100, [6, 30, 90, 270, 400, 550], 50),
   { type: 'chance', name: 'Шанс', en: 'Chance' },
@@ -48,13 +50,13 @@ const SQUARES = [
   railway('Ленинградская железная дорога', 'Leningrad Railway'),
   { type: 'chance', name: 'Шанс', en: 'Chance' },
   street('Улица Малая Бронная', 'Malaya Bronnaya St', 'darkblue', 350, [35, 175, 500, 1100, 1300, 1500], 200),
-  { type: 'tax', name: 'Сверхналог', en: 'Luxury Tax', amount: 100 },
+  { type: 'tax', name: 'Сверхналог', en: 'Luxury Tax', amount: 100 * SCALE },
   street('Улица Арбат', 'Arbat St', 'darkblue', 400, [50, 200, 600, 1400, 1700, 2000], 200),
 ];
 
 const JAIL = 10;
 const GO_TO_JAIL = 30;
-const RAILWAY_RENT = [25, 50, 100, 200];
+const RAILWAY_RENT = [25, 50, 100, 200].map(r => r * SCALE);
 const GROUPS = {};
 SQUARES.forEach((sq, i) => { if (sq.group) (GROUPS[sq.group] ||= []).push(i); });
 const isProperty = i => ['street', 'railway', 'utility'].includes(SQUARES[i].type);
@@ -135,4 +137,10 @@ const SHORT = {
 };
 SQUARES.forEach(sq => { const sh = SHORT[sq.name]; sq.short = sh ? sh[0] : sq.name; sq.shortEn = sh ? sh[1] : sq.en; });
 
-module.exports = { SQUARES, JAIL, GO_TO_JAIL, RAILWAY_RENT, GROUPS, CHANCE, CHEST, isProperty };
+for (const c of [...CHANCE, ...CHEST]) {
+  if (c.money) c.money *= SCALE;
+  if (c.eachPlayer) c.eachPlayer *= SCALE;
+  if (c.repairs) c.repairs = c.repairs.map(x => x * SCALE);
+}
+
+module.exports = { SCALE, SQUARES, JAIL, GO_TO_JAIL, RAILWAY_RENT, GROUPS, CHANCE, CHEST, isProperty };

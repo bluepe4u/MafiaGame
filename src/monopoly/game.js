@@ -6,14 +6,16 @@
 // Chance / Community Chest, debts and bankruptcy. House rules are lobby settings.
 
 const crypto = require('crypto');
-const { SQUARES, JAIL, GO_TO_JAIL, RAILWAY_RENT, GROUPS, CHANCE, CHEST, isProperty } = require('./board');
+const { SCALE, SQUARES, JAIL, GO_TO_JAIL, RAILWAY_RENT, GROUPS, CHANCE, CHEST, isProperty } = require('./board');
 const { GameError } = require('../game');
 
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 8;
 const MAX_SPECTATORS = 20;
-const SALARY = 200;
-const BAIL = 50;
+const SALARY = 200 * SCALE;
+const BAIL = 50 * SCALE;
+const JAIL_CARD_VALUE = 50 * SCALE; // what a "Get out of jail" card counts for when judging a trade
+const UNFAIR_RATIO = 2; // giving more than twice what you get (without completing a set) is refused
 const HOUSES = 32;
 const HOTELS = 12;
 const AUCTION_MS = 10000; // the auction ends this long after the last bid
@@ -51,7 +53,10 @@ class MonoRoom {
     this.players = []; // { id, token, userId, name, connected, ready, piece }
     this.spectators = []; // { id, token, userId, name, connected }
     this.hostId = null;
-    this.settings = { startingCash: 1500, doubleGo: true, freeParking: false, auctions: true, noRentInJail: false, turnSeconds: 90 };
+    // mortgageTurns: a mortgaged property goes back to the bank after this many of its owner's turns (0 = never)
+    this.settings = {
+      startingCash: 1500 * SCALE, doubleGo: true, freeParking: false, auctions: true, noRentInJail: false, turnSeconds: 90, mortgageTurns: 15,
+    };
     this.phase = 'lobby';
     this.g = null; // the running game, see start()
     this.gameId = null;
@@ -202,13 +207,18 @@ class MonoRoom {
     this.assert(this.phase === 'lobby', 'err.settingsLobbyOnly');
     if (s.startingCash !== undefined) {
       const v = Number(s.startingCash);
-      this.assert(Number.isInteger(v) && v >= 500 && v <= 5000, 'err.mono.cashRange', { min: 500, max: 5000 });
+      this.assert(Number.isInteger(v) && v >= 500 * SCALE && v <= 5000 * SCALE, 'err.mono.cashRange', { min: 500 * SCALE, max: 5000 * SCALE });
       this.settings.startingCash = v;
     }
     if (s.turnSeconds !== undefined) {
       const v = Number(s.turnSeconds);
       this.assert(Number.isInteger(v) && (v === 0 || (v >= 30 && v <= 600)), 'err.mono.turnRange', { min: 30, max: 600 });
       this.settings.turnSeconds = v;
+    }
+    if (s.mortgageTurns !== undefined) {
+      const v = Number(s.mortgageTurns);
+      this.assert(Number.isInteger(v) && (v === 0 || (v >= 3 && v <= 50)), 'err.mono.mortgageRange', { min: 3, max: 50 });
+      this.settings.mortgageTurns = v;
     }
     for (const k of ['doubleGo', 'freeParking', 'auctions', 'noRentInJail']) if (s[k] !== undefined) this.settings[k] = !!s[k];
     this.touch();
@@ -365,7 +375,21 @@ class MonoRoom {
   // ---------- turns ----------
   beginTurn(pid) {
     this.g.turn = { pid, stage: 'roll', dice: null, doublesCount: 0, extraRoll: false, endsAt: this.turnDeadline() };
+    this.tickMortgages(pid);
     this.touch();
+  }
+
+  // Each of the owner's turns counts down their mortgages; at zero the property goes back to the bank.
+  tickMortgages(pid) {
+    for (const sq of this.owned(pid)) {
+      const pr = this.prop(sq);
+      if (!pr.mortgaged || !pr.mortgageLeft) continue;
+      pr.mortgageLeft -= 1;
+      if (pr.mortgageLeft <= 0) {
+        delete this.g.props[sq];
+        this.addLog('mono.log.mortgageExpired', { name: this.nameOf(pid), square: sq });
+      }
+    }
   }
 
   requireTurn(pid, stage) {
@@ -641,7 +665,8 @@ class MonoRoom {
     g.turn.offer = null;
     g.turn.stage = 'resolved';
     if (this.settings.auctions && this.active().length > 1) {
-      g.auction = { square: sq, bid: 0, bidder: null, endsAt: Date.now() + AUCTION_MS };
+      // bidding opens at half the price, so nobody snaps it up for pennies
+      g.auction = { square: sq, bid: 0, bidder: null, min: Math.ceil(SQUARES[sq].price / 2), endsAt: Date.now() + AUCTION_MS };
       this.addLog('mono.log.auction', { square: sq });
     } else {
       this.addLog('mono.log.declined', { name: this.nameOf(pid), square: sq });
@@ -655,7 +680,8 @@ class MonoRoom {
     this.assert(this.player(pid) && !this.gp(pid).bankrupt, 'err.notInRoom');
     this.assert(!this.g.debts.length, 'err.mono.waitForOthers');
     amount = Math.floor(Number(amount));
-    this.assert(Number.isInteger(amount) && amount > a.bid, 'err.mono.bidTooLow', { min: a.bid + 1 });
+    const min = a.bidder ? a.bid + 1 : a.min || 1;
+    this.assert(Number.isInteger(amount) && amount >= min, 'err.mono.bidTooLow', { min });
     this.assert(amount <= this.gp(pid).cash, 'err.mono.notEnoughCash');
     a.bid = amount;
     a.bidder = pid;
@@ -814,6 +840,7 @@ class MonoRoom {
 
   mortgageRaw(pid, sq) {
     this.prop(sq).mortgaged = true;
+    if (this.settings.mortgageTurns) this.prop(sq).mortgageLeft = this.settings.mortgageTurns;
     this.gp(pid).cash += SQUARES[sq].price / 2;
   }
 
@@ -828,6 +855,7 @@ class MonoRoom {
     this.assert(this.gp(pid).cash >= cost, 'err.mono.notEnoughCash');
     this.gp(pid).cash -= cost;
     pr.mortgaged = false;
+    delete pr.mortgageLeft;
     this.addLog('mono.log.unmortgaged', { name: this.nameOf(pid), square: sq });
     this.touch();
   }
@@ -952,6 +980,30 @@ class MonoRoom {
     };
     side(tr.from, tr.give);
     side(tr.to, tr.take);
+    this.checkFairness(tr);
+  }
+
+  // Refuse deals that are clearly unfair (gifts, a colour set sold off cheap) — the usual way to fix a game.
+  checkFairness(tr) {
+    const propValue = sq => (this.prop(sq).mortgaged ? SQUARES[sq].price / 2 : SQUARES[sq].price);
+    const value = s => s.props.reduce((t, sq) => t + propValue(sq), 0) + s.cash + s.cards * JAIL_CARD_VALUE;
+    // the properties among `props` that complete a colour set for `pid` once the trade is done
+    const completing = (pid, props, givingAway) => props.filter(sq => {
+      const group = SQUARES[sq].group;
+      if (!group) return false;
+      return GROUPS[group].every(x => props.includes(x) || (this.prop(x)?.owner === pid && !givingAway.includes(x)));
+    });
+    const fromSet = completing(tr.from, tr.take.props, tr.give.props); // what `from` completes
+    const toSet = completing(tr.to, tr.give.props, tr.take.props);
+    const fromGives = value(tr.give), toGives = value(tr.take);
+    // 1) one side hands over more than twice what it gets back, with no colour set to show for it
+    if (fromGives > 0 && toGives * UNFAIR_RATIO < fromGives && !fromSet.length) throw new GameError('err.mono.unfairTrade');
+    if (toGives > 0 && fromGives * UNFAIR_RATIO < toGives && !toSet.length) throw new GameError('err.mono.unfairTrade');
+    // 2) a property that completes someone's colour set must go for at least its full price
+    //    (fine when both sides complete a set)
+    const fullPrice = props => props.reduce((t, sq) => t + SQUARES[sq].price, 0);
+    if (toSet.length && !fromSet.length && toGives < fullPrice(toSet)) throw new GameError('err.mono.cheapMonopoly', { min: fullPrice(toSet) });
+    if (fromSet.length && !toSet.length && fromGives < fullPrice(fromSet)) throw new GameError('err.mono.cheapMonopoly', { min: fullPrice(fromSet) });
   }
 
   respondTrade(pid, tradeId, accept) {
@@ -1074,4 +1126,4 @@ class MonoRoom {
   }
 }
 
-module.exports = { MonoRoom, TOKENS, MIN_PLAYERS, MAX_PLAYERS, AUCTION_MS, BAIL, SALARY };
+module.exports = { MonoRoom, TOKENS, MIN_PLAYERS, MAX_PLAYERS, AUCTION_MS, BAIL, SALARY, SCALE };

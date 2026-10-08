@@ -104,8 +104,9 @@
           <div class="card-head"><h2 data-i18n="mono.setup"></h2></div>
           <div id="hostSettings" class="hidden">
             <div class="grid2">
-              <label class="field"><span data-i18n="mono.startingCash"></span> <input type="number" min="500" max="5000" step="100" id="startingCash"></label>
+              <label class="field"><span data-i18n="mono.startingCash"></span> <input type="number" min="5000" max="50000" step="1000" id="startingCash"></label>
               <label class="field"><span data-i18n="mono.turnTime"></span> <input type="number" min="0" max="600" step="10" id="turnSeconds"></label>
+              <label class="field"><span data-i18n="mono.mortgageTurns"></span> <input type="number" min="0" max="50" id="mortgageTurns"></label>
             </div>
             <div class="checks settings-rest">
               <label class="check"><input type="checkbox" class="switch" data-rule="doubleGo"> <span data-i18n="mono.rule.doubleGo"></span></label>
@@ -131,6 +132,7 @@
             <button id="restartBtn" class="danger small hidden" data-i18n="mono.backToLobby"></button>
             <button id="resignBtn" class="ghost small hidden" data-i18n="mono.resign"></button>
           </div>
+          <div id="reactBar" class="react-bar mono-react hidden"></div>
         </aside>
         <div class="board-area">
           <div id="board" class="mboard">
@@ -144,29 +146,26 @@
               <div id="actions" class="actions"></div>
               <ul id="feed" class="feed"></ul>
               <div id="cardShow" class="card-show hidden"></div>
+              <div id="dealShow" class="deal-show hidden"></div>
             </div>
             <div id="tokens" class="tokens"></div>
           </div>
         </div>
-        <aside class="side-col">
-          <div class="card grow tabs-card">
-            <div class="tabs" role="tablist">
-              <button data-tab="props" data-i18n="mono.tab.props"></button>
-              <button data-tab="trade"><span data-i18n="mono.tab.trade"></span><span id="tradeBadge" class="badge hidden"></span></button>
-              <button data-tab="log" data-i18n="mono.tab.log"></button>
-            </div>
-            <div class="tab-panel" data-panel="props"><div id="myProps" class="my-props"></div></div>
-            <div class="tab-panel" data-panel="trade"><div id="tradePanel" class="trade-panel"></div></div>
-            <div class="tab-panel" data-panel="log"><ul id="log" class="log"></ul></div>
-          </div>
-          <div id="reactBar" class="react-bar mono-react hidden"></div>
-        </aside>
       </div>
     </section>
   </main>
 
   <!-- square details -->
   <div id="sqInfo" class="overlay hidden" role="dialog" aria-modal="true"><div id="sqCard" class="sq-card"></div></div>
+
+  <!-- player menu, trade window -->
+  <div id="playerMenu" class="mark-menu player-menu hidden" role="menu"></div>
+  <div id="tradeModal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet trade-sheet">
+      <div class="sheet-head"><h2 id="tradeTitle"></h2><button id="tradeClose" class="ghost small" data-i18n="ui.close"></button></div>
+      <div id="tradeBody" class="sheet-body trade-body"></div>
+    </div>
+  </div>
 
   <!-- results -->
   <div id="results" class="overlay hidden" role="dialog" aria-modal="true">

@@ -9,11 +9,12 @@ const store = {
 const AUTH_KEY = 'mafia.auth'; // shared with Mafia: one login for the whole site
 const SESSION_KEY = 'mono.session';
 const SOUND_KEY = 'mafia.alerts';
-const TAB_KEY = 'mono.tab';
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = n => `${Math.round(n).toLocaleString('ru-RU')} ₽`;
+// compact amounts for the price tags on the board: 600, 1.4к, 20к
+const tagMoney = n => (typeof n !== 'number' ? n : n < 1000 ? String(n) : `${+(n / 1000).toFixed(n % 1000 ? 1 : 0)}к`);
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const socket = io('/monopoly', { auth: cb => cb({ token: store.get(AUTH_KEY) }) });
@@ -256,6 +257,7 @@ function render() {
 for (const input of $$('[data-rule]')) input.addEventListener('change', () => send('settings', { [input.dataset.rule]: input.checked }));
 $('#startingCash').addEventListener('change', e => send('settings', { startingCash: parseInt(e.target.value, 10) }));
 $('#turnSeconds').addEventListener('change', e => send('settings', { turnSeconds: parseInt(e.target.value, 10) || 0 }));
+$('#mortgageTurns').addEventListener('change', e => send('settings', { mortgageTurns: parseInt(e.target.value, 10) || 0 }));
 $('#startBtn').onclick = () => send('start');
 $('#readyBtn').onclick = () => {
   const mine = state.players.find(p => p.id === state.me.id);
@@ -295,8 +297,9 @@ function renderLobby() {
   $('#setupSummary').innerHTML = [
     `${t('mono.startingCash')}: ${money(s.startingCash)}`,
     s.turnSeconds ? `${t('mono.turnTime').split('(')[0].trim()}: ${s.turnSeconds} s` : t('mono.turnTime').split('(')[0].trim() + ': ∞',
+    s.mortgageTurns ? `${t('mono.mortgageTurns').split('(')[0].trim()}: ${s.mortgageTurns}` : '',
     ...['doubleGo', 'auctions', 'freeParking', 'noRentInJail'].filter(k => s[k]).map(k => t('mono.rule.' + k)),
-  ].map(x => `<li>${esc(x)}</li>`).join('');
+  ].filter(Boolean).map(x => `<li>${esc(x)}</li>`).join('');
   $('#hostSettings').classList.toggle('hidden', !isHost());
   $('#startBtn').classList.toggle('hidden', !isHost());
   $('#waitHost').classList.toggle('hidden', isHost());
@@ -305,6 +308,7 @@ function renderLobby() {
   if (isHost()) {
     setIfNotFocused($('#startingCash'), s.startingCash);
     setIfNotFocused($('#turnSeconds'), s.turnSeconds);
+    setIfNotFocused($('#mortgageTurns'), s.mortgageTurns);
     for (const input of $$('[data-rule]')) input.checked = !!s[input.dataset.rule];
   }
 }
@@ -324,7 +328,7 @@ function gridPos(i) {
 // thin line icons, drawn in the cell's colour
 const svg = (paths, extra = '') => `<svg class="sq-svg" viewBox="0 0 24 24" aria-hidden="true" ${extra}>${paths}</svg>`;
 const ICONS = {
-  go: svg('<path d="M4 12h13M12 6l6 6-6 6"/>'),
+  go: svg('<path d="M20 12H7M12 6l-6 6 6 6"/>'),
   jail: svg('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 4v16M15 4v16M4 12h16"/>'),
   parking: svg('<rect x="4" y="3" width="16" height="18" rx="3"/><path d="M10 17V8h3.5a2.5 2.5 0 0 1 0 5H10"/>'),
   gotojail: svg('<circle cx="8" cy="15" r="3.2"/><circle cx="16" cy="15" r="3.2"/><path d="M8 11.8V8a4 4 0 0 1 8 0v3.8"/>'),
@@ -349,7 +353,7 @@ function buildBoard() {
         ${icon ? `<span class="sq-icon">${icon}</span>` : ''}
         <span class="sq-name">${esc(sqShort(i))}</span>
       </span>
-      ${sq.price ? `<span class="tag-price">${sq.price}</span>` : sq.amount ? `<span class="tag-price tax">${sq.amount}</span>` : ''}
+      ${sq.price ? `<span class="tag-price">${tagMoney(sq.price)}</span>` : sq.amount ? `<span class="tag-price tax">${tagMoney(sq.amount)}</span>` : ''}
       <span class="lock">${ICONS.lock}</span>
     </button>`;
   }).join('');
@@ -382,7 +386,7 @@ function updateBoard() {
     const bldg = el.querySelector('.bldg');
     if (bldg) bldg.innerHTML = !pr || !pr.houses ? '' : pr.houses === 5 ? '<i class="hotel"></i>' : '<i class="house"></i>'.repeat(pr.houses);
     const tag = el.querySelector('.tag-price');
-    if (tag && sq.price) tag.textContent = pr && !pr.mortgaged ? rentNow(i) : sq.price;
+    if (tag && sq.price) tag.textContent = pr && pr.mortgaged ? (pr.mortgageLeft || '') : tagMoney(pr ? rentNow(i) : sq.price);
     el.querySelector('.sq-name').textContent = sqShort(i);
   }
   renderTokens();
@@ -483,23 +487,33 @@ function fxOnState(prev, s) {
   }
   if (s.phase === 'ended' && prev.phase !== 'ended') { SFX.win(); setTimeout(openResults, 900); }
 }
+// 3D dice: each die is a cube that tumbles and lands on the rolled face
 const PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
-const dieHtml = n => Array.from({ length: 9 }, (_, i) => `<i class="${PIPS[n].includes(i + 1) ? 'pip' : ''}"></i>`).join('');
-function drawDice(d) {
-  const dies = $$('#dice .die');
-  dies[0].innerHTML = dieHtml(d[0]);
-  dies[1].innerHTML = dieHtml(d[1]);
+const FACE_ROT = { 1: [0, 0], 2: [0, -90], 3: [-90, 0], 4: [90, 0], 5: [0, 90], 6: [0, 180] }; // [x, y] to show each face
+const faceHtml = n => `<span class="face f${n}">${Array.from({ length: 9 }, (_, i) => `<i class="${PIPS[n].includes(i + 1) ? 'pip' : ''}"></i>`).join('')}</span>`;
+function ensureDice() {
+  const box = $('#dice');
+  if (box.querySelector('.cube')) return;
+  box.innerHTML = [0, 1].map(() => `<span class="die3d"><span class="cube">${[1, 2, 3, 4, 5, 6].map(faceHtml).join('')}</span></span>`).join('');
+}
+const spins = [0, 0];
+function drawDice(d, animate = false) {
+  ensureDice();
+  $$('#dice .cube').forEach((cube, k) => {
+    const [x, y] = FACE_ROT[d[k]];
+    if (animate) spins[k] += 2 + Math.floor(Math.random() * 2); // extra full turns so it really tumbles
+    cube.style.transition = animate ? `transform ${0.9 + k * 0.15}s cubic-bezier(.2, .9, .25, 1.05)` : 'none';
+    cube.style.transform = `rotateX(${x + spins[k] * 360}deg) rotateY(${y + spins[k] * 360}deg)`;
+  });
   $('#dice').classList.toggle('doubles', d[0] === d[1]);
+  if (animate) {
+    $('#dice').classList.remove('bounce');
+    void $('#dice').offsetWidth;
+    $('#dice').classList.add('bounce');
+  }
 }
 function animateDice(final) {
-  if (reducedMotion()) return drawDice(final);
-  const box = $('#dice');
-  box.classList.add('rolling');
-  let n = 0;
-  const spin = setInterval(() => {
-    drawDice([1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]);
-    if (++n >= 8) { clearInterval(spin); box.classList.remove('rolling'); drawDice(final); }
-  }, 70);
+  drawDice(final, !reducedMotion());
 }
 
 // ---------- game screen ----------
@@ -509,10 +523,9 @@ function renderGame() {
   updateBoard();
   renderCenter();
   renderPlayers();
-  renderMyProps();
-  renderTrades();
-  renderTabs();
-  $('#log').innerHTML = g.log.slice().reverse().map(e => `<li>${esc(fmtLog(e))}</li>`).join('');
+  renderDeal();
+  if (deal && !$('#tradeModal').classList.contains('hidden')) renderTrade();
+  if (!$('#sqInfo').classList.contains('hidden') && openSq !== null) openSquare(openSq, true);
   $('#bankInfo').textContent = t('mono.bankSupply', { h: g.housesLeft, t: g.hotelsLeft }) + (state.settings.freeParking ? ` · ${t('mono.pot', { n: g.pot })}` : '');
   const playing = state.phase === 'playing' && !state.me.spectator && gp(state.me.id) && !gp(state.me.id).bankrupt;
   $('#resignBtn').classList.toggle('hidden', !playing);
@@ -556,8 +569,8 @@ function renderCenter() {
       <div class="auction-title">${esc(t('mono.auctionTitle', { square: sqName(a.square) }))}</div>
       <div class="auction-bid">${a.bidder ? esc(t('mono.auctionBid', { amount: a.bid, name: nameOf(a.bidder) })) : esc(t('mono.auctionNoBid'))}</div>
       ${canBid ? `<div class="row center bid-row">
-        ${[10, 50, 100].map(x => `<button class="small" data-bid="${a.bid + x}">+${x}</button>`).join('')}
-        <input id="bidInput" type="number" min="${a.bid + 1}" value="${a.bid + 10}">
+        ${a.bidder ? [100, 500, 1000].map(x => `<button class="small" data-bid="${a.bid + x}">+${x}</button>`).join('') : `<button class="small" data-bid="${a.min}">${money(a.min)}</button>`}
+        <input id="bidInput" type="number" step="100" min="${a.bidder ? a.bid + 1 : a.min}" value="${a.bidder ? a.bid + 100 : a.min}">
         <button id="bidBtn" class="primary small">${esc(t('mono.bid'))}</button>
       </div>` : ''}
     </div>`;
@@ -575,7 +588,7 @@ function renderCenter() {
       html = myGp.inJail
         ? `<div class="muted small-text">${esc(t('mono.inJail', { n: myGp.jailTurns + 1 }))}</div><div class="row center">
             <button id="rollBtn" class="primary big-roll">${esc(t('mono.roll'))}</button>
-            <button id="bailBtn" ${myGp.cash < 50 ? 'disabled' : ''}>${esc(t('mono.payBail', { n: 50 }))}</button>
+            <button id="bailBtn" ${myGp.cash < 500 ? 'disabled' : ''}>${esc(t('mono.payBail', { n: 500 }))}</button>
             ${myGp.jailCards ? `<button id="cardBtn">${esc(t('mono.useCard'))}</button>` : ''}</div>`
         : `<button id="rollBtn" class="primary big-roll">${esc(t('mono.roll'))}</button>`;
     } else if (st === 'buy') {
@@ -637,154 +650,185 @@ function renderPlayers() {
   $('#playerList').innerHTML = g.order.map(pid => {
     const p = member(pid) || { name: '?' };
     const s = gp(pid);
-    const mine = owned(pid).sort((a, b) => a - b);
     const tags = [s.inJail ? `<span class="tag">${esc(t('mono.jail'))}</span>` : '', s.bankrupt ? `<span class="tag mafia">${esc(t('mono.bankrupt'))}</span>` : '',
-      p.connected === false ? `<span class="tag">${esc(t('tag.offline'))}</span>` : '', s.jailCards ? `<span class="tag">${esc(t('mono.trade.cards'))}: ${s.jailCards}</span>` : ''].join('');
+      p.connected === false ? `<span class="tag">${esc(t('tag.offline'))}</span>` : '', s.jailCards ? `<span class="tag key-tag" title="${esc(t('mono.trade.cards'))}"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/></svg>×${s.jailCards}</span>` : ''].join('');
     return `<div class="pcard ${pid === turnPid ? 'turn' : ''} ${s.bankrupt ? 'out' : ''} ${pid === state.me.id ? 'me' : ''}" data-pid="${pid}" style="--pc:${colorOf(pid)}">
       <span class="avatar-wrap clickable pc-wrap" data-open-player="${p.userId || ''}">${avatar(p.name, p.avatar, p.cos)}</span>
       <div class="pc-main">
         <div class="pc-top"><b class="pc-name ${nameCls(p.cos)}">${esc(p.name)}</b>${tags}</div>
         <div class="pc-cash">${money(s.cash)}</div>
-        <div class="pc-props">${mine.map(sq => `<i class="g-${BOARD.squares[sq].group || BOARD.squares[sq].type} ${g.props[sq].mortgaged ? 'm' : ''}" title="${esc(sqName(sq))}"></i>`).join('')}</div>
       </div>
       ${pid === turnPid && deadline ? '<span class="pc-timer"><span id="pcTimerFill"></span></span>' : ''}
     </div>`;
   }).join('');
-  for (const el of $$('#playerList [data-open-player]')) if (el.dataset.openPlayer) el.onclick = () => openPlayer(el.dataset.openPlayer);
+  for (const el of $$('#playerList .pcard')) el.onclick = e => { e.stopPropagation(); openPlayerMenu(el.dataset.pid, el); };
 }
-
-// ---------- my properties: build, sell, mortgage ----------
-const GROUP_ORDER = ['brown', 'lightblue', 'pink', 'orange', 'red', 'yellow', 'green', 'darkblue'];
-function renderMyProps() {
-  const g = state.game;
-  const me = state.me.id;
-  if (!gp(me)) { $('#myProps').innerHTML = ''; return; }
-  const mine = owned(me).sort((a, b) => {
-    const ga = BOARD.squares[a].group, gb = BOARD.squares[b].group;
-    return (ga ? GROUP_ORDER.indexOf(ga) : 9 + (BOARD.squares[a].type === 'railway' ? 0 : 1)) - (gb ? GROUP_ORDER.indexOf(gb) : 9 + (BOARD.squares[b].type === 'railway' ? 0 : 1)) || a - b;
-  });
-  if (!mine.length) { $('#myProps').innerHTML = `<p class="muted small-text">${esc(t('mono.noProps'))}</p>`; return; }
-  $('#myProps').innerHTML = mine.map(sq => {
-    const s = BOARD.squares[sq];
-    const pr = g.props[sq];
-    const ownsSet = s.group && BOARD.groups[s.group].every(x => g.props[x] && g.props[x].owner === me);
-    const level = !pr.houses ? '' : pr.houses === 5 ? '🏨' : '🏠'.repeat(pr.houses);
-    return `<div class="mprop ${pr.mortgaged ? 'mortgaged' : ''}">
-      <span class="mband g-${s.group || s.type}"></span>
-      <button class="mname" data-info="${sq}">${esc(sqName(sq))} <span class="lvl">${level}</span>${pr.mortgaged ? `<span class="tag">${esc(t('mono.mortgaged'))}</span>` : ''}</button>
-      <span class="mbtns">
-        ${s.type === 'street' && ownsSet && !pr.mortgaged && pr.houses < 5 ? `<button class="small" data-act="build" data-sq="${sq}" title="${s.house} ₽">🏠 ${esc(t('mono.build'))}</button>` : ''}
-        ${pr.houses ? `<button class="small ghost" data-act="sell" data-sq="${sq}">${esc(t('mono.sell'))}</button>` : ''}
-        ${!pr.mortgaged && !pr.houses ? `<button class="small ghost" data-act="mortgage" data-sq="${sq}">${esc(t('mono.mortgage', { n: s.price / 2 }))}</button>` : ''}
-        ${pr.mortgaged ? `<button class="small ghost" data-act="unmortgage" data-sq="${sq}">${esc(t('mono.unmortgage', { n: g.unmortgageCosts[sq] }))}</button>` : ''}
-      </span>
-    </div>`;
-  }).join('');
-  for (const b of $$('#myProps [data-act]')) b.onclick = () => send(b.dataset.act, { square: Number(b.dataset.sq) });
-  for (const b of $$('#myProps [data-info]')) b.onclick = () => openSquare(Number(b.dataset.info));
-}
-
-// ---------- trades ----------
-let draft = null; // { to, give: Set, take: Set, giveCash, takeCash, giveCards, takeCards }
-function renderTrades() {
-  const g = state.game;
-  const me = state.me.id;
-  const panel = $('#tradePanel');
-  if (!gp(me) || gp(me).bankrupt || state.phase !== 'playing') { panel.innerHTML = `<p class="muted small-text">${esc(t('mono.trade.none'))}</p>`; $('#tradeBadge').classList.add('hidden'); return; }
-  const mineOffers = g.trades.filter(tr => tr.from === me || tr.to === me);
-  const incoming = mineOffers.filter(tr => tr.to === me).length;
-  $('#tradeBadge').textContent = incoming;
-  $('#tradeBadge').classList.toggle('hidden', !incoming || tab === 'trade');
-  const sideTxt = s => [...s.props.map(sq => sqName(sq)), s.cash ? money(s.cash) : '', s.cards ? `🔑×${s.cards}` : ''].filter(Boolean).join(', ') || t('mono.trade.nothing');
-  const offers = mineOffers.map(tr => {
-    const inc = tr.to === me;
-    return `<div class="offer-card ${inc ? 'incoming' : ''}">
-      <div class="offer-head">${esc(inc ? t('mono.trade.incoming', { name: nameOf(tr.from) }) : t('mono.trade.outgoing', { name: nameOf(tr.to) }))}</div>
-      <div class="offer-sides"><div><span class="muted small-text">${esc(t('mono.trade.give'))}</span><p>${esc(sideTxt(inc ? tr.take : tr.give))}</p></div>
-      <div><span class="muted small-text">${esc(t('mono.trade.get'))}</span><p>${esc(sideTxt(inc ? tr.give : tr.take))}</p></div></div>
-      <div class="row">${inc ? `<button class="primary small" data-respond="${tr.id}" data-accept="1">${esc(t('mono.trade.accept'))}</button>
-        <button class="ghost small" data-respond="${tr.id}">${esc(t('mono.trade.decline'))}</button>` : `<button class="ghost small" data-respond="${tr.id}">${esc(t('mono.trade.cancel'))}</button>`}</div>
-    </div>`;
-  }).join('');
-  const others = g.order.filter(pid => pid !== me && !gp(pid).bankrupt);
-  if (draft && !others.includes(draft.to)) draft = null;
-  if (!draft && others.length) draft = { to: others[0], give: new Set(), take: new Set(), giveCash: 0, takeCash: 0, giveCards: 0, takeCards: 0 };
-  const tradeable = pid => owned(pid).filter(sq => {
-    const s = BOARD.squares[sq];
-    return !s.group || !BOARD.groups[s.group].some(x => g.props[x] && g.props[x].houses);
-  });
-  const list = (pid, set, key) => tradeable(pid).map(sq => `<label class="tprop"><input type="checkbox" data-tset="${key}" value="${sq}" ${set.has(sq) ? 'checked' : ''}><span class="mband g-${BOARD.squares[sq].group || BOARD.squares[sq].type}"></span>${esc(sqName(sq))}</label>`).join('') || `<span class="muted small-text">—</span>`;
-  const form = draft ? `<div class="trade-form">
-    <div class="row"><span class="muted small-text">${esc(t('mono.trade.with'))}</span>
-      <select id="tradeTo">${others.map(pid => `<option value="${pid}" ${pid === draft.to ? 'selected' : ''}>${esc(nameOf(pid))}</option>`).join('')}</select></div>
-    <div class="trade-cols">
-      <div><h4>${esc(t('mono.trade.give'))}</h4>${list(me, draft.give, 'give')}
-        <label class="tcash">${esc(t('mono.trade.cash'))} <input type="number" min="0" step="10" data-tnum="giveCash" value="${draft.giveCash}"></label>
-        ${gp(me).jailCards ? `<label class="tcash">${esc(t('mono.trade.cards'))} <input type="number" min="0" max="${gp(me).jailCards}" data-tnum="giveCards" value="${draft.giveCards}"></label>` : ''}</div>
-      <div><h4>${esc(t('mono.trade.get'))}</h4>${list(draft.to, draft.take, 'take')}
-        <label class="tcash">${esc(t('mono.trade.cash'))} <input type="number" min="0" step="10" data-tnum="takeCash" value="${draft.takeCash}"></label>
-        ${gp(draft.to).jailCards ? `<label class="tcash">${esc(t('mono.trade.cards'))} <input type="number" min="0" max="${gp(draft.to).jailCards}" data-tnum="takeCards" value="${draft.takeCards}"></label>` : ''}</div>
-    </div>
-    <button id="sendTrade" class="primary small">${esc(t('mono.trade.send'))}</button>
-  </div>` : '';
-  // keep the form untouched while someone is typing in it
-  if (panel.contains(document.activeElement) && document.activeElement.matches('input[type=number]')) {
-    panel.querySelector('.offers').innerHTML = offers || `<p class="muted small-text">${esc(t('mono.trade.none'))}</p>`;
-  } else {
-    panel.innerHTML = `<div class="offers">${offers || `<p class="muted small-text">${esc(t('mono.trade.none'))}</p>`}</div><h3>${esc(t('mono.trade.new'))}</h3>${form}`;
-  }
-  for (const b of $$('[data-respond]')) b.onclick = () => send('tradeRespond', { id: b.dataset.respond, accept: !!b.dataset.accept });
-  const to = $('#tradeTo');
-  if (to) to.onchange = () => { draft = { to: to.value, give: new Set(), take: new Set(), giveCash: 0, takeCash: 0, giveCards: 0, takeCards: 0 }; renderTrades(); };
-  for (const c of $$('[data-tset]')) c.onchange = () => { draft[c.dataset.tset][c.checked ? 'add' : 'delete'](Number(c.value)); };
-  for (const n of $$('[data-tnum]')) n.oninput = () => { draft[n.dataset.tnum] = Math.max(0, parseInt(n.value, 10) || 0); };
-  const sendBtn = $('#sendTrade');
-  if (sendBtn) sendBtn.onclick = async () => {
-    const res = await send('trade', {
-      to: draft.to,
-      give: { props: [...draft.give], cash: draft.giveCash, cards: draft.giveCards },
-      take: { props: [...draft.take], cash: draft.takeCash, cards: draft.takeCards },
-    });
-    if (res && res.ok) { draft = null; toast('✓ ' + t('mono.trade.send'), 'info'); }
-  };
-}
-
-// ---------- sidebar tabs ----------
-let tab = store.get(TAB_KEY) || 'props';
-function renderTabs() {
-  for (const b of $$('[data-tab]')) b.classList.toggle('active', b.dataset.tab === tab);
-  for (const p of $$('[data-panel]')) p.classList.toggle('hidden', p.dataset.panel !== tab);
-}
-for (const b of $$('[data-tab]')) b.onclick = () => { tab = b.dataset.tab; store.set(TAB_KEY, tab); renderTabs(); if (state && state.game) renderTrades(); };
 
 // ---------- square details ----------
-function openSquare(i) {
+let openSq = null;
+function openSquare(i, refresh = false) {
+  openSq = i;
   const s = BOARD.squares[i];
   const g = state && state.game;
   const pr = g && g.props[i];
   let body = '';
   if (s.type === 'street') {
     body = `<table class="rent-table">
-      <tr><td>${esc(t('mono.rent'))}</td><td>${s.rent[0]} ₽</td></tr>
-      <tr><td>${esc(t('mono.rentSet'))}</td><td>${s.rent[0] * 2} ₽</td></tr>
-      ${[1, 2, 3, 4].map(n => `<tr><td>${esc(t('mono.rentHouses', { n }))}</td><td>${s.rent[n]} ₽</td></tr>`).join('')}
-      <tr><td>${esc(t('mono.rentHotel'))}</td><td>${s.rent[5]} ₽</td></tr>
-      <tr class="sep"><td>${esc(t('mono.houseCost'))}</td><td>${s.house} ₽</td></tr>
-      <tr><td>${esc(t('mono.mortgageValue'))}</td><td>${s.price / 2} ₽</td></tr></table>`;
+      <tr><td>${esc(t('mono.rent'))}</td><td>${money(s.rent[0])}</td></tr>
+      <tr><td>${esc(t('mono.rentSet'))}</td><td>${money(s.rent[0] * 2)}</td></tr>
+      ${[1, 2, 3, 4].map(n => `<tr><td>${esc(t('mono.rentHouses', { n }))}</td><td>${money(s.rent[n])}</td></tr>`).join('')}
+      <tr><td>${esc(t('mono.rentHotel'))}</td><td>${money(s.rent[5])}</td></tr>
+      <tr class="sep"><td>${esc(t('mono.houseCost'))}</td><td>${money(s.house)}</td></tr>
+      <tr><td>${esc(t('mono.mortgageValue'))}</td><td>${money(s.price / 2)}</td></tr></table>`;
   } else if (s.type === 'railway') {
-    body = `<table class="rent-table">${BOARD.railwayRent.map((r, k) => `<tr><td>${esc(t('mono.railRent', { n: k + 1 }))}</td><td>${r} ₽</td></tr>`).join('')}
-      <tr class="sep"><td>${esc(t('mono.mortgageValue'))}</td><td>${s.price / 2} ₽</td></tr></table>`;
+    body = `<table class="rent-table">${BOARD.railwayRent.map((r, k) => `<tr><td>${esc(t('mono.railRent', { n: k + 1 }))}</td><td>${money(r)}</td></tr>`).join('')}
+      <tr class="sep"><td>${esc(t('mono.mortgageValue'))}</td><td>${money(s.price / 2)}</td></tr></table>`;
   } else if (s.type === 'utility') {
-    body = `<p>${esc(t('mono.utilRent'))}</p><table class="rent-table"><tr><td>${esc(t('mono.mortgageValue'))}</td><td>${s.price / 2} ₽</td></tr></table>`;
-  } else if (s.type === 'tax') body = `<p class="big-amount">${s.amount} ₽</p>`;
+    body = `<p>${esc(t('mono.utilRent'))}</p><table class="rent-table"><tr><td>${esc(t('mono.mortgageValue'))}</td><td>${money(s.price / 2)}</td></tr></table>`;
+  } else if (s.type === 'tax') body = `<p class="big-amount">${money(s.amount)}</p>`;
   $('#sqCard').innerHTML = `
     <div class="sq-head g-${s.group || s.type}"><span>${esc(sqName(i))}</span></div>
-    ${s.price ? `<div class="sq-meta"><span>${esc(t('mono.price'))}: <b>${s.price} ₽</b></span><span>${pr ? `${esc(t('mono.owner'))}: <b style="color:${colorOf(pr.owner)}">${esc(nameOf(pr.owner))}</b>${pr.mortgaged ? ` · ${esc(t('mono.mortgaged'))}` : ''}` : esc(t('mono.unowned'))}</span></div>` : ''}
+    ${s.price ? `<div class="sq-meta"><span>${esc(t('mono.price'))}: <b>${money(s.price)}</b></span><span>${pr ? `${esc(t('mono.owner'))}: <b style="color:${colorOf(pr.owner)}">${esc(nameOf(pr.owner))}</b>${pr.mortgaged ? ` · ${esc(t('mono.mortgaged'))}` : ''}` : esc(t('mono.unowned'))}</span></div>` : ''}
+    ${pr && pr.mortgaged && pr.mortgageLeft ? `<p class="sq-warn">${esc(t('mono.mortgageLeft', { n: pr.mortgageLeft }))}</p>` : ''}
     ${body}
+    ${manageHtml(i)}
     <button id="sqClose" class="ghost small">${esc(t('ui.close'))}</button>`;
-  $('#sqInfo').classList.remove('hidden');
-  $('#sqClose').onclick = () => $('#sqInfo').classList.add('hidden');
+  if (!refresh) $('#sqInfo').classList.remove('hidden');
+  $('#sqClose').onclick = () => { $('#sqInfo').classList.add('hidden'); openSq = null; };
+  for (const b of $$('#sqCard [data-act]')) b.onclick = () => send(b.dataset.act, { square: i });
 }
+
+// Build / sell / mortgage live on the property's own card — the one place to manage it.
+function manageHtml(i) {
+  const g = state && state.game;
+  if (!g || state.phase !== 'playing' || !state.me) return '';
+  const pr = g.props[i];
+  const me = state.me.id;
+  if (!pr || pr.owner !== me || !gp(me) || gp(me).bankrupt) return '';
+  const s = BOARD.squares[i];
+  const cash = gp(me).cash;
+  const set = s.group ? BOARD.groups[s.group] : [];
+  const ownsSet = s.group && set.every(x => g.props[x] && g.props[x].owner === me);
+  const groupBuilt = set.some(x => g.props[x] && g.props[x].houses);
+  const myTurn = g.turn && g.turn.pid === me && !g.debts.length;
+  const btns = [];
+  if (s.type === 'street' && ownsSet && !pr.mortgaged && pr.houses < 5) {
+    const min = Math.min(...set.map(x => g.props[x].houses));
+    btns.push(`<button class="primary small" data-act="build" ${!myTurn || pr.houses !== min || cash < s.house || set.some(x => g.props[x].mortgaged) ? 'disabled' : ''}>${esc(t('mono.build'))} · ${money(s.house)}</button>`);
+  }
+  if (pr.houses) btns.push(`<button class="small" data-act="sell">${esc(t('mono.sell'))} · +${money(s.house / 2)}</button>`);
+  if (!pr.mortgaged && !groupBuilt) btns.push(`<button class="small" data-act="mortgage">${esc(t('mono.mortgage', { n: money(s.price / 2) }))}</button>`);
+  if (pr.mortgaged) btns.push(`<button class="small" data-act="unmortgage" ${cash < g.unmortgageCosts[i] ? 'disabled' : ''}>${esc(t('mono.unmortgage', { n: money(g.unmortgageCosts[i]) }))}</button>`);
+  return btns.length ? `<div class="sq-manage"><span class="muted small-text">${esc(t('mono.yourProperty'))}</span><div class="row">${btns.join('')}</div></div>` : '';
+}
+
+// ---------- player menu: deal or profile ----------
+function openPlayerMenu(pid, anchor) {
+  const menu = $('#playerMenu');
+  const p = member(pid) || {};
+  const g = state.game;
+  const me = state.me.id;
+  const canTrade = state.phase === 'playing' && pid !== me && gp(me) && !gp(me).bankrupt && gp(pid) && !gp(pid).bankrupt;
+  menu.innerHTML = `<div class="mark-title">${esc(p.name || '')}</div>
+    ${canTrade ? `<button class="mk" data-menu="trade">${esc(t('mono.menu.trade'))}</button>` : ''}
+    ${p.userId ? `<button class="mk" data-menu="profile">${esc(t('mono.menu.profile'))}</button>` : ''}`;
+  if (!menu.querySelector('button')) return;
+  menu.classList.remove('hidden');
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = `${window.scrollX + Math.min(window.innerWidth - menu.offsetWidth - 12, r.right + 8)}px`;
+  menu.style.top = `${window.scrollY + r.top}px`;
+  menu.querySelector('[data-menu="trade"]')?.addEventListener('click', () => { menu.classList.add('hidden'); openTrade(pid); });
+  menu.querySelector('[data-menu="profile"]')?.addEventListener('click', () => { menu.classList.add('hidden'); openPlayer(p.userId); });
+  void g;
+}
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#playerMenu') && !e.target.closest('.pcard')) $('#playerMenu').classList.add('hidden'); });
+
+// ---------- trade window ----------
+// Mirrors the server's fairness rules so players see the problem before sending.
+const JAIL_CARD_VALUE = 500;
+function tradeCheck(from, to, give, take) {
+  const g = state.game;
+  const val = sq => (g.props[sq].mortgaged ? BOARD.squares[sq].price / 2 : BOARD.squares[sq].price);
+  const value = x => x.props.reduce((tt, sq) => tt + val(sq), 0) + x.cash + x.cards * JAIL_CARD_VALUE;
+  const completing = (pid, props, away) => props.filter(sq => {
+    const grp = BOARD.squares[sq].group;
+    return grp && BOARD.groups[grp].every(x => props.includes(x) || (g.props[x] && g.props[x].owner === pid && !away.includes(x)));
+  });
+  const fromSet = completing(from, take.props, give.props), toSet = completing(to, give.props, take.props);
+  const a = value(give), b = value(take);
+  const full = props => props.reduce((tt, sq) => tt + BOARD.squares[sq].price, 0);
+  if ((a > 0 && b * 2 < a && !fromSet.length) || (b > 0 && a * 2 < b && !toSet.length)) return { ok: false, msg: t('mono.trade.fairBad') };
+  if (toSet.length && !fromSet.length && b < full(toSet)) return { ok: false, msg: t('mono.trade.cheapSet', { min: full(toSet) }) };
+  if (fromSet.length && !toSet.length && a < full(fromSet)) return { ok: false, msg: t('mono.trade.cheapSet', { min: full(fromSet) }) };
+  return { ok: a + b > 0, msg: a + b > 0 ? t('mono.trade.fairOk') : '' };
+}
+
+let deal = null; // { to, give: Set, take: Set, giveCash, takeCash, giveCards, takeCards }
+function openTrade(pid) {
+  deal = { to: pid, give: new Set(), take: new Set(), giveCash: 0, takeCash: 0, giveCards: 0, takeCards: 0 };
+  $('#tradeTitle').textContent = t('mono.trade.title', { name: nameOf(pid) });
+  $('#tradeModal').classList.remove('hidden');
+  renderTrade();
+}
+function renderTrade() {
+  if (!deal || !state || !state.game) return;
+  const g = state.game;
+  const me = state.me.id;
+  const tradeable = pid => owned(pid).filter(sq => {
+    const s = BOARD.squares[sq];
+    return !s.group || !BOARD.groups[s.group].some(x => g.props[x] && g.props[x].houses);
+  }).sort((a, b) => a - b);
+  const tile = (sq, set, key) => `<button class="deed-tile g-${BOARD.squares[sq].group || BOARD.squares[sq].type} ${set.has(sq) ? 'on' : ''} ${g.props[sq].mortgaged ? 'mort' : ''}" data-tile="${key}" data-sq="${sq}">
+    <span class="dt-strip"></span><span class="dt-name">${esc(sqShort(sq))}</span><span class="dt-price">${money(BOARD.squares[sq].price)}</span></button>`;
+  const side = (pid, key) => {
+    const set = deal[key];
+    const cashKey = key + 'Cash', cardKey = key + 'Cards';
+    return `<div class="trade-side">
+      <h4>${esc(t(key === 'give' ? 'mono.trade.give' : 'mono.trade.get'))} <span class="muted">· ${esc(nameOf(pid))} ${money(gp(pid).cash)}</span></h4>
+      <div class="deed-grid">${tradeable(pid).map(sq => tile(sq, set, key)).join('') || '<span class="muted small-text">—</span>'}</div>
+      <label class="tcash">${esc(t('mono.trade.cash'))} <input type="number" min="0" step="100" max="${gp(pid).cash}" data-num="${cashKey}" value="${deal[cashKey]}"></label>
+      ${gp(pid).jailCards ? `<label class="tcash">${esc(t('mono.trade.cards'))} <input type="number" min="0" max="${gp(pid).jailCards}" data-num="${cardKey}" value="${deal[cardKey]}"></label>` : ''}
+    </div>`;
+  };
+  const give = { props: [...deal.give], cash: deal.giveCash, cards: deal.giveCards };
+  const take = { props: [...deal.take], cash: deal.takeCash, cards: deal.takeCards };
+  const check = tradeCheck(me, deal.to, give, take);
+  const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.num;
+  $('#tradeBody').innerHTML = `<div class="trade-cols">${side(me, 'give')}${side(deal.to, 'take')}</div>
+    <div class="trade-foot"><span class="fair ${check.ok ? 'ok' : 'bad'}">${esc(check.msg)}</span>
+    <button id="sendTrade" class="primary" ${check.ok ? '' : 'disabled'}>${esc(t('mono.trade.send'))}</button></div>`;
+  if (focused) { const el = $(`#tradeBody [data-num="${focused}"]`); if (el) { el.focus(); el.setSelectionRange?.(el.value.length, el.value.length); } }
+  for (const b of $$('#tradeBody [data-tile]')) b.onclick = () => { const set = deal[b.dataset.tile]; const sq = Number(b.dataset.sq); set.has(sq) ? set.delete(sq) : set.add(sq); renderTrade(); };
+  for (const n of $$('#tradeBody [data-num]')) n.oninput = () => { deal[n.dataset.num] = Math.max(0, parseInt(n.value, 10) || 0); renderTrade(); };
+  $('#sendTrade').onclick = async () => {
+    const res = await send('trade', { to: deal.to, give, take });
+    if (res && res.ok) { $('#tradeModal').classList.add('hidden'); deal = null; }
+  };
+}
+$('#tradeClose').onclick = () => { $('#tradeModal').classList.add('hidden'); deal = null; };
+$('#tradeModal').addEventListener('pointerdown', e => { if (e.target.id === 'tradeModal') { $('#tradeModal').classList.add('hidden'); deal = null; } });
+
+// ---------- open deals, shown to the whole table ----------
+function renderDeal() {
+  const box = $('#dealShow');
+  const g = state.game;
+  const tr = state.phase === 'playing' && g.trades.length ? g.trades[g.trades.length - 1] : null;
+  if (!tr) { box.classList.add('hidden'); box.dataset.id = ''; return; }
+  const me = state.me.id;
+  const sideHtml = (pid, x) => `<div class="deal-side"><div class="deal-who">${pieceOf(pid)}<b>${esc(t('mono.deal.gives', { name: nameOf(pid) }))}</b></div>
+    <div class="deal-items">${x.props.map(sq => `<span class="deal-prop g-${BOARD.squares[sq].group || BOARD.squares[sq].type}"><i></i>${esc(sqShort(sq))}</span>`).join('')}
+    ${x.cash ? `<span class="deal-cash">${money(x.cash)}</span>` : ''}${x.cards ? `<span class="deal-cash">${esc(t('mono.trade.cards'))} ×${x.cards}</span>` : ''}
+    ${!x.props.length && !x.cash && !x.cards ? `<span class="muted">${esc(t('mono.trade.nothing'))}</span>` : ''}</div></div>`;
+  box.innerHTML = `<div class="deal-title">${esc(t('mono.deal.offer', { from: nameOf(tr.from), to: nameOf(tr.to) }))}</div>
+    <div class="deal-sides">${sideHtml(tr.from, tr.give)}<span class="deal-arrow">⇄</span>${sideHtml(tr.to, tr.take)}</div>
+    <div class="row center">${tr.to === me ? `<button class="primary" data-deal="accept">${esc(t('mono.trade.accept'))}</button><button data-deal="decline">${esc(t('mono.trade.decline'))}</button>`
+      : tr.from === me ? `<button data-deal="cancel">${esc(t('mono.trade.cancel'))}</button>` : `<span class="muted small-text">${esc(t('mono.deal.waiting', { name: nameOf(tr.to) }))}</span>`}</div>`;
+  if (box.dataset.id !== tr.id) { box.dataset.id = tr.id; box.classList.remove('hidden', 'pop'); void box.offsetWidth; box.classList.add('pop'); SFX.turn(); }
+  box.classList.remove('hidden');
+  for (const b of box.querySelectorAll('[data-deal]')) b.onclick = () => send('tradeRespond', { id: tr.id, accept: b.dataset.deal === 'accept' });
+}
+
+
 $('#sqInfo').addEventListener('pointerdown', e => { if (e.target.id === 'sqInfo') $('#sqInfo').classList.add('hidden'); });
 
 // ---------- results ----------
@@ -942,7 +986,7 @@ $('#playerClose').onclick = () => $('#playerPage').classList.add('hidden');
 for (const id of ['boardSheet', 'playerPage', 'results']) $('#' + id).addEventListener('pointerdown', e => { if (e.target.id === id) $('#' + id).classList.add('hidden'); });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  for (const id of ['boardSheet', 'playerPage', 'results', 'sqInfo']) $('#' + id).classList.add('hidden');
+  for (const id of ['boardSheet', 'playerPage', 'results', 'sqInfo', 'tradeModal', 'playerMenu']) $('#' + id).classList.add('hidden');
   $('#siteMenu').classList.add('hidden');
 });
 
