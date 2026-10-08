@@ -19,7 +19,8 @@ const HOTELS = 12;
 const AUCTION_MS = 10000; // the auction ends this long after the last bid
 const TRADE_TTL_MS = 2 * 60 * 1000;
 const LOG_KEEP = 300;
-const TOKENS = ['🎩', '🚗', '🐕', '🚢', '👢', '🐈', '🦆', '🦖', '🎸', '🚀'];
+// player colours: each player's piece on the board is a ring in their colour
+const TOKENS = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316', '#eab308', '#64748b'];
 
 const id = (bytes = 6) => crypto.randomBytes(bytes).toString('hex');
 

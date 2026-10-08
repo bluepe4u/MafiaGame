@@ -123,23 +123,32 @@
 
     <!-- game -->
     <section id="game" class="screen hidden">
-      <div class="mono-grid">
-        <div class="board-wrap">
+      <div class="mono-layout">
+        <aside class="players-col">
+          <div id="playerList" class="player-list"></div>
+          <p id="bankInfo" class="muted small-text bank-info"></p>
+          <div class="row col-actions">
+            <button id="restartBtn" class="danger small hidden" data-i18n="mono.backToLobby"></button>
+            <button id="resignBtn" class="ghost small hidden" data-i18n="mono.resign"></button>
+          </div>
+        </aside>
+        <div class="board-area">
           <div id="board" class="mboard">
             <div id="squares" class="squares"></div>
             <div class="board-center">
-              <div class="center-brand">МОНОПОЛИЯ</div>
-              <div id="dice" class="dice"><span class="die"></span><span class="die"></span></div>
+              <div class="center-top">
+                <div class="center-brand">МОНОПОЛИЯ</div>
+                <div id="dice" class="dice"><span class="die"></span><span class="die"></span></div>
+              </div>
               <div id="turnInfo" class="turn-info"></div>
               <div id="actions" class="actions"></div>
+              <ul id="feed" class="feed"></ul>
               <div id="cardShow" class="card-show hidden"></div>
             </div>
             <div id="tokens" class="tokens"></div>
           </div>
-          <div id="reactBar" class="react-bar mono-react hidden"></div>
         </div>
-        <aside class="sidebar mono-side">
-          <div class="card"><div id="playerList" class="player-list"></div><p id="bankInfo" class="muted small-text bank-info"></p></div>
+        <aside class="side-col">
           <div class="card grow tabs-card">
             <div class="tabs" role="tablist">
               <button data-tab="props" data-i18n="mono.tab.props"></button>
@@ -150,10 +159,7 @@
             <div class="tab-panel" data-panel="trade"><div id="tradePanel" class="trade-panel"></div></div>
             <div class="tab-panel" data-panel="log"><ul id="log" class="log"></ul></div>
           </div>
-          <div id="hostPanel" class="card host-panel hidden">
-            <button id="restartBtn" class="danger small" data-i18n="mono.backToLobby"></button>
-          </div>
-          <button id="resignBtn" class="ghost small resign-btn hidden" data-i18n="mono.resign"></button>
+          <div id="reactBar" class="react-bar mono-react hidden"></div>
         </aside>
       </div>
     </section>
