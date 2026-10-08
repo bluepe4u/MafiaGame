@@ -1,165 +1,42 @@
 'use strict';
 
-// Monopoly client. Same accounts as Mafia (shared login token), its own Socket.IO namespace.
+// Monopoly client. Same accounts as Mafia, its own Socket.IO namespace. The login, profile,
+// admin panel, sounds and alerts are shared with Mafia (common.js).
 
-const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
-};
-const AUTH_KEY = 'mafia.auth'; // shared with Mafia: one login for the whole site
 const SESSION_KEY = 'mono.session';
-const SOUND_KEY = 'mafia.alerts';
-const $ = sel => document.querySelector(sel);
-const $$ = sel => document.querySelectorAll(sel);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const money = n => `${Math.round(n).toLocaleString('ru-RU')} ₽`;
+const AUTO_END_KEY = 'mono.autoEnd';
 // compact amounts for the price tags on the board: 600, 1.4к, 20к
 const tagMoney = n => (typeof n !== 'number' ? n : n < 1000 ? String(n) : `${+(n / 1000).toFixed(n % 1000 ? 1 : 0)}к`);
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const socket = io('/monopoly', { auth: cb => cb({ token: store.get(AUTH_KEY) }) });
 
 let state = null;
-let account = null;
 let BOARD = null; // { squares, groups, railwayRent }
 let clockOffset = 0;
 let urlRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase().slice(0, 4);
 
-function toast(msg, kind = '') {
-  const el = $('#toast');
-  el.textContent = msg;
-  el.className = `toast ${kind}`;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => el.classList.add('hidden'), 3500);
-}
-
-function send(event, payload = {}) {
-  return new Promise(resolve => {
-    socket.emit(event, payload, res => {
-      if (res && !res.ok) toast(t(res.error.key, res.error.params));
-      resolve(res);
-    });
-  });
-}
-
-async function api(path, body) {
-  const token = store.get(AUTH_KEY);
-  try {
-    const res = await fetch('/api/' + path, {
-      method: body === undefined ? 'GET' : 'POST',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!data.ok) toast(t(data.error.key, data.error.params));
-    return data;
-  } catch {
-    toast(t('err.server'));
-    return { ok: false };
-  }
-}
-
-// ---------- shared look: avatars, cosmetics, decency status ----------
-let ITEMS = {};
-fetch('/api/items').then(r => r.json()).then(d => { ITEMS = d.items || {}; render(); }).catch(() => {});
-const nameCls = cos => (cos && cos.name ? `nm ${cos.name.replace('.', '-')}` : '');
-function avatarCore(name, url) {
-  if (url) return `<img class="avatar" src="${esc(url)}" alt="" loading="lazy">`;
-  let h = 0;
-  for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
-  const parts = name.trim().split(/\s+/);
-  const initials = (parts.length > 1 ? parts[0][0] + parts[1][0] : [...name].slice(0, 2).join('')).toUpperCase();
-  return `<span class="avatar" style="--h:${h}">${esc(initials)}</span>`;
-}
-function avatar(name, url, cos) {
-  const inner = avatarCore(name, url);
-  const hat = cos && cos.hat && ITEMS[cos.hat]
-    ? `<span class="hat"><svg viewBox="0 0 10 10" aria-hidden="true"><text x="5" y="8.6" font-size="8.6" text-anchor="middle">${ITEMS[cos.hat].emoji}</text></svg></span>` : '';
-  const frame = cos && cos.frame ? cos.frame.replace('.', '-') : '';
-  return hat || frame ? `<span class="cos ${frame}">${inner}${hat}</span>` : inner;
-}
-const TIER_MIN = [-Infinity, -9, -4, -1, 2, 5, 10];
-const tierOf = score => TIER_MIN.findLastIndex(min => (score || 0) >= min);
-const statusPill = score => score === null || score === undefined ? '' : `<span class="status t${tierOf(score)}">${esc(t('tier.' + tierOf(score)))}</span>`;
-
-// ---------- site switcher (top-left menu) ----------
-$('#brandBtn').onclick = e => { e.stopPropagation(); $('#siteMenu').classList.toggle('hidden'); };
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.brand-switch')) $('#siteMenu').classList.add('hidden'); });
-
-// ---------- sound ----------
-let soundOn = store.get(SOUND_KEY) !== 'off';
-let audioCtx = null;
-document.addEventListener('pointerdown', () => {
-  if (!audioCtx && window.AudioContext) audioCtx = new AudioContext();
-  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-}, { capture: true });
-function tone(f, at = 0, dur = 0.15, type = 'triangle', vol = 0.06) {
-  if (!soundOn || !audioCtx) return;
-  const now = audioCtx.currentTime + at;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = type;
-  osc.frequency.value = f;
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(vol, now + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0008, now + dur);
-  osc.connect(gain).connect(audioCtx.destination);
-  osc.start(now);
-  osc.stop(now + dur + 0.05);
-}
-const SFX = {
-  dice: () => { for (let i = 0; i < 6; i++) tone(180 + Math.random() * 260, i * 0.05, 0.05, 'square', 0.03); },
-  coin: () => { tone(988, 0, 0.12); tone(1319, 0.08, 0.3); },
-  pay: () => { tone(392, 0, 0.18, 'sine', 0.07); tone(294, 0.1, 0.25, 'sine', 0.06); },
-  turn: () => { tone(660, 0, 0.12); tone(880, 0.1, 0.25); },
-  win: () => [523, 659, 784, 1046].forEach((f, i) => tone(f, i * 0.1, 0.5)),
-};
-function renderSoundBtn() {
-  const b = $('#soundBtn');
-  b.innerHTML = soundOn ? '🔔' : '🔕';
-  b.setAttribute('aria-pressed', String(soundOn));
-}
-$('#soundBtn').onclick = () => { soundOn = !soundOn; store.set(SOUND_KEY, soundOn ? null : 'off'); renderSoundBtn(); if (soundOn) SFX.turn(); };
-
-// ---------- accounts (same as the Mafia side) ----------
-let authMode = 'login';
-function renderAuthMode() {
-  for (const b of $$('[data-auth-mode]')) b.classList.toggle('active', b.dataset.authMode === authMode);
-  $('#authSubmit').textContent = t(authMode === 'login' ? 'auth.login' : 'auth.register');
-}
-for (const b of $$('[data-auth-mode]')) b.onclick = () => { authMode = b.dataset.authMode; renderAuthMode(); };
-$('#authCard').addEventListener('submit', async e => {
-  e.preventDefault();
-  const res = await api(authMode, { username: $('#authUser').value, password: $('#authPass').value });
-  if (!res.ok) return;
-  $('#authPass').value = '';
-  store.set(AUTH_KEY, res.token);
-  account = res.user;
-  socket.disconnect().connect();
-  renderAccount();
-  render();
+Site.init({
+  game: 'mono',
+  socket,
+  urlRoom: () => urlRoom,
+  hooks: {
+    onAccount: () => render(),
+    onItems: () => render(),
+    onLang: () => { buildBoard(); render(); },
+  },
 });
-function renderAccount() {
-  $('#authCard').classList.toggle('hidden', !!account);
-  $('#playCard').classList.toggle('hidden', !account);
-  $('#profileBtn').classList.toggle('hidden', !account);
-  $('#boardBtn').classList.toggle('hidden', !account);
-  if (!account) return;
-  $('#profileBtn').innerHTML = avatar(account.username, account.avatar, account.equipped);
-  $('#homeProfile').innerHTML = `${avatar(account.username, account.avatar, account.equipped)}
-    <span class="me-text"><b class="${nameCls(account.equipped)}">${esc(account.username)}</b>${statusPill(account.score)}</span>`;
-}
-$('#profileBtn').onclick = () => account && openPlayer(account.id);
-$('#homeProfile').onclick = () => account && openPlayer(account.id);
-(async () => {
-  if (store.get(AUTH_KEY)) {
-    const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${store.get(AUTH_KEY)}` } }).then(r => r.json()).catch(() => null);
-    if (res && res.ok) account = res.user;
-    else if (res) store.set(AUTH_KEY, null);
-  }
-  renderAccount();
-  if (!account) $('#authUser').focus();
-})();
+$('#profileBtn').onclick = () => openProfile();
+$('#homeProfile').onclick = () => openProfile();
+
+// ---------- sound effects (muted with the bell, like the alerts) ----------
+const beep = (f, at = 0, dur = 0.15, type = 'triangle', vol = 0.06) => alertsOn && tone({ f, at, dur, type, vol, attack: 0.01 });
+const SFX = {
+  dice: () => { for (let i = 0; i < 6; i++) beep(180 + Math.random() * 260, i * 0.05, 0.05, 'square', 0.03); },
+  coin: () => { beep(988, 0, 0.12); beep(1319, 0.08, 0.3); },
+  pay: () => { beep(392, 0, 0.18, 'sine', 0.07); beep(294, 0.1, 0.25, 'sine', 0.06); },
+  turn: () => { beep(660, 0, 0.12); beep(880, 0.1, 0.25); },
+  win: () => [523, 659, 784, 1046].forEach((f, i) => beep(f, i * 0.1, 0.5)),
+};
 
 // ---------- board data ----------
 fetch('/api/mono/board').then(r => r.json()).then(d => { BOARD = d; buildBoard(); render(); });
@@ -187,7 +64,7 @@ socket.on('state', s => {
   fxOnState(prev, s);
   render();
 });
-socket.on('kicked', () => { leftRoom(); toast(t('toast.kicked')); });
+socket.on('kicked', r => { leftRoom(); toast(t(r && r.closed ? 'toast.roomClosed' : 'toast.kicked')); });
 function leftRoom() {
   store.set(SESSION_KEY, null);
   state = null;
@@ -236,6 +113,7 @@ const owned = pid => Object.entries(state.game.props).filter(([, p]) => p.owner 
 // ---------- render ----------
 function show(screen) {
   for (const id of ['home', 'lobby', 'game']) $('#' + id).classList.toggle('hidden', id !== screen);
+  Site.setHome(screen === 'home');
 }
 
 function render() {
@@ -247,6 +125,7 @@ function render() {
   $('#topRound').textContent = inRoom && state.game ? t('mono.round', { n: state.game.round }) : '';
   if (inRoom && urlRoom !== state.code) { urlRoom = state.code; history.replaceState(null, '', `/monopoly/?room=${state.code}`); }
   renderReactBar();
+  updateTurnAlert(monoNeed());
   if (!inRoom) return show('home');
   if (state.phase === 'lobby') { show('lobby'); return renderLobby(); }
   show('game');
@@ -520,6 +399,7 @@ function hop(pid, target) {
   if (reducedMotion() || steps === 0 || steps > 12 || (gp(pid).inJail && target === 10)) {
     shownPos[pid] = target;
     placeTokens();
+    if (steps) flashSquare(target, pid);
     return;
   }
   hopping[pid] = true;
@@ -527,16 +407,28 @@ function hop(pid, target) {
   const tick = () => {
     shownPos[pid] = (shownPos[pid] + 1) % 40;
     placeTokens();
-    tone(500 + (steps - left) * 40, 0, 0.05, 'sine', 0.025);
+    beep(500 + (steps - left) * 40, 0, 0.05, 'sine', 0.025);
     if (--left > 0) setTimeout(tick, 150);
     else {
       hopping[pid] = false;
       if (shownPos[pid] !== gp(pid).pos) hop(pid, gp(pid).pos);
+      else flashSquare(target, pid);
     }
   };
   setTimeout(tick, 120);
 }
 window.addEventListener('resize', () => state && state.game && placeTokens());
+
+// where a token lands lights up in the player's colour
+function flashSquare(sq, pid) {
+  const el = $(`#squares [data-sq="${sq}"]`);
+  if (!el) return;
+  el.style.setProperty('--flash', colorOf(pid));
+  el.classList.remove('landed');
+  void el.offsetWidth;
+  el.classList.add('landed');
+  setTimeout(() => el.classList.remove('landed'), 1400);
+}
 
 // ---------- dice, cards and sounds on changes ----------
 let lastDiceAt = null;
@@ -551,7 +443,7 @@ function fxOnState(prev, s) {
   }
   if (!prev || !prev.game) return;
   const me = s.me && s.me.id;
-  if (g.turn && prev.game.turn && g.turn.pid !== prev.game.turn.pid && g.turn.pid === me) SFX.turn();
+  if (prev.gameId === s.gameId) requestAnimationFrame(() => moneyFx(prev.game, g));
   const pg = prev.game.players[me];
   if (pg && g.players[me]) {
     if (g.players[me].cash > pg.cash) SFX.coin();
@@ -559,6 +451,72 @@ function fxOnState(prev, s) {
   }
   if (s.phase === 'ended' && prev.phase !== 'ended') { SFX.win(); setTimeout(openResults, 900); }
 }
+// Money that changed hands: each card shows +/− for a moment, and a single payment (rent, a
+// deal's cash) flies as a chip from the payer's card to the receiver's.
+const fxLayer = document.createElement('div');
+fxLayer.className = 'money-layer';
+fxLayer.setAttribute('aria-hidden', 'true');
+document.body.append(fxLayer);
+function moneyFx(prevG, g) {
+  const deltas = g.order.map(pid => [pid, g.players[pid].cash - (prevG.players[pid] ? prevG.players[pid].cash : g.players[pid].cash)]).filter(([, d]) => d);
+  if (!deltas.length || reducedMotion()) return;
+  const card = pid => $(`#playerList [data-pid="${pid}"]`);
+  const neg = deltas.filter(([, d]) => d < 0);
+  const pos = deltas.filter(([, d]) => d > 0);
+  if (neg.length === 1 && pos.length === 1 && -neg[0][1] === pos[0][1]) {
+    const from = card(neg[0][0]), to = card(pos[0][0]);
+    if (from && to) {
+      const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
+      const chip = document.createElement('span');
+      chip.className = 'money-chip';
+      chip.style.setProperty('--pc', colorOf(neg[0][0]));
+      chip.textContent = `${money(pos[0][1])} → ${nameOf(pos[0][0])}`;
+      chip.style.left = `${a.left + a.width / 2}px`;
+      chip.style.top = `${a.top + a.height / 2}px`;
+      chip.style.setProperty('--dx', `${b.left - a.left}px`);
+      chip.style.setProperty('--dy', `${b.top - a.top}px`);
+      fxLayer.append(chip);
+      chip.addEventListener('animationend', () => chip.remove());
+      setTimeout(() => chip.remove(), 2500);
+    }
+  }
+  for (const [pid, d] of deltas) {
+    const el = card(pid);
+    if (!el) continue;
+    const r = el.querySelector('.pc-cash').getBoundingClientRect();
+    const pop = document.createElement('span');
+    pop.className = `cash-pop ${d > 0 ? 'up' : 'down'}`;
+    pop.textContent = `${d > 0 ? '+' : '−'}${money(Math.abs(d))}`;
+    pop.style.left = `${r.right + 6}px`;
+    pop.style.top = `${r.top + r.height / 2}px`;
+    fxLayer.append(pop);
+    pop.addEventListener('animationend', () => pop.remove());
+    setTimeout(() => pop.remove(), 2500);
+    el.classList.remove('cash-up', 'cash-down');
+    void el.offsetWidth;
+    el.classList.add(d > 0 ? 'cash-up' : 'cash-down');
+  }
+}
+
+// ---------- turn alerts: chime, buzz and a blinking tab title when the game needs you ----------
+function monoNeed() {
+  if (!state || !state.me || state.phase !== 'playing' || !state.game) return null;
+  const g = state.game;
+  const me = state.me.id;
+  const mine = gp(me);
+  if (!mine || mine.bankrupt) return null;
+  const deal = g.trades.find(x => x.to === me);
+  if (deal) return { key: `deal:${deal.id}`, text: t('mono.alert.deal', { name: nameOf(deal.from) }) };
+  if (g.auction) {
+    const a = g.auction;
+    const canBid = a.bidder !== me && mine.cash >= (a.bidder ? a.bid + 1 : a.min);
+    return canBid ? { key: `auction:${g.round}:${g.turn.pid}:${a.square}`, text: t('mono.alert.auction', { square: sqShort(a.square) }) } : null;
+  }
+  if (g.debts.length) return g.debts[0].pid === me ? { key: `debt:${g.round}:${g.debts[0].amount}`, text: t('mono.alert.debt') } : null;
+  if (g.turn.pid === me) return { key: `turn:${g.round}`, text: t('mono.alert.turn') };
+  return null;
+}
+
 // 3D dice: each die is a cube that tumbles and lands on the rolled face
 const PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
 const FACE_ROT = { 1: [0, 0], 2: [0, -90], 3: [-90, 0], 4: [90, 0], 5: [0, 90], 6: [0, 180] }; // [x, y] to show each face
@@ -603,6 +561,8 @@ function renderGame() {
     ${state.settings.freeParking ? `<span class="bank-item" title="${esc(t('mono.pot', { n: g.pot }))}">${ART.car}${money(g.pot)}</span>` : ''}`;
   const playing = state.phase === 'playing' && !state.me.spectator && gp(state.me.id) && !gp(state.me.id).bankrupt;
   $('#resignBtn').classList.toggle('hidden', !playing);
+  $('#autoEndBtn').classList.toggle('hidden', !playing);
+  renderAutoEnd();
   $('#restartBtn').classList.toggle('hidden', !(isHost() && state.phase === 'ended'));
 }
 
@@ -613,6 +573,57 @@ function fmtLog(e) {
   if (p.card) p.card = t('mono.card.' + p.card);
   return t(e.key, p);
 }
+
+const kbd = k => `<kbd class="kb">${k}</kbd>`;
+
+// Keyboard: Space rolls / ends the turn / pays a debt, B buys, A sends it to auction,
+// P pays bail, 1-3 are the quick bids. Ignored while typing or with a window open.
+document.addEventListener('keydown', e => {
+  if (!state || state.phase !== 'playing' || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+  if (e.target.closest && e.target.closest('input, textarea, select, button, [contenteditable]')) return;
+  if ($$('.overlay:not(.hidden)').length) return;
+  const press = sel => {
+    const b = $(sel);
+    if (!b || b.disabled) return false;
+    e.preventDefault();
+    b.click();
+    return true;
+  };
+  const keys = { Space: ['#rollBtn', '#endBtn', '#payDebtBtn'], KeyB: ['#buyBtn'], KeyA: ['#declineBtn'], KeyP: ['#bailBtn'] };
+  const digit = /^Digit([1-3])$/.exec(e.code);
+  if (digit) press(`#actions [data-key="${digit[1]}"]`);
+  else for (const sel of keys[e.code] || []) if (press(sel)) break;
+});
+
+// "Auto-end turn": when there's nothing left to do, end the turn after a short pause
+// (paused while a property card or the trade window is open).
+let autoEnd = store.get(AUTO_END_KEY) === 'on';
+let autoEndTimer = null;
+function scheduleAutoEnd() {
+  if (autoEndTimer) return;
+  const key = `${state.game.round}:${state.game.lastDice && state.game.lastDice.at}`;
+  autoEndTimer = setTimeout(function fire() {
+    const g = state && state.game;
+    const still = autoEnd && g && state.phase === 'playing' && g.turn && g.turn.pid === state.me.id && g.turn.stage === 'end' && !g.debts.length && !g.auction
+      && `${g.round}:${g.lastDice && g.lastDice.at}` === key;
+    if (still && $$('.overlay:not(.hidden)').length) { autoEndTimer = setTimeout(fire, 1000); return; }
+    autoEndTimer = null;
+    if (still) send('endTurn');
+  }, 2000);
+}
+function renderAutoEnd() {
+  const b = $('#autoEndBtn');
+  b.classList.toggle('on', autoEnd);
+  b.setAttribute('aria-pressed', String(autoEnd));
+  b.textContent = t('mono.autoEnd');
+  b.title = t('mono.autoEndHint');
+}
+$('#autoEndBtn').onclick = () => {
+  autoEnd = !autoEnd;
+  store.set(AUTO_END_KEY, autoEnd ? 'on' : null);
+  renderAutoEnd();
+  if (autoEnd && state && state.game && state.game.turn && state.game.turn.pid === state.me.id && state.game.turn.stage === 'end') scheduleAutoEnd();
+};
 
 function timerHtml(endsAt) {
   return endsAt ? '<span class="mini-timer" id="turnTimer"></span>' : '';
@@ -643,7 +654,7 @@ function renderCenter() {
       <div class="auction-title">${esc(t('mono.auctionTitle', { square: sqName(a.square) }))}</div>
       <div class="auction-bid">${a.bidder ? esc(t('mono.auctionBid', { amount: a.bid, name: nameOf(a.bidder) })) : esc(t('mono.auctionNoBid'))}</div>
       ${canBid ? `<div class="row center bid-row">
-        ${a.bidder ? [10, 50, 100].map(x => `<button class="small" data-bid="${a.bid + x}">+${x}</button>`).join('') : `<button class="small" data-bid="${a.min}">${money(a.min)}</button>`}
+        ${a.bidder ? [10, 50, 100].map((x, k) => `<button class="small" data-bid="${a.bid + x}" data-key="${k + 1}">+${x}${kbd(k + 1)}</button>`).join('') : `<button class="small" data-bid="${a.min}" data-key="1">${money(a.min)}${kbd(1)}</button>`}
         <input id="bidInput" type="number" step="10" min="${a.bidder ? a.bid + 1 : a.min}" value="${a.bidder ? a.bid + 10 : a.min}">
         <button id="bidBtn" class="primary small">${esc(t('mono.bid'))}</button>
       </div>` : ''}
@@ -661,18 +672,19 @@ function renderCenter() {
     if (st === 'roll') {
       html = myGp.inJail
         ? `<div class="muted small-text">${esc(t('mono.inJail', { n: myGp.jailTurns + 1 }))}</div><div class="row center">
-            <button id="rollBtn" class="primary big-roll">${esc(t('mono.roll'))}</button>
-            <button id="bailBtn" ${myGp.cash < 50 ? 'disabled' : ''}>${esc(t('mono.payBail', { n: 50 }))}</button>
+            <button id="rollBtn" class="primary big-roll">${esc(t('mono.roll'))}${kbd('␣')}</button>
+            <button id="bailBtn" ${myGp.cash < 50 ? 'disabled' : ''}>${esc(t('mono.payBail', { n: 50 }))}${kbd('P')}</button>
             ${myGp.jailCards ? `<button id="cardBtn">${esc(t('mono.useCard'))}</button>` : ''}</div>`
-        : `<button id="rollBtn" class="primary big-roll">${esc(t('mono.roll'))}</button>`;
+        : `<button id="rollBtn" class="primary big-roll">${esc(t('mono.roll'))}${kbd('␣')}</button>`;
     } else if (st === 'buy') {
       const sq = g.turn.offer;
       const price = BOARD.squares[sq].price;
       html = `<button class="mini-deed g-${BOARD.squares[sq].group || BOARD.squares[sq].type}" data-info="${sq}"><span class="md-strip"></span><b>${esc(sqName(sq))}</b><span class="md-price">${price} ₽</span></button>
-        <div class="row center"><button id="buyBtn" class="primary" ${myGp.cash < price ? 'disabled' : ''}>${esc(t('mono.buy', { price }))}</button>
-        <button id="declineBtn">${esc(t(state.settings.auctions ? 'mono.decline' : 'mono.declineNoAuction'))}</button></div>`;
+        <div class="row center"><button id="buyBtn" class="primary" ${myGp.cash < price ? 'disabled' : ''}>${esc(t('mono.buy', { price }))}${kbd('B')}</button>
+        <button id="declineBtn">${esc(t(state.settings.auctions ? 'mono.decline' : 'mono.declineNoAuction'))}${kbd('A')}</button></div>`;
     } else if (st === 'end') {
-      html = `<button id="endBtn" class="primary">${esc(t('mono.endTurn'))}</button>`;
+      html = `<button id="endBtn" class="primary">${esc(t('mono.endTurn'))}${kbd('␣')}</button>`;
+      if (autoEnd) scheduleAutoEnd();
     }
   }
   actions.innerHTML = html;
@@ -907,7 +919,7 @@ function renderDeal() {
     <div class="deal-sides">${sideHtml(tr.from, tr.give)}<span class="deal-arrow">⇄</span>${sideHtml(tr.to, tr.take)}</div>
     <div class="row center">${tr.to === me ? `<button class="primary" data-deal="accept">${esc(t('mono.trade.accept'))}</button><button data-deal="decline">${esc(t('mono.trade.decline'))}</button>`
       : tr.from === me ? `<button data-deal="cancel">${esc(t('mono.trade.cancel'))}</button>` : `<span class="muted small-text">${esc(t('mono.deal.waiting', { name: nameOf(tr.to) }))}</span>`}</div>`;
-  if (box.dataset.id !== tr.id) { box.dataset.id = tr.id; box.classList.remove('hidden', 'pop'); void box.offsetWidth; box.classList.add('pop'); SFX.turn(); }
+  if (box.dataset.id !== tr.id) { box.dataset.id = tr.id; box.classList.remove('hidden', 'pop'); void box.offsetWidth; box.classList.add('pop'); if (tr.to !== me) SFX.turn(); }
   box.classList.remove('hidden');
   for (const b of box.querySelectorAll('[data-deal]')) b.onclick = () => send('tradeRespond', { id: tr.id, accept: b.dataset.deal === 'accept' });
 }
@@ -915,7 +927,7 @@ function renderDeal() {
 
 $('#sqInfo').addEventListener('pointerdown', e => { if (e.target.id === 'sqInfo') $('#sqInfo').classList.add('hidden'); });
 
-// ---------- results ----------
+// ---------- results: standings, net worth over the game, highlights ----------
 function openResults() {
   const g = state.game;
   const rows = g.order.map(pid => ({ pid, s: gp(pid) })).sort((a, b) => {
@@ -924,14 +936,71 @@ function openResults() {
     // whoever went bankrupt later finished higher (bankruptAt counts the players still left)
     return (a.s.bankruptAt || 0) - (b.s.bankruptAt || 0) || b.s.netWorth - a.s.netWorth;
   });
-  $('#resultsBody').innerHTML = `<ol class="results">${rows.map(({ pid, s }, i) => {
+  const standings = `<ol class="results">${rows.map(({ pid, s }, i) => {
     const p = member(pid) || { name: '?' };
     return `<li class="${i === 0 ? 'first' : ''}"><span class="board-rank">${['🥇', '🥈', '🥉'][i] || i + 1}</span>
       ${pieceOf(pid)}
       <b class="${nameCls(p.cos)}">${esc(p.name)}</b><span class="spacer"></span>
       ${s.bankrupt ? `<span class="tag mafia">${esc(t('mono.bankrupt'))}</span>` : `<b>${money(s.netWorth)}</b>`}</li>`;
   }).join('')}</ol>`;
+  $('#resultsBody').innerHTML = standings + worthChart(g) + highlightsHtml(g, rows);
   $('#results').classList.remove('hidden');
+}
+
+// net worth of every player, one point per round
+function worthChart(g) {
+  const pts = g.worth || [];
+  if (pts.length < 2) return '';
+  const W = 560, H = 200, padL = 46, padB = 22, padT = 8;
+  const max = Math.max(1, ...pts.flatMap(p => Object.values(p.w)));
+  const x = i => padL + ((W - padL - 8) * i) / (pts.length - 1);
+  const y = v => padT + (H - padT - padB) * (1 - v / max);
+  const step = Math.pow(10, Math.floor(Math.log10(max)));
+  const tick = max / step > 5 ? step * 2 : max / step > 2 ? step : step / 2;
+  const ticks = [];
+  for (let v = 0; v <= max; v += tick) ticks.push(v);
+  const every = Math.ceil(pts.length / 8);
+  const lines = g.order.map(pid => {
+    const d = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.w[pid] || 0).toFixed(1)}`).join('');
+    const last = pts.length - 1;
+    return `<path d="${d}" class="wc-line" style="--pc:${colorOf(pid)}"/><circle cx="${x(last)}" cy="${y(pts[last].w[pid] || 0)}" r="3.5" style="fill:${colorOf(pid)}"/>`;
+  }).join('');
+  return `<section class="player-section"><h3>${esc(t('mono.sum.worth'))}</h3>
+    <svg class="worth-chart" viewBox="0 0 ${W} ${H}" role="img">
+      ${ticks.map(v => `<line x1="${padL}" x2="${W - 8}" y1="${y(v)}" y2="${y(v)}" class="wc-grid"/><text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end" class="wc-label">${tagMoney(v)}</text>`).join('')}
+      ${pts.map((p, i) => (i % every === 0 || i === pts.length - 1 ? `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" class="wc-label">${p.round}</text>` : '')).join('')}
+      ${lines}
+    </svg>
+    <div class="wc-legend">${g.order.map(pid => `<span>${dot(pid)}${esc(nameOf(pid))}</span>`).join('')}<span class="muted small-text">${esc(t('mono.sum.byRound'))}</span></div>
+  </section>`;
+}
+
+function highlightsHtml(g, rows) {
+  const st = pid => gp(pid).stats || {};
+  const best = (f, min = 1) => {
+    const top = g.order.map(pid => [pid, f(st(pid))]).sort((a, b) => b[1] - a[1])[0];
+    return top && top[1] >= min ? top : null;
+  };
+  const who = pid => `${dot(pid)}<b>${esc(nameOf(pid))}</b>`;
+  const items = [];
+  const hl = g.highlights || {};
+  if (hl.rent) items.push(['💸', t('mono.sum.bigRent'), money(hl.rent.amount), `${who(hl.rent.from)} → ${who(hl.rent.to)} · ${esc(sqShort(hl.rent.square))}`]);
+  if (hl.deal) items.push(['🤝', t('mono.sum.bigDeal'), money(hl.deal.value), `${who(hl.deal.from)} ⇄ ${who(hl.deal.to)}`]);
+  const landlord = best(s => s.rentCollected || 0);
+  if (landlord) items.push(['🏦', t('mono.sum.landlord'), money(landlord[1]), who(landlord[0])]);
+  const builder = best(s => (s.housesBuilt || 0) + 5 * (s.hotelsBuilt || 0));
+  if (builder) items.push(['🏗️', t('mono.sum.builder'), `${st(builder[0]).housesBuilt}<i class="house"></i> ${st(builder[0]).hotelsBuilt}<i class="hotel"></i>`, who(builder[0])]);
+  const peak = best(s => s.peakNetWorth || 0);
+  if (peak) items.push(['📈', t('mono.sum.peak'), money(peak[1]), who(peak[0])]);
+  const jail = best(s => s.jailed || 0);
+  if (jail) items.push(['🚔', t('mono.sum.jailbird'), t('mono.sum.times', { n: jail[1] }), who(jail[0])]);
+  const runnerUp = rows[1];
+  if (runnerUp && rows.length > 2) items.push(['🛡️', t('mono.sum.heldOut'), t('mono.sum.untilRound', { n: gp(runnerUp.pid).outRound || g.round }), who(runnerUp.pid)]);
+  items.push(['⏱️', t('mono.sum.length'), t('mono.sum.rounds', { n: g.round }), '']);
+  return `<section class="player-section"><h3>${esc(t('player.highlights'))}</h3>
+    <div class="highlights">${items.map(([ico, label, value, sub]) => `<div class="hl"><span class="hl-ico">${ico}</span>
+      <span class="hl-text"><span class="muted small-text">${esc(label)}</span><b>${value}</b><span class="small-text">${sub}</span></span></div>`).join('')}</div>
+  </section>`;
 }
 $('#resultsClose').onclick = () => $('#results').classList.add('hidden');
 $('#restartBtn').onclick = () => send('restart');
@@ -967,7 +1036,7 @@ socket.on('reaction', r => {
 });
 
 // ---------- leaderboard and player pages (Monopoly stats) ----------
-const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
+const pct = pctOf;
 let boardTab = 'wins';
 let boardUsers = [];
 async function openBoard() {
@@ -1003,91 +1072,11 @@ $('#boardBtn').onclick = openBoard;
 $('#homeBoard').onclick = openBoard;
 $('#boardClose').onclick = () => $('#boardSheet').classList.add('hidden');
 
-// Five axes from in-game actions only; each needs 3 games before it shows.
-function monoStyle(m) {
-  const enough = m.games >= 3;
-  const v = x => (enough ? Math.max(0, Math.min(1, x)) : null);
-  return [
-    ['results', v(m.games && m.recent.length ? m.recent.reduce((s, r) => s + (r.players > 1 ? (r.players - r.place) / (r.players - 1) : 1), 0) / m.recent.length : 0)],
-    ['builder', v((m.housesBuilt + 5 * m.hotelsBuilt) / Math.max(1, m.games) / 15)],
-    ['landlord', v(m.rentCollected + m.rentPaid ? m.rentCollected / (m.rentCollected + m.rentPaid) : 0)],
-    ['dealer', v((m.trades + m.auctionsWon) / Math.max(1, m.games) / 4)],
-    ['survival', v(1 - m.bankruptcies / Math.max(1, m.games))],
-  ];
-}
-function radarSvg(axes) {
-  const size = 300, c = 150, R = 104;
-  const point = (i, r) => { const a = -Math.PI / 2 + (2 * Math.PI * i) / axes.length; return [c + r * Math.cos(a), c + r * Math.sin(a)]; };
-  const ring = f => axes.map((_, i) => point(i, R * f).join(',')).join(' ');
-  const shape = axes.map(([, v], i) => point(i, R * Math.max(0.04, v || 0)).join(',')).join(' ');
-  return `<svg class="radar" viewBox="-40 -10 ${size + 80} ${size + 20}" role="img">
-    <defs><linearGradient id="radarFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--glow-a)" stop-opacity=".75"/><stop offset="1" stop-color="var(--glow-b)" stop-opacity=".55"/></linearGradient></defs>
-    ${[0.25, 0.5, 0.75, 1].map(f => `<polygon points="${ring(f)}" class="radar-ring"/>`).join('')}
-    ${axes.map((_, i) => `<line x1="${c}" y1="${c}" x2="${point(i, R)[0]}" y2="${point(i, R)[1]}" class="radar-axis"/>`).join('')}
-    <polygon points="${shape}" class="radar-shape" fill="url(#radarFill)"/>
-    ${axes.map(([key, v], i) => {
-      const [x, y] = point(i, R + 30);
-      const anchor = Math.abs(x - c) < 8 ? 'middle' : x > c ? 'start' : 'end';
-      return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="radar-label"><tspan>${esc(t('mono.axis.' + key))}</tspan><tspan x="${x}" dy="15" class="radar-value">${v === null ? '—' : Math.round(v * 100) + '%'}</tspan></text>`;
-    }).join('')}
-  </svg>`;
-}
-async function openPlayer(userId) {
-  if (!userId) return;
-  const res = await api('player/' + userId);
-  if (!res.ok) return;
-  const u = res.user;
-  const m = u.monoStats;
-  const axes = monoStyle(m);
-  const tile = (v, label) => `<div class="stat"><b>${v}</b><span>${esc(label)}</span></div>`;
-  const fav = Object.entries(m.groups).sort((a, b) => b[1] - a[1])[0];
-  $('#playerTitle').textContent = u.username;
-  $('#playerBody').innerHTML = `
-    <div class="profile-top"><span class="player-avatar">${avatar(u.username, u.avatar, u.equipped)}</span>
-      <div class="profile-id"><div class="profile-name ${nameCls(u.equipped)}">${esc(u.username)}</div>${statusPill(u.score)}</div></div>
-    ${!m.games ? `<p class="muted">${esc(t('player.noGames'))}</p>` : `
-    <div class="stat-grid four">
-      ${tile(m.games, t('player.games'))}${tile(pct(m.wins, m.games) + '%', t('player.winRate'))}
-      ${tile((m.placeSum / m.games).toFixed(1), t('mono.player.avgPlace'))}${tile(money(m.bestNetWorth), t('mono.player.bestWorth'))}
-    </div>
-    <section class="player-section"><h3>${esc(t('mono.player.style'))}</h3>
-      <div class="radar-wrap">${radarSvg(axes)}<ul class="radar-help">${axes.map(([k, v]) => `<li><b>${esc(t('mono.axis.' + k))}</b> — ${esc(t('mono.help.' + k))}${v === null ? ` <span class="need-more">${esc(t('player.needMore.games', { n: 3 - m.games }))}</span>` : ''}</li>`).join('')}</ul></div>
-    </section>
-    <section class="player-section"><h3>${esc(t('player.highlights'))}</h3>
-      <div class="stat-grid four">
-        ${tile(money(m.rentCollected), t('mono.player.rentIn'))}${tile(money(m.rentPaid), t('mono.player.rentOut'))}
-        ${tile(m.housesBuilt, t('mono.player.houses'))}${tile(m.hotelsBuilt, t('mono.player.hotels'))}
-        ${tile(m.auctionsWon, t('mono.player.auctions'))}${tile(m.jailed, t('mono.player.jailed'))}
-        ${tile(m.bestStreak, t('player.bestStreak'))}${tile(fav ? `<span class="mband g-${fav[0]}"></span> ${esc(t('mono.group.' + fav[0]))}` : '—', t('mono.player.favGroup'))}
-      </div>
-    </section>
-    <section class="player-section"><h3>${esc(t('mono.player.recent'))}</h3>
-      <div class="recent-games">${m.recent.map(r => `<span class="recent ${r.won ? 'won' : 'lost'}"><b>${r.place}</b><span>${esc(t('mono.place', { n: r.place }))} / ${r.players}</span><span class="muted">${money(r.netWorth)}</span></span>`).join('')}</div>
-    </section>`}`;
-  $('#playerPage').classList.remove('hidden');
-}
-$('#playerClose').onclick = () => $('#playerPage').classList.add('hidden');
-for (const id of ['boardSheet', 'playerPage', 'results']) $('#' + id).addEventListener('pointerdown', e => { if (e.target.id === id) $('#' + id).classList.add('hidden'); });
+for (const id of ['boardSheet', 'results']) $('#' + id).addEventListener('pointerdown', e => { if (e.target.id === id) $('#' + id).classList.add('hidden'); });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  for (const id of ['boardSheet', 'playerPage', 'results', 'sqInfo', 'tradeModal', 'playerMenu']) $('#' + id).classList.add('hidden');
-  $('#siteMenu').classList.add('hidden');
+  for (const id of ['boardSheet', 'results', 'sqInfo', 'tradeModal', 'playerMenu']) $('#' + id).classList.add('hidden');
 });
 
-// ---------- language ----------
-const langSelect = $('#langSelect');
-langSelect.innerHTML = Object.entries(LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-langSelect.value = lang;
-langSelect.onchange = () => {
-  setLang(langSelect.value);
-  applyStaticTranslations();
-  renderAuthMode();
-  renderAccount();
-  buildBoard();
-  render();
-};
-
 applyStaticTranslations();
-renderAuthMode();
-renderSoundBtn();
 render();

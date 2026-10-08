@@ -151,3 +151,17 @@ test('Monopoly results add up into their own stats', () => {
     [2, 1, 1, 4, 600, 2, 2500, { orange: 2 }, 0, 1]);
   assert.strictEqual(store.publicProfile(user).stats.games, 0, 'Mafia stats are separate');
 });
+
+test('admin fixes: rename (unique names) and a temporary password that logs out everywhere', () => {
+  const store = new UserStore(tmp());
+  const { user, token } = store.register('Dima', 'pass');
+  store.register('Lena', 'pass');
+  assert.throws(() => store.rename(user, 'lena'), /err\.usernameTaken/);
+  store.rename(user, ' Дима  К ');
+  assert.strictEqual(user.username, 'Дима К');
+  const temp = store.resetPassword(user);
+  assert.match(temp, /^[a-z2-9]{8}$/);
+  assert.strictEqual(store.byToken(token), null);
+  assert.throws(() => store.login('Дима К', 'pass'), /err\.badLogin/);
+  assert.ok(store.login('дима к', temp).token);
+});

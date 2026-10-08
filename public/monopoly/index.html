@@ -31,7 +31,7 @@
     <div id="topRound" class="phase-chip"></div>
     <div class="spacer"></div>
     <button id="boardBtn" class="icon-btn hidden" type="button"><span class="trophy">🏆</span></button>
-    <button id="soundBtn" class="icon-btn" type="button" aria-pressed="true"></button>
+    <button id="alertsBtn" class="icon-btn" type="button" aria-pressed="true"></button>
     <select id="langSelect" class="lang-select" aria-label="Language"></select>
     <button id="leaveBtn" class="ghost small hidden" data-i18n="ui.leaveRoom"></button>
     <button id="profileBtn" class="profile-btn hidden" type="button"></button>
@@ -132,6 +132,7 @@
             <button id="restartBtn" class="danger small hidden" data-i18n="mono.backToLobby"></button>
             <button id="resignBtn" class="ghost small hidden" data-i18n="mono.resign"></button>
           </div>
+          <button id="autoEndBtn" class="toggle-chip hidden" type="button" aria-pressed="false"></button>
           <div id="reactBar" class="react-bar mono-react hidden"></div>
         </aside>
         <div class="board-area">
@@ -195,16 +196,11 @@
       </div>
     </div>
   </div>
-  <div id="playerPage" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="sheet player-sheet">
-      <div class="sheet-head"><h2 id="playerTitle"></h2><button id="playerClose" class="ghost small" data-i18n="ui.close"></button></div>
-      <div id="playerBody" class="sheet-body player-body"></div>
-    </div>
-  </div>
 
   <div id="toast" class="toast hidden"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/i18n.js"></script>
+  <script src="/common.js"></script>
   <script src="/monopoly/mono.js"></script>
 </body>
 </html>

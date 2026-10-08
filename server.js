@@ -10,6 +10,7 @@ const { Room, GameError } = require('./src/game');
 const { UserStore } = require('./src/users');
 const { ITEMS } = require('./src/items');
 const { attachMonopoly } = require('./src/monopoly/server');
+const { limitSocket } = require('./src/ratelimit');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -22,6 +23,34 @@ const users = new UserStore(DATA_DIR);
 
 const app = express();
 app.set('trust proxy', 'loopback'); // behind Caddy: use its X-Forwarded-Proto/Host for invite links
+app.disable('x-powered-by');
+
+// Standard browser protections: only our own scripts run, nobody can frame the site, no MIME
+// sniffing, HTTPS remembered. Inline styles stay allowed (the pages set CSS variables inline).
+app.use((req, res, next) => {
+  const host = /^[\w.:-]+$/.test(req.get('host') || '') ? req.get('host') : '';
+  res.set({
+    'Content-Security-Policy': [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      'font-src https://fonts.gstatic.com',
+      "img-src 'self' data: blob:",
+      `connect-src 'self'${host ? ` wss://${host} ws://${host}` : ''}`,
+      "frame-ancestors 'none'",
+      "base-uri 'none'",
+      "form-action 'self'",
+      "object-src 'none'",
+    ].join('; '),
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'same-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    'Cross-Origin-Opener-Policy': 'same-origin',
+  });
+  if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000');
+  next();
+});
 // browsers re-check the page's files on every load (cheap: unchanged files answer 304), so
 // nobody keeps running an old version after an update
 app.use(express.static(path.join(__dirname, 'public'), { setHeaders: res => res.setHeader('Cache-Control', 'no-cache') }));
@@ -80,6 +109,12 @@ app.post('/api/equip', api(req => {
   return { user: users.publicProfile(user) };
 }));
 app.post('/api/gifts/seen', api(req => { users.giftsSeen(currentUser(req)); return {}; }));
+// rooms this account is still in, in either game: the "back to my game" button
+app.get('/api/active', api(req => {
+  const user = currentUser(req);
+  const mine = [...rooms.values()].filter(r => r.byUser(user.id)).map(roomSummary).concat(mono.userRooms(user.id));
+  return { rooms: mine.filter(r => r.phase !== 'ended') };
+}));
 
 // ---------- admin: decency and gifts ----------
 const adminUser = req => {
@@ -109,8 +144,58 @@ app.post('/api/admin/gift', api(req => {
   users.gift(u, req.body.itemId);
   refreshUser(u.id);
   // pop the present open right away if they're online
-  for (const sock of io.sockets.sockets.values()) if (sock.data.userId === u.id) sock.emit('gift', { itemId: req.body.itemId });
+  for (const sock of allSockets()) if (sock.data.userId === u.id) sock.emit('gift', { itemId: req.body.itemId });
   return { user: users.adminView(u) };
+}));
+// account fixes: a new name, a temporary password (shown once to the admin)
+app.post('/api/admin/rename', api(req => {
+  adminUser(req);
+  const u = targetUser(req);
+  users.rename(u, req.body.username);
+  refreshUser(u.id);
+  return { user: users.adminView(u) };
+}));
+app.post('/api/admin/resetPassword', api(req => {
+  adminUser(req);
+  const u = targetUser(req);
+  const password = users.resetPassword(u);
+  // their open pages lose the login: send them back to the login form
+  for (const sock of allSockets()) if (sock.data.userId === u.id) sock.emit('loggedOut');
+  return { password, user: users.adminView(u) };
+}));
+// who's online right now (in either game) and every room on the server
+app.get('/api/admin/live', api(req => {
+  adminUser(req);
+  const online = {};
+  for (const sock of allSockets()) {
+    const u = users.users[sock.data.userId];
+    if (!u) continue;
+    const o = (online[u.id] ||= { id: u.id, username: u.username, avatar: u.avatar ? `/avatars/${u.avatar}` : null, where: [] });
+    const where = sock.data.roomCode ? `${sock.nsp.name === '/monopoly' ? 'mono' : 'mafia'}:${sock.data.roomCode}` : (sock.nsp.name === '/monopoly' ? 'mono' : 'mafia');
+    if (!o.where.includes(where)) o.where.push(where);
+  }
+  return {
+    online: Object.values(online).sort((a, b) => a.username.localeCompare(b.username)),
+    rooms: [...rooms.values()].map(roomSummary).concat(mono.list()).sort((a, b) => b.lastActivity - a.lastActivity),
+  };
+}));
+app.post('/api/admin/endRoom', api(req => {
+  adminUser(req);
+  const code = String(req.body.code || '');
+  if (req.body.game === 'mono') { if (!mono.end(code)) throw new GameError('err.roomNotFound'); return {}; }
+  const room = rooms.get(code);
+  if (!room) throw new GameError('err.roomNotFound');
+  for (const s of io.sockets.adapter.rooms.get(code) || []) {
+    const sock = io.sockets.sockets.get(s);
+    if (!sock) continue;
+    sock.data.playerId = null;
+    sock.leave(code);
+    sock.emit('kicked', { closed: true });
+  }
+  room.dispose();
+  rooms.delete(code);
+  scheduleSave();
+  return {};
 }));
 app.post('/api/admin/take', api(req => {
   adminUser(req);
@@ -145,6 +230,12 @@ const io = new Server(server);
 const rooms = new Map(); // code -> Room
 // Monopoly: its own namespace and rooms, same accounts; room codes are unique across both games
 const mono = attachMonopoly({ io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) });
+
+const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets()];
+const roomSummary = room => ({
+  game: 'mafia', code: room.code, phase: room.phase, lastActivity: room.lastActivity,
+  players: room.players.map(p => ({ name: p.name, connected: p.connected })), spectators: room.spectators.length,
+});
 
 function newCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -235,6 +326,7 @@ io.use((socket, next) => {
 });
 
 io.on('connection', socket => {
+  limitSocket(socket);
   const me = () => {
     const user = users.users[socket.data.userId];
     if (!user) throw new GameError('err.loginRequired');

@@ -143,6 +143,27 @@ class UserStore {
     return this.newSession(user);
   }
 
+  // ---------- admin: account fixes ----------
+  rename(user, username) {
+    username = String(username || '').trim().replace(/\s+/g, ' ');
+    if (!USERNAME_RE.test(username)) throw new GameError('err.usernameInvalid', { min: 2, max: 20 });
+    const other = this.byName(username);
+    if (other && other.id !== user.id) throw new GameError('err.usernameTaken');
+    user.username = username;
+    this.save();
+  }
+
+  // A fresh temporary password (the admin passes it on); every device gets logged out.
+  resetPassword(user) {
+    const words = 'abcdefghjkmnpqrstuvwxyz23456789';
+    const password = Array.from(crypto.randomBytes(8), b => words[b % words.length]).join('');
+    Object.assign(user, hashPassword(password));
+    for (const [h, id] of Object.entries(this.sessions)) if (id === user.id) delete this.sessions[h];
+    this.failures.delete(user.username.toLowerCase());
+    this.save();
+    return password;
+  }
+
   setAvatar(user, buf) {
     if (buf.length > MAX_AVATAR_BYTES) throw new GameError('err.avatarTooBig');
     const ext = imageType(buf);

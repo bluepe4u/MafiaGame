@@ -216,65 +216,6 @@
     </div>
   </div>
 
-  <div id="profile" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="sheet profile-sheet">
-      <div class="sheet-head">
-        <h2 data-i18n="profile.title"></h2>
-        <button id="profileClose" class="ghost small" data-i18n="ui.close"></button>
-      </div>
-      <div class="sheet-body">
-        <div class="profile-top">
-          <label class="avatar-upload">
-            <span id="profileAvatar"></span>
-            <span class="avatar-edit" data-i18n="profile.changePhoto"></span>
-            <input id="avatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/*" hidden>
-          </label>
-          <div class="profile-id">
-            <div id="profileName" class="profile-name"></div>
-            <div id="profileStatus"></div>
-            <div class="karma">
-              <span class="karma-up" id="profileLikes"></span>
-              <span class="karma-down" id="profileDislikes"></span>
-            </div>
-          </div>
-        </div>
-        <div>
-          <h3 data-i18n="profile.stats"></h3>
-          <div id="profileStats" class="stats"></div>
-        </div>
-        <div id="wardrobeBox">
-          <h3 data-i18n="wardrobe.title"></h3>
-          <div id="wardrobe" class="wardrobe"></div>
-        </div>
-        <p class="muted small-text" data-i18n="profile.decencyHint"></p>
-        <div id="tierLadder" class="tier-ladder"></div>
-        <form id="passwordForm" class="password-form" autocomplete="on">
-          <h3 data-i18n="profile.changePassword"></h3>
-          <input type="text" name="username" autocomplete="username" hidden>
-          <div class="row">
-            <input id="oldPass" type="password" autocomplete="current-password" data-i18n-placeholder="profile.oldPassword">
-            <input id="newPass" type="password" autocomplete="new-password" data-i18n-placeholder="profile.newPassword">
-            <button type="submit" data-i18n="profile.save"></button>
-          </div>
-        </form>
-        <div class="row">
-          <button id="logoutBtn" class="danger" data-i18n="profile.logout"></button>
-          <button id="adminBtn" class="ghost hidden" data-i18n="admin.open"></button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="admin" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="sheet admin-sheet">
-      <div class="sheet-head">
-        <h2 data-i18n="admin.title"></h2>
-        <button id="adminClose" class="ghost small" data-i18n="ui.close"></button>
-      </div>
-      <div id="adminBody" class="sheet-body admin-body"></div>
-    </div>
-  </div>
-
   <div id="board" class="overlay hidden" role="dialog" aria-modal="true">
     <div class="sheet board-sheet">
       <div class="sheet-head">
@@ -294,16 +235,6 @@
     </div>
   </div>
 
-  <div id="playerPage" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="sheet player-sheet">
-      <div class="sheet-head">
-        <h2 id="playerTitle"></h2>
-        <button id="playerClose" class="ghost small" data-i18n="ui.close"></button>
-      </div>
-      <div id="playerBody" class="sheet-body player-body"></div>
-    </div>
-  </div>
-
   <div id="renameMenu" class="mark-menu rename-menu hidden" role="dialog">
     <div id="renameTitle" class="mark-title"></div>
     <form id="renameForm" class="row">
@@ -311,16 +242,6 @@
       <button type="submit" class="primary small" data-i18n="rename.save"></button>
     </form>
     <p class="muted small-text" data-i18n="rename.hint"></p>
-  </div>
-
-  <div id="giftBox" class="overlay gift-overlay hidden" role="dialog" aria-modal="true">
-    <div class="gift-stage">
-      <div class="gift-title" data-i18n="gift.title"></div>
-      <button id="giftPresent" class="gift-present" type="button" aria-label="Open">🎁</button>
-      <div id="giftItem" class="gift-item hidden"></div>
-      <div id="giftName" class="gift-name"></div>
-      <button id="giftDone" class="primary hidden" data-i18n="gift.done"></button>
-    </div>
   </div>
 
   <div id="markMenu" class="mark-menu hidden" role="dialog">
@@ -372,7 +293,8 @@
 
   <div id="toast" class="toast hidden"></div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="i18n.js"></script>
-  <script src="app.js"></script>
+  <script src="/i18n.js"></script>
+  <script src="/common.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

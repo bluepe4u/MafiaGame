@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { MonoRoom } = require('./game');
 const { GameError } = require('../game');
+const { limitSocket } = require('../ratelimit');
 
 const ROOM_IDLE_MS = 60 * 60 * 1000;
 
@@ -67,6 +68,7 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken }
   });
 
   nsp.on('connection', socket => {
+    limitSocket(socket);
     const me = () => {
       const user = users.users[socket.data.userId];
       if (!user) throw new GameError('err.loginRequired');
@@ -188,8 +190,33 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken }
     }
   }, 30 * 1000).unref();
 
+  // a room as the admin and the "back to my game" button see it
+  const summary = room => ({
+    game: 'mono', code: room.code, phase: room.phase, lastActivity: room.lastActivity,
+    players: room.players.map(p => ({ name: p.name, connected: p.connected })), spectators: room.spectators.length,
+  });
+
   return {
     has: code => rooms.has(code),
+    list: () => [...rooms.values()].map(summary),
+    userRooms: userId => [...rooms.values()].filter(r => r.byUser(userId)).map(summary),
+    sockets: () => [...nsp.sockets.values()],
+    // the admin closes a stuck room: everyone in it is sent back to the home screen
+    end: code => {
+      const room = rooms.get(code);
+      if (!room) return false;
+      for (const s of nsp.adapter.rooms.get(code) || []) {
+        const sock = nsp.sockets.get(s);
+        if (!sock) continue;
+        sock.data.playerId = null;
+        sock.leave(code);
+        sock.emit('kicked', { closed: true });
+      }
+      room.dispose();
+      rooms.delete(code);
+      scheduleSave();
+      return true;
+    },
     refreshUser: userId => { for (const room of rooms.values()) if (room.byUser(userId)) broadcast(room); },
     shutdown: () => { saveNow(); shuttingDown = true; },
   };

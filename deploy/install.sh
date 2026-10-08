@@ -54,8 +54,8 @@ id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --home-dir "$APP_DIR" --sh
 install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR"
 if [[ "$SRC_DIR" != "$APP_DIR" ]]; then
   # copy only what the app needs at runtime
-  rm -rf "$APP_DIR/public" "$APP_DIR/src"
-  cp -r "$SRC_DIR/public" "$SRC_DIR/src" "$APP_DIR/"
+  rm -rf "$APP_DIR/public" "$APP_DIR/src" "$APP_DIR/deploy"
+  cp -r "$SRC_DIR/public" "$SRC_DIR/src" "$SRC_DIR/deploy" "$APP_DIR/"
   cp "$SRC_DIR/server.js" "$SRC_DIR/package.json" "$SRC_DIR/package-lock.json" "$APP_DIR/"
 fi
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
@@ -98,6 +98,35 @@ EOF
 systemctl daemon-reload
 systemctl enable "$SERVICE" >/dev/null
 systemctl restart "$SERVICE"
+
+# --- Nightly backup ------------------------------------------------------------
+# A dated archive of /var/lib/$SERVICE every night at 04:00, kept 14 days, and copied to
+# Google Drive once connected (deploy/connect-gdrive.sh, run from your own computer).
+log "Scheduling the nightly backup"
+command -v rclone >/dev/null || apt-get install -y -qq rclone >/dev/null || echo "(rclone not installed: backups stay on this server)"
+cat > "/etc/systemd/system/${SERVICE}-backup.service" <<EOF
+[Unit]
+Description=Back up the $SERVICE game data
+
+[Service]
+Type=oneshot
+Environment=DATA_DIR=/var/lib/$SERVICE
+ExecStart=$APP_DIR/deploy/backup.sh
+EOF
+cat > "/etc/systemd/system/${SERVICE}-backup.timer" <<EOF
+[Unit]
+Description=Nightly backup of the $SERVICE game data
+
+[Timer]
+OnCalendar=*-*-* 04:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable --now "${SERVICE}-backup.timer" >/dev/null
 
 # --- Caddy (HTTPS) -----------------------------------------------------------
 if [[ -n "$DOMAIN" ]]; then
@@ -156,6 +185,7 @@ for _ in $(seq 1 20); do
     log "Done. Mafia is running at $URL"
     echo "Logs:    journalctl -u $SERVICE -f"
     echo "Restart: systemctl restart $SERVICE   (games in progress are saved and resume)"
+    echo "Backups: $APP_DIR/deploy/backup.sh (now) · deploy/restore.sh (put one back) · nightly at 04:00"
     exit 0
   fi
   sleep 0.5

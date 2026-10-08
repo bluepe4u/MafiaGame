@@ -483,3 +483,29 @@ test('random play: 60 games never get stuck and keep the bank and cash consisten
   }
   assert.ok(finished >= 15, `plenty of random games reach an end (${finished}/60)`);
 });
+
+test('summary: net worth snapshot each round, biggest rent and deal, the round you went out', () => {
+  const { room, by, dice } = setup(2);
+  assert.strictEqual(room.g.worth.length, 1);
+  assert.deepStrictEqual(room.g.worth[0], { round: 1, w: { [by.Ann]: 1500, [by.Bob]: 1500 } });
+  own(room, 3, by.Bob);
+  dice.push([1, 2]); // Ann to 3, pays Bob 4
+  room.roll(by.Ann);
+  assert.deepStrictEqual(room.g.highlights.rent, { from: by.Ann, to: by.Bob, amount: 4, square: 3 });
+  room.endTurn(by.Ann);
+  dice.push([1, 3]);
+  room.roll(by.Bob); // to 4: income tax
+  room.endTurn(by.Bob);
+  assert.strictEqual(room.g.round, 2);
+  assert.strictEqual(room.g.worth.length, 2);
+  assert.strictEqual(room.g.worth[1].w[by.Ann], 1496);
+  own(room, 1, by.Ann);
+  room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [1], cash: 0, cards: 0 }, take: { props: [], cash: 60, cards: 0 } });
+  room.respondTrade(by.Bob, room.g.trades[0].id, true);
+  assert.strictEqual(room.g.highlights.deal.value, 120);
+  room.resign(by.Bob);
+  assert.strictEqual(room.phase, 'ended');
+  assert.strictEqual(room.g.players[by.Bob].outRound, 2);
+  const view = room.viewFor(by.Ann);
+  assert.ok(view.game.worth.length >= 2 && view.game.highlights.rent && view.game.players[by.Ann].stats);
+});

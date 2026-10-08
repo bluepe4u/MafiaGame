@@ -33,6 +33,21 @@ The script installs Node.js 22 (if needed), copies the app to `/opt/mafia`, runs
 
 Rooms are saved to disk (`/var/lib/mafia`, or `DATA_DIR`) about once a second and on shutdown, so a restart or update doesn't end games in progress: players' pages reconnect on their own and the game picks up where it was. Run a single instance — the app can't be load-balanced across processes.
 
+**Backups:** the installer schedules a nightly backup (04:00) of `/var/lib/mafia` — accounts,
+photos and saved rooms — as dated archives in `/var/backups/mafia`, kept 14 days. To also keep them
+on Google Drive, run once from your own computer (needs `brew install rclone`; a browser opens for the
+Google sign-in, and the server only gets access to the files it creates):
+
+```sh
+bash deploy/connect-gdrive.sh root@<server>
+```
+
+Back up now: `sudo /opt/mafia/deploy/backup.sh` · list / restore: `sudo /opt/mafia/deploy/restore.sh [latest | <file>]`
+(the current data is moved aside, not deleted).
+
+**Security:** the app sends standard browser protections (Content-Security-Policy, no framing,
+nosniff, a strict referrer policy, HSTS over HTTPS) and rate-limits socket events per connection.
+
 **Docker alternative:** `docker compose up -d --build` serves on port 3000 (put your own HTTPS proxy in front).
 
 ## Monopoly
@@ -82,7 +97,10 @@ Default counts by player count (host can override in the lobby):
 
 - `src/game.js` — game rules and state (no I/O), unit-tested in `test/`
 - `server.js` — Express + Socket.IO; rooms are kept in memory
-- `public/` — static client (vanilla JS, no build step)
+- `public/` — static client (vanilla JS, no build step); `public/common.js` holds what both games
+  share: login, avatars and cosmetics, sounds and turn alerts, the profile window (stats for both
+  games, wardrobe, account), the admin panel (who's online, rooms, decency, gifts, renames,
+  password resets), gifts and the "back to my game" banner
 - `public/i18n.js` — English and Russian translations. The server never sends display text: log entries and errors are `{ key, params }`, rendered in each player's chosen language (auto-detected from the browser, switchable in the top bar). To add a language, add a dictionary to `DICT` and an entry to `LANGS`.
 
 Players reconnect automatically after a refresh (session token in `localStorage`).

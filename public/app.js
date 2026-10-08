@@ -1,17 +1,10 @@
 'use strict';
 
-const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
-};
+// Mafia client. The login, profile, admin panel, sounds and other shared parts are in common.js.
 
-const AUTH_KEY = 'mafia.auth';
 // the login token travels with every (re)connection; after logging in or out we reconnect
 const socket = io({ auth: cb => cb({ token: store.get(AUTH_KEY) }) });
-const $ = sel => document.querySelector(sel);
-const $$ = sel => document.querySelectorAll(sel);
 const SESSION_KEY = 'mafia.session';
-const ALERTS_KEY = 'mafia.alerts';
 const REVEALED_KEY = 'mafia.revealed';
 const TAB_KEY = 'mafia.tab';
 const NOTES_PREFIX = 'mafia.notes.';
@@ -22,27 +15,19 @@ let clockOffset = 0; // serverNow - clientNow
 let roleShown = false; // true only while the role card is pressed
 // room code in the address bar (?room=ABCD): from an invite link, or the room we're in
 let urlRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase().slice(0, 4);
+Site.init({
+  game: 'mafia',
+  socket,
+  urlRoom: () => urlRoom,
+  hooks: {
+    onAccount: () => { renderReactButtons(); render(); },
+    onItems: () => render(),
+    onLang: () => { renderSpookyBtn(); render(); },
+    celebrate: () => celebrate('town'),
+  },
+});
 
 // ---------- utils ----------
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-function toast(msg, kind = '') {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.className = `toast ${kind}`;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => t.classList.add('hidden'), 3500);
-}
-
-function send(event, payload = {}) {
-  return new Promise(resolve => {
-    socket.emit(event, payload, res => {
-      if (res && !res.ok) toast(t(res.error.key, res.error.params));
-      resolve(res);
-    });
-  });
-}
-
 function loadSession() {
   try { return JSON.parse(store.get(SESSION_KEY)); } catch { return null; }
 }
@@ -52,6 +37,7 @@ function saveSession(s) {
 
 function show(screen) {
   for (const id of ['home', 'lobby', 'game']) $('#' + id).classList.toggle('hidden', id !== screen);
+  Site.setHome(screen === 'home');
 }
 
 const playerById = id => state.players.find(p => p.id === id);
@@ -59,45 +45,16 @@ const nameOf = id => (playerById(id) || {}).name || '?';
 const isHost = () => !!(state && state.me && state.hostId === state.me.id);
 const roleName = r => t('role.' + r);
 const tagHtml = (key, cls = '') => `<span class="tag ${cls}">${esc(t(key))}</span>`;
-// initials on a colour derived from the name, so each player is recognisable at a glance
-// cosmetics: { hat, frame, name } item ids from the catalog (gifts from the admin)
-let ITEMS = {};
-fetch('/api/items').then(r => r.json()).then(d => { ITEMS = d.items || {}; render(); renderAccount(); }).catch(() => {});
-const nameCls = cos => (cos && cos.name ? `nm ${cos.name.replace('.', '-')}` : '');
-function avatar(name, url, cos) {
-  const inner = avatarCore(name, url);
-  // the hat is drawn in a tiny SVG so it scales with whatever size the avatar is
-  const hat = cos && cos.hat && ITEMS[cos.hat]
-    ? `<span class="hat"><svg viewBox="0 0 10 10" aria-hidden="true"><text x="5" y="8.6" font-size="8.6" text-anchor="middle">${ITEMS[cos.hat].emoji}</text></svg></span>`
-    : '';
-  const frame = cos && cos.frame ? cos.frame.replace('.', '-') : '';
-  return hat || frame ? `<span class="cos ${frame}">${inner}${hat}</span>` : inner;
-}
-function avatarCore(name, url) {
-  if (url) return `<img class="avatar" src="${esc(url)}" alt="" loading="lazy">`;
-  let h = 0;
-  for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
-  const parts = name.trim().split(/\s+/);
-  const initials = (parts.length > 1 ? parts[0][0] + parts[1][0] : [...name].slice(0, 2).join('')).toUpperCase();
-  return `<span class="avatar" style="--h:${h}">${esc(initials)}</span>`;
-}
-// decency status from likes minus dislikes, lowest to highest
-const TIER_MIN = [-Infinity, -9, -4, -1, 2, 5, 10];
-const tierOf = score => TIER_MIN.findLastIndex(min => (score || 0) >= min);
-const statusPill = score => score === null || score === undefined ? '' : `<span class="status t${tierOf(score)}">${esc(t('tier.' + tierOf(score)))}</span>`;
-const icon = paths => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
+const icon = svgIcon;
 const ICONS = {
+  ...COMMON_ICONS,
   night: icon('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
   speech: icon('<path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/>'),
   vote: icon('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>'),
   ended: icon('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>'),
   eyeOpen: icon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   eye: icon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>'),
-  bell: icon('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
-  bellOff: icon('<path d="M8.7 3A6 6 0 0 1 18 8c0 2.9.5 5 1.2 6.5M17 17H3s3-2 3-9c0-.8.1-1.5.4-2.2"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0M3 3l18 18"/>'),
   check: icon('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
-  up: icon('<path d="M7 10v11H4V10zM7 10l4-7c1.7 0 2.6 1.2 2.2 2.8L12.5 9H19a2 2 0 0 1 2 2.3l-1.3 7.5A2.5 2.5 0 0 1 17.3 21H7"/>'),
-  down: icon('<path d="M17 14V3h3v11zM17 14l-4 7c-1.7 0-2.6-1.2-2.2-2.8L11.5 15H5a2 2 0 0 1-2-2.3l1.3-7.5A2.5 2.5 0 0 1 6.7 3H17"/>'),
 };
 const progress = (done, total) => `<div class="bar-track"><div class="bar-fill" style="width:${total ? (100 * done / total) : 0}%"></div></div>`;
 const roleTag = r => r ? `<span class="tag ${state.roleInfo[r].team}">${esc(roleName(r))}</span>` : '';
@@ -163,12 +120,8 @@ document.addEventListener('keydown', e => {
   if (pending) closeModal();
   closeMarkMenu();
   if (typeof closeRename === 'function') closeRename();
-  for (const id of ['recap', 'board', 'playerPage']) $('#' + id).classList.add('hidden');
+  for (const id of ['recap', 'board']) $('#' + id).classList.add('hidden');
 });
-
-// ---------- site switcher (top-left menu) ----------
-$('#brandBtn').onclick = e => { e.stopPropagation(); $('#siteMenu').classList.toggle('hidden'); };
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.brand-switch')) $('#siteMenu').classList.add('hidden'); });
 
 // ---------- socket ----------
 let everConnected = false;
@@ -190,9 +143,9 @@ socket.on('state', s => {
   state = s;
   render();
 });
-socket.on('kicked', () => {
+socket.on('kicked', r => {
   leftRoom();
-  toast(t('toast.kicked'));
+  toast(t(r && r.closed ? 'toast.roomClosed' : 'toast.kicked'));
 });
 
 function leftRoom() {
@@ -212,148 +165,9 @@ $('#joinBtn').onclick = () => send('join', { code: $('#joinCode').value });
 $('#watchBtn').onclick = () => send('join', { code: $('#joinCode').value, spectate: true });
 $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joinBtn').click(); });
 
-// ---------- accounts ----------
-let account = null; // { id, username, avatar, likes, dislikes, score } once logged in
-let authMode = 'login';
-
-async function api(path, body) {
-  const token = store.get(AUTH_KEY);
-  try {
-    const res = await fetch('/api/' + path, {
-      method: body === undefined ? 'GET' : 'POST',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!data.ok) toast(t(data.error.key, data.error.params));
-    return data;
-  } catch {
-    toast(t('err.server'));
-    return { ok: false };
-  }
-}
-
-function setAccount(user, token) {
-  if (token !== undefined) store.set(AUTH_KEY, token);
-  account = user;
-  // reconnect so the server knows who this socket belongs to
-  socket.disconnect().connect();
-  renderAccount();
-  render();
-}
-
-function renderAuthMode() {
-  for (const b of $$('[data-auth-mode]')) b.classList.toggle('active', b.dataset.authMode === authMode);
-  $('#authSubmit').textContent = t(authMode === 'login' ? 'auth.login' : 'auth.register');
-  $('#authPass').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
-}
-for (const b of $$('[data-auth-mode]')) b.onclick = () => { authMode = b.dataset.authMode; renderAuthMode(); };
-$('#authCard').addEventListener('submit', async e => {
-  e.preventDefault();
-  const res = await api(authMode, { username: $('#authUser').value, password: $('#authPass').value });
-  if (!res.ok) return;
-  $('#authPass').value = '';
-  setAccount(res.user, res.token);
-  toast(t('toast.welcome', { name: res.user.username }), 'info');
-});
-
-function renderAccount() {
-  $('#authCard').classList.toggle('hidden', !!account);
-  $('#playCard').classList.toggle('hidden', !account);
-  $('#profileBtn').classList.toggle('hidden', !account);
-  $('#boardBtn').classList.toggle('hidden', !account);
-  $('#boardBtn').title = t('board.title');
-  if (!account) return;
-  $('#profileBtn').innerHTML = avatar(account.username, account.avatar, account.equipped);
-  $('#profileBtn').title = t('profile.open');
-  $('#homeProfile').innerHTML = `${avatar(account.username, account.avatar, account.equipped)}
-    <span class="me-text"><b class="${nameCls(account.equipped)}">${esc(account.username)}</b>${statusPill(account.score)}</span>`;
-  $('#profileAvatar').innerHTML = avatar(account.username, account.avatar, account.equipped);
-  $('#profileName').textContent = account.username;
-  $('#profileName').className = `profile-name ${nameCls(account.equipped)}`;
-  renderWardrobe();
-  $('#adminBtn').classList.toggle('hidden', !account.admin);
-  renderReactButtons();
-  queueGifts(account.gifts);
-  $('#profileStatus').innerHTML = statusPill(account.score);
-  $('#profileLikes').innerHTML = `${ICONS.up}${esc(t('profile.likes', { n: account.likes }))}`;
-  $('#profileDislikes').innerHTML = `${ICONS.down}${esc(t('profile.dislikes', { n: account.dislikes }))}`;
-  const current = tierOf(account.score);
-  const st = account.stats || {};
-  const pct = (w, g) => g ? `${Math.round((100 * w) / g)}%` : '—';
-  $('#profileStats').innerHTML = !st.games ? `<p class="muted small-text">${esc(t('stats.none'))}</p>` : `
-    <div class="stat-grid">
-      <div class="stat"><b>${st.games}</b><span>${esc(t('stats.games'))}</span></div>
-      <div class="stat"><b>${pct(st.wins, st.games)}</b><span>${esc(t('stats.winRate'))}</span></div>
-      <div class="stat"><b>${pct(st.survived, st.games)}</b><span>${esc(t('stats.survived'))}</span></div>
-      <div class="stat mafia"><b>${pct(st.mafiaWins, st.mafiaGames)}</b><span>${esc(t('stats.asMafia'))} · ${esc(t('stats.record', { w: st.mafiaWins, g: st.mafiaGames }))}</span></div>
-      <div class="stat town"><b>${pct(st.townWins, st.townGames)}</b><span>${esc(t('stats.asTown'))} · ${esc(t('stats.record', { w: st.townWins, g: st.townGames }))}</span></div>
-    </div>
-    <div class="stat-roles"><span class="muted small-text">${esc(t('stats.roles'))}</span>
-      ${Object.entries(st.roles).sort((a, b) => b[1] - a[1]).map(([r, n]) => `<span class="tag ${r === 'mafia' ? 'mafia' : 'town'}">${esc(roleName(r))} ×${n}</span>`).join('')}
-    </div>`;
-  $('#tierLadder').innerHTML = TIER_MIN.map((min, i) => `<span class="status t${i} ${i === current ? 'current' : ''}">${esc(t('tier.' + i))}</span>`).join('');
-}
-
-const openProfile = async () => {
-  const res = await api('me'); // fresh likes/dislikes
-  if (res.ok) { account = res.user; renderAccount(); }
-  $('#profile').classList.remove('hidden');
-};
-$('#profileBtn').onclick = openProfile;
-$('#homeProfile').onclick = openProfile;
-$('#profileClose').onclick = () => $('#profile').classList.add('hidden');
-$('#profile').addEventListener('pointerdown', e => { if (e.target.id === 'profile') $('#profile').classList.add('hidden'); });
-$('#logoutBtn').onclick = async () => {
-  await api('logout', {});
-  $('#profile').classList.add('hidden');
-  setAccount(null, null);
-};
-$('#passwordForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const res = await api('password', { oldPassword: $('#oldPass').value, newPassword: $('#newPass').value });
-  if (!res.ok) return;
-  store.set(AUTH_KEY, res.token);
-  $('#oldPass').value = $('#newPass').value = '';
-  toast(t('toast.passwordChanged'), 'info');
-});
-
-// Crop to a centred square and shrink to 256px before uploading, so photos stay small.
-function shrinkImage(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const side = Math.min(img.naturalWidth, img.naturalHeight);
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 256;
-      canvas.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 256, 256);
-      URL.revokeObjectURL(img.src);
-      resolve(canvas.toDataURL('image/jpeg', 0.86));
-    };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-$('#avatarFile').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  let image;
-  try { image = await shrinkImage(file); } catch { toast(t('err.avatarType')); return; }
-  const res = await api('avatar', { image });
-  if (!res.ok) return;
-  account = res.user;
-  renderAccount();
-  toast(t('toast.photoUpdated'), 'info');
-});
-
-(async () => {
-  if (!store.get(AUTH_KEY)) { renderAccount(); return; }
-  const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${store.get(AUTH_KEY)}` } }).then(r => r.json()).catch(() => null);
-  if (res && res.ok) account = res.user;
-  else if (res) store.set(AUTH_KEY, null); // expired or logged out elsewhere
-  renderAccount();
-})();
+// ---------- accounts (shared, see common.js) ----------
+$('#profileBtn').onclick = () => openProfile();
+$('#homeProfile').onclick = () => openProfile();
 
 // ---------- top bar ----------
 $('#leaveBtn').onclick = async () => {
@@ -394,48 +208,6 @@ $('#shareLink').classList.toggle('hidden', !navigator.share);
 $('#shareLink').onclick = () => navigator.share({ title: 'Mafia', text: t('share.text', { code: state.code }), url: inviteUrl() }).catch(() => {});
 
 // ---------- turn alerts ----------
-let alertsOn = store.get(ALERTS_KEY) !== 'off';
-let lastNeed = null;
-let audioCtx = null;
-let titleBlink = null;
-
-// browsers only allow sound after the user has interacted with the page
-document.addEventListener('pointerdown', () => {
-  if (!audioCtx && window.AudioContext) audioCtx = new AudioContext();
-  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-}, { capture: true });
-
-function renderAlertsBtn() {
-  const b = $('#alertsBtn');
-  b.innerHTML = alertsOn ? ICONS.bell : ICONS.bellOff;
-  b.setAttribute('aria-pressed', String(alertsOn));
-  b.title = t('ui.alerts');
-  b.setAttribute('aria-label', t('ui.alerts'));
-}
-$('#alertsBtn').onclick = () => {
-  alertsOn = !alertsOn;
-  store.set(ALERTS_KEY, alertsOn ? null : 'off');
-  renderAlertsBtn();
-  if (alertsOn) chime();
-};
-
-function chime() {
-  if (!audioCtx) return;
-  const now = audioCtx.currentTime;
-  [[660, 0], [990, 0.13]].forEach(([freq, at]) => {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0, now + at);
-    gain.gain.linearRampToValueAtTime(0.18, now + at + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + at + 0.45);
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start(now + at);
-    osc.stop(now + at + 0.5);
-  });
-}
-
 // What, if anything, the game is waiting on this player for right now.
 function needsMe() {
   if (!state || !state.me || !state.me.alive) return null;
@@ -447,21 +219,7 @@ function needsMe() {
 
 function updateAlerts() {
   const need = needsMe();
-  if (need && need.key !== (lastNeed && lastNeed.key) && alertsOn) {
-    chime();
-    if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
-  }
-  lastNeed = need;
-  clearInterval(titleBlink);
-  if (!need) { document.title = 'Mafia'; return; }
-  const msg = `● ${t('alert.' + need.type)}`;
-  document.title = msg;
-  // blink the tab title so it's noticeable among other tabs
-  let on = true;
-  titleBlink = setInterval(() => {
-    on = !on || !document.hidden;
-    document.title = on ? msg : 'Mafia';
-  }, 1000);
+  updateTurnAlert(need && { key: need.key, text: t('alert.' + need.type) });
 }
 
 // ---------- lobby ----------
@@ -1193,7 +951,6 @@ function render() {
 const SPOOKY_KEY = 'mafia.spooky';
 const inSpookySeason = () => { const d = new Date(); return d.getMonth() === 9 || (d.getMonth() === 10 && d.getDate() <= 2); };
 let spooky = store.get(SPOOKY_KEY) ? store.get(SPOOKY_KEY) === 'on' : inSpookySeason();
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const PUMPKIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-1-.2-1.4-1.6-.6-3"/><path d="M12 6c4.9-1.6 9 1.4 9 6.5S17.4 21 12 21 3 17.6 3 12.5 7.1 4.4 12 6z"/><path d="M8.5 11l1.5 1.5L8.5 14M15.5 11 14 12.5l1.5 1.5M9 17c2 1 4 1 6 0"/></svg>';
 const BAT = '<svg viewBox="0 0 64 28"><path d="M32 9c1.5-3 2.5-4 3-6 .6 2 .4 3.5 0 5 4-3 9-5.5 15-6-2 2.5-2 5 0 8 2-2 6-3 10-2-3 2-4 6-4 10-3-2-7-3-10-1-1-3-4-5-8-5-2 0-4 2-6 6-2-4-4-6-6-6-4 0-7 2-8 5-3-2-7-1-10 1 0-4-1-8-4-10 4-1 8 0 10 2 2-3 2-5.5 0-8 6 .5 11 3 15 6-.4-1.5-.6-3 0-5 .5 2 1.5 3 3 6z"/></svg>';
 
@@ -1220,38 +977,7 @@ $('#spookyBtn').onclick = () => {
   if (spooky) sfx('night');
 };
 
-// --- sounds, synthesized on the fly (no files to load) ---
-function tone({ f, f2, at = 0, dur = 0.5, type = 'sine', vol = 0.12, attack = 0.02, vib = 0, lowpass }) {
-  const now = audioCtx.currentTime + at;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(f, now);
-  if (f2) osc.frequency.exponentialRampToValueAtTime(f2, now + dur);
-  if (vib) {
-    const lfo = audioCtx.createOscillator();
-    const depth = audioCtx.createGain();
-    lfo.frequency.value = 5.5;
-    depth.gain.value = vib;
-    lfo.connect(depth).connect(osc.frequency);
-    lfo.start(now);
-    lfo.stop(now + dur + 0.1);
-  }
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(vol, now + attack);
-  gain.gain.exponentialRampToValueAtTime(0.0008, now + dur);
-  let out = osc.connect(gain);
-  if (lowpass) {
-    const lp = audioCtx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = lowpass;
-    out = out.connect(lp);
-  }
-  out.connect(audioCtx.destination);
-  osc.start(now);
-  osc.stop(now + dur + 0.05);
-}
-
+// --- sounds, synthesized on the fly (tone() is in common.js) ---
 function noise({ at = 0, dur = 1, vol = 0.05, freq = 800 }) {
   const now = audioCtx.currentTime + at;
   const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
@@ -1415,130 +1141,8 @@ socket.on('reaction', r => {
   if (anchor) { anchor.classList.remove('reacted'); void anchor.offsetWidth; anchor.classList.add('reacted'); }
 });
 
-// ---------- wardrobe: equip gifted items ----------
-const SLOT_ORDER = ['hat', 'frame', 'name', 'reaction'];
-function itemPreview(id) {
-  const it = ITEMS[id] || {};
-  if (it.slot === 'hat' || it.slot === 'reaction') return `<span class="item-emoji">${it.emoji}</span>`;
-  if (it.slot === 'frame') return `<span class="cos ${id.replace('.', '-')}"><span class="avatar" style="--h:260">★</span></span>`;
-  return `<span class="item-name ${nameCls({ name: id })}">Aa</span>`;
-}
-function renderWardrobe() {
-  const box = $('#wardrobe');
-  const inv = (account && account.inventory) || [];
-  if (!inv.length) { box.innerHTML = `<p class="muted small-text">${esc(t('wardrobe.empty'))}</p>`; return; }
-  box.innerHTML = SLOT_ORDER.map(slot => {
-    const items = inv.filter(id => (ITEMS[id] || {}).slot === slot);
-    if (!items.length) return '';
-    return `<div class="ward-slot"><span class="muted small-text">${esc(t('wardrobe.slot.' + slot))}</span><div class="ward-items">${items.map(id => {
-      const on = slot === 'reaction' || account.equipped[slot] === id;
-      return `<button class="ward-item ${on ? 'on' : ''}" ${slot === 'reaction' ? 'disabled' : ''} data-equip="${id}" data-slot="${slot}" title="${esc(t('item.' + id))}">
-        ${itemPreview(id)}<span class="ward-label">${esc(t('item.' + id))}</span>
-        ${on ? `<span class="ward-on">${esc(t(slot === 'reaction' ? 'wardrobe.unlocked' : 'wardrobe.equipped'))}</span>` : ''}
-      </button>`;
-    }).join('')}</div></div>`;
-  }).join('');
-  for (const b of box.querySelectorAll('[data-equip]')) {
-    b.onclick = async () => {
-      const slot = b.dataset.slot;
-      const res = await api('equip', { slot, itemId: account.equipped[slot] === b.dataset.equip ? null : b.dataset.equip });
-      if (res.ok) { account = res.user; renderAccount(); }
-    };
-  }
-}
-
-// ---------- gifts: an unboxing when something new arrives ----------
-let giftShowing = null;
-let giftOpening = false;
-const giftQueue = []; // several gifts open one after another
-function queueGifts(ids) {
-  for (const id of ids || []) if (ITEMS[id] && id !== giftShowing && !giftQueue.includes(id)) giftQueue.push(id);
-  if (!giftShowing && giftQueue.length) showGift(giftQueue.shift());
-}
-function showGift(itemId) {
-  giftShowing = itemId;
-  giftOpening = false;
-  $('#giftPresent').classList.remove('hidden', 'opening');
-  $('#giftItem').classList.add('hidden');
-  $('#giftDone').classList.add('hidden');
-  $('#giftName').textContent = t('gift.tap');
-  $('#giftBox').classList.remove('hidden');
-  if (alertsOn && audioCtx) [523, 659, 784].forEach((f, i) => tone({ f, at: i * 0.09, dur: 0.4, vol: 0.06, type: 'triangle' }));
-}
-$('#giftPresent').onclick = () => {
-  const id = giftShowing;
-  if (!id || giftOpening) return;
-  giftOpening = true;
-  $('#giftPresent').classList.add('opening');
-  setTimeout(() => {
-    $('#giftPresent').classList.add('hidden');
-    $('#giftItem').innerHTML = (ITEMS[id] || {}).slot === 'hat'
-      ? avatar(account.username, account.avatar, { hat: id })
-      : itemPreview(id);
-    $('#giftItem').classList.remove('hidden');
-    $('#giftName').textContent = t('item.' + id);
-    $('#giftDone').classList.remove('hidden');
-    if (!reducedMotion()) celebrate('town');
-    if (alertsOn && audioCtx) [784, 988, 1175, 1568].forEach((f, i) => tone({ f, at: i * 0.07, dur: 0.5, vol: 0.06, type: 'triangle' }));
-  }, 650);
-};
-$('#giftDone').onclick = async () => {
-  giftShowing = null;
-  if (giftQueue.length) { showGift(giftQueue.shift()); return; }
-  $('#giftBox').classList.add('hidden');
-  await api('gifts/seen', {});
-  const res = await api('me');
-  if (res.ok) { account = { ...res.user, gifts: [] }; renderAccount(); }
-};
-socket.on('gift', async () => {
-  const res = await api('me');
-  if (res.ok) { account = res.user; renderAccount(); }
-});
-
-// ---------- admin panel (decency and gifts) ----------
-async function renderAdmin() {
-  const res = await api('admin/users');
-  if (!res.ok) return;
-  const body = $('#adminBody');
-  const itemIds = Object.keys(ITEMS);
-  body.innerHTML = res.users.map(u => `
-    <div class="admin-user" data-user="${u.id}">
-      <div class="admin-head">
-        ${avatar(u.username, u.avatar, u.equipped)}
-        <div class="admin-id"><b class="${nameCls(u.equipped)}">${esc(u.username)}</b>${statusPill(u.score)}
-          <span class="muted small-text">${u.likes} 👍 · ${u.dislikes} 👎 · ${esc(t('admin.raw', { l: u.rawLikes, d: u.rawDislikes }))}</span></div>
-      </div>
-      <div class="admin-controls">
-        <label class="admin-bonus">${esc(t('admin.bonus'))} <input type="number" value="${u.bonus}" data-bonus></label>
-        <label class="check"><input type="checkbox" class="switch" data-shield ${u.dislikeShield ? 'checked' : ''}> ${esc(t('admin.shield'))}</label>
-        <button class="danger small" data-lowest>${esc(t('admin.lowest'))}</button>
-      </div>
-      <div class="muted small-text">${esc(t('admin.dislikedBy'))}: ${u.dislikedBy.length ? u.dislikedBy.map(esc).join(', ') : esc(t('admin.nobody'))}</div>
-      <div class="admin-items">
-        ${u.inventory.map(id => `<span class="admin-item">${itemPreview(id)}${esc(t('item.' + id))}<button class="ghost small" data-take="${id}" aria-label="×">×</button></span>`).join('')}
-        <select data-give><option value="">${esc(t('admin.give'))}</option>${itemIds.filter(id => !u.inventory.includes(id)).map(id => `<option value="${id}">${ITEMS[id].emoji || ''} ${esc(t('item.' + id))}</option>`).join('')}</select>
-      </div>
-    </div>`).join('');
-  for (const row of body.querySelectorAll('[data-user]')) {
-    const userId = row.dataset.user;
-    const after = r => { if (r.ok) renderAdmin(); };
-    row.querySelector('[data-bonus]').onchange = e => api('admin/karma', { userId, bonus: e.target.value }).then(after);
-    row.querySelector('[data-shield]').onchange = e => api('admin/karma', { userId, dislikeShield: e.target.checked }).then(after);
-    row.querySelector('[data-lowest]').onclick = () => api('admin/karma', { userId, lowest: true }).then(after);
-    row.querySelector('[data-give]').onchange = e => e.target.value && api('admin/gift', { userId, itemId: e.target.value }).then(r => {
-      if (r.ok) toast(t('admin.gifted', { name: r.user.username }), 'info');
-      after(r);
-    });
-    for (const b of row.querySelectorAll('[data-take]')) b.onclick = () => api('admin/take', { userId, itemId: b.dataset.take }).then(after);
-  }
-}
-$('#adminBtn').onclick = () => { $('#profile').classList.add('hidden'); $('#admin').classList.remove('hidden'); renderAdmin(); };
-$('#adminClose').onclick = () => $('#admin').classList.add('hidden');
-$('#admin').addEventListener('pointerdown', e => { if (e.target.id === 'admin') $('#admin').classList.add('hidden'); });
-
 // ---------- leaderboard ----------
 const MIN_GAMES_FOR_RATE = 3;
-const pctOf = (w, g) => (g ? Math.round((100 * w) / g) : 0);
 let boardTab = 'wins';
 let boardUsers = [];
 async function openBoard() {
@@ -1577,116 +1181,6 @@ $('#homeBoard').onclick = openBoard;
 $('#boardClose').onclick = () => $('#board').classList.add('hidden');
 $('#board').addEventListener('pointerdown', e => { if (e.target.id === 'board') $('#board').classList.add('hidden'); });
 
-// ---------- player page: lifetime stats and the playstyle pentagon ----------
-// Five axes, each 0..1, built only from explicit in-app actions (final votes, night moves,
-// game outcomes): never from timing or chat, since the talking happens in voice.
-// An axis stays empty (null) until there's enough data for it to mean something.
-const AXIS_MIN = { survival: 3, deception: 2, intuition: 5, influence: 5, town: 3 };
-function playstyle(st) {
-  const axis = (key, part, whole) => [key, whole >= AXIS_MIN[key] ? part / whole : null, whole];
-  return [
-    axis('survival', st.survived, st.games),
-    axis('deception', st.mafiaWins, st.mafiaGames),
-    axis('intuition', st.votesOnMafia, st.townVotes),
-    axis('influence', st.decisive, st.ballots),
-    axis('town', st.townWins, st.townGames),
-  ];
-}
-
-function radarSvg(axes) {
-  const size = 300, c = size / 2, R = 104;
-  const point = (i, r) => {
-    const a = -Math.PI / 2 + (2 * Math.PI * i) / axes.length;
-    return [c + r * Math.cos(a), c + r * Math.sin(a)];
-  };
-  const ring = f => axes.map((_, i) => point(i, R * f).join(',')).join(' ');
-  const shape = axes.map(([, v], i) => point(i, R * Math.max(0.04, v || 0)).join(',')).join(' ');
-  const labels = axes.map(([key, v], i) => {
-    const [x, y] = point(i, R + 30);
-    const anchor = Math.abs(x - c) < 8 ? 'middle' : x > c ? 'start' : 'end';
-    return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="radar-label"><tspan>${esc(t('player.axis.' + key))}</tspan>
-      <tspan x="${x}" dy="15" class="radar-value">${v === null ? '—' : Math.round(v * 100) + '%'}</tspan></text>`;
-  }).join('');
-  return `<svg class="radar" viewBox="-40 -10 ${size + 80} ${size + 20}" role="img">
-    <defs><linearGradient id="radarFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--glow-a)" stop-opacity=".75"/><stop offset="1" stop-color="var(--glow-b)" stop-opacity=".55"/></linearGradient></defs>
-    ${[0.25, 0.5, 0.75, 1].map(f => `<polygon points="${ring(f)}" class="radar-ring"/>`).join('')}
-    ${axes.map((_, i) => `<line x1="${c}" y1="${c}" x2="${point(i, R)[0]}" y2="${point(i, R)[1]}" class="radar-axis"/>`).join('')}
-    <polygon points="${shape}" class="radar-shape" fill="url(#radarFill)"/>
-    ${axes.map(([, v], i) => `<circle cx="${point(i, R * Math.max(0.04, v || 0))[0]}" cy="${point(i, R * Math.max(0.04, v || 0))[1]}" r="4" class="radar-dot"/>`).join('')}
-    ${labels}
-  </svg>`;
-}
-
-async function openPlayer(userId) {
-  if (!userId) return;
-  const res = await api('player/' + userId);
-  if (!res.ok) return;
-  const u = res.user;
-  const st = u.stats;
-  $('#playerTitle').textContent = u.username;
-  const axes = playstyle(st);
-  const roleRows = Object.entries(st.roles).sort((a, b) => b[1] - a[1]);
-  const best = roleRows.filter(([, g]) => g >= 2).map(([r, g]) => [r, (st.roleWins[r] || 0) / g]).sort((a, b) => b[1] - a[1])[0];
-  const tile = (v, label) => `<div class="stat"><b>${v}</b><span>${esc(label)}</span></div>`;
-  const dateFmt = ts => new Date(ts).toLocaleDateString([], { day: 'numeric', month: 'short' });
-  $('#playerBody').innerHTML = `
-    <div class="profile-top">
-      <span class="player-avatar">${avatar(u.username, u.avatar, u.equipped)}</span>
-      <div class="profile-id">
-        <div class="profile-name ${nameCls(u.equipped)}">${esc(u.username)}</div>
-        ${statusPill(u.score)}
-        <div class="karma"><span class="karma-up">${ICONS.up}${esc(t('profile.likes', { n: u.likes }))}</span><span class="karma-down">${ICONS.down}${esc(t('profile.dislikes', { n: u.dislikes }))}</span></div>
-      </div>
-    </div>
-    ${!st.games ? `<p class="muted">${esc(t('player.noGames'))}</p>` : `
-    <div class="stat-grid four">
-      ${tile(st.games, t('player.games'))}
-      ${tile(pctOf(st.wins, st.games) + '%', t('player.winRate'))}
-      ${tile(st.streak, t('player.streak'))}
-      ${tile(st.bestStreak, t('player.bestStreak'))}
-    </div>
-    <section class="player-section">
-      <h3>${esc(t('player.playstyle'))}</h3>
-      <div class="radar-wrap">${radarSvg(axes)}
-        <ul class="radar-help">${axes.map(([k, v, n]) => `<li><b>${esc(t('player.axis.' + k))}</b> — ${esc(t('player.help.' + k))}
-          ${v === null ? `<span class="need-more">${esc(t('player.needMore.' + (k === 'intuition' || k === 'influence' ? 'votes' : 'games'), { n: AXIS_MIN[k] - n }))}</span>` : ''}</li>`).join('')}</ul>
-      </div>
-      <p class="muted small-text">${esc(t('player.reliability'))}</p>
-    </section>
-    <section class="player-section">
-      <h3>${esc(t('player.roles'))}</h3>
-      <div class="role-bars">${roleRows.map(([r, g]) => `
-        <div class="role-bar ${state && state.roleInfo ? '' : ''}">
-          <span class="tag ${r === 'mafia' ? 'mafia' : 'town'}">${esc(roleName(r))}</span>
-          <span class="bar-track wide"><span class="bar-fill ${r === 'mafia' ? 'mafia' : 'town'}" style="width:${pctOf(st.roleWins[r] || 0, g)}%"></span></span>
-          <span class="muted small-text">${esc(t('player.roleLine', { g, w: pctOf(st.roleWins[r] || 0, g) }))}</span>
-        </div>`).join('')}</div>
-    </section>
-    <section class="player-section">
-      <h3>${esc(t('player.highlights'))}</h3>
-      <div class="stat-grid four">
-        ${tile(st.kills, t('player.kills'))}
-        ${tile(st.saves, t('player.saves'))}
-        ${tile(st.copHits, t('player.copHits'))}
-        ${tile(st.mafiaVotedOut, t('player.mafiaVotedOut'))}
-      </div>
-      <div class="highlight-line">
-        ${roleRows[0] ? `<span class="muted small-text">${esc(t('player.favRole'))}:</span> <span class="tag ${roleRows[0][0] === 'mafia' ? 'mafia' : 'town'}">${esc(roleName(roleRows[0][0]))}</span>` : ''}
-        ${best ? `<span class="muted small-text">${esc(t('player.bestRole'))}:</span> <span class="tag ${best[0] === 'mafia' ? 'mafia' : 'town'}">${esc(roleName(best[0]))} · ${Math.round(best[1] * 100)}%</span>` : ''}
-      </div>
-    </section>
-    <section class="player-section">
-      <h3>${esc(t('player.recent'))}</h3>
-      <div class="recent-games">${st.recent.map(g => `
-        <span class="recent ${g.won ? 'won' : 'lost'}" title="${esc(dateFmt(g.at))} · ${esc(roleName(g.role))} · ${esc(t(g.won ? 'player.won' : 'player.lost'))}">
-          <b>${g.won ? 'W' : 'L'}</b><span>${esc(roleName(g.role))}</span>${g.survived ? '' : '<i>💀</i>'}
-        </span>`).join('')}</div>
-    </section>`}`;
-  $('#playerPage').classList.remove('hidden');
-}
-$('#playerClose').onclick = () => $('#playerPage').classList.add('hidden');
-$('#playerPage').addEventListener('pointerdown', e => { if (e.target.id === 'playerPage') $('#playerPage').classList.add('hidden'); });
-
 // ---------- host renames people in the lobby ----------
 let renameFor = null;
 function openRename(pid, anchor) {
@@ -1713,21 +1207,6 @@ document.addEventListener('pointerdown', e => {
   if (renameFor && !e.target.closest('#renameMenu') && !e.target.closest('[data-rename]')) closeRename();
 });
 
-// ---------- language ----------
-const langSelect = $('#langSelect');
-langSelect.innerHTML = Object.entries(LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-langSelect.value = lang;
-langSelect.onchange = () => {
-  setLang(langSelect.value);
-  applyStaticTranslations();
-  renderAuthMode();
-  renderAccount();
-  renderSpookyBtn();
-  render();
-};
-
 applyStaticTranslations();
 applySpooky();
 render();
-renderAuthMode();
-if (!store.get(AUTH_KEY)) $('#authUser').focus();

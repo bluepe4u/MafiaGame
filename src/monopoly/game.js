@@ -74,6 +74,7 @@ class MonoRoom {
     const defaults = room.settings;
     for (const k of SAVED_FIELDS) if (data[k] !== undefined) room[k] = data[k];
     room.settings = { ...defaults, ...room.settings };
+    if (room.g) { room.g.worth ||= []; room.g.highlights ||= { rent: null, deal: null }; }
     for (const p of [...room.players, ...room.spectators]) p.connected = false;
     // give whoever was acting a fresh turn clock after the downtime
     if (room.g && room.phase === 'playing') {
@@ -257,10 +258,13 @@ class MonoRoom {
       ended: false,
       round: 1,
       startedAt: Date.now(),
+      worth: [], // [{ round, w: { pid: net worth } }]: one snapshot per round, for the summary chart
+      highlights: { rent: null, deal: null }, // the biggest single rent and the biggest deal
     };
     for (const p of this.players) p.ready = false;
     this.phase = 'playing';
     this.addLog('mono.log.started');
+    this.snapshotWorth();
     this.beginTurn(order[0]);
   }
 
@@ -507,6 +511,7 @@ class MonoRoom {
         const rent = this.rentFor(gp.pos, { multiplier: rentMultiplier, utilityTimes });
         this.addLog('mono.log.rent', { name: this.nameOf(pid), owner: this.nameOf(pr.owner), amount: rent, square: gp.pos });
         this.charge(pid, rent, pr.owner, 'rent');
+        if (rent > (g.highlights.rent?.amount || 0)) g.highlights.rent = { from: pid, to: pr.owner, amount: rent, square: gp.pos };
         return;
       }
       case 'tax':
@@ -590,6 +595,14 @@ class MonoRoom {
     this.touch();
   }
 
+  snapshotWorth() {
+    const g = this.g;
+    const w = Object.fromEntries(g.order.map(pid => [pid, this.gp(pid).bankrupt ? 0 : this.netWorth(pid)]));
+    const last = g.worth.at(-1);
+    if (last && last.round === g.round) last.w = w;
+    else g.worth.push({ round: g.round, w });
+  }
+
   trackPeaks() {
     for (const pid of this.active()) {
       const st = this.gp(pid).stats;
@@ -609,7 +622,7 @@ class MonoRoom {
     let idx = g.turnIdx;
     for (let i = 0; i < order.length; i++) {
       idx = (idx + 1) % order.length;
-      if (idx === 0) g.round += 1;
+      if (idx === 0) { g.round += 1; this.snapshotWorth(); }
       if (!this.gp(order[idx]).bankrupt) break;
     }
     g.turnIdx = idx;
@@ -918,6 +931,7 @@ class MonoRoom {
     gp.jailCards = [];
     gp.bankrupt = true;
     gp.bankruptAt = this.active().length; // finishing place: the last one standing is 1st
+    gp.outRound = this.g.round;
     g.trades = g.trades.filter(tr => tr.from !== pid && tr.to !== pid);
   }
 
@@ -939,6 +953,7 @@ class MonoRoom {
     g.ended = true;
     g.auction = null;
     g.debts = [];
+    this.snapshotWorth();
     this.phase = 'ended';
     this.dispose();
     if (g.winner) this.addLog('mono.log.winner', { name: this.nameOf(g.winner) });
@@ -1036,6 +1051,9 @@ class MonoRoom {
     a.jailCards.push(...b.jailCards.splice(0, tr.take.cards));
     a.stats.trades += 1;
     b.stats.trades += 1;
+    const dealValue = x => x.props.reduce((s, sq) => s + SQUARES[sq].price, 0) + x.cash + x.cards * JAIL_CARD_VALUE;
+    const value = dealValue(tr.give) + dealValue(tr.take);
+    if (value > (this.g.highlights.deal?.value || 0)) this.g.highlights.deal = { from: tr.from, to: tr.to, value, give: tr.give, take: tr.take };
     this.g.trades = this.g.trades.filter(x => x !== tr);
     this.addLog('mono.log.tradeDone', { name: this.nameOf(tr.from), to: this.nameOf(tr.to) });
     this.trackPeaks();
@@ -1104,7 +1122,8 @@ class MonoRoom {
         order: g.order,
         players: Object.fromEntries(Object.entries(g.players).map(([k, v]) => [k, {
           cash: v.cash, pos: v.pos, inJail: v.inJail, jailTurns: v.jailTurns, jailCards: v.jailCards.length,
-          bankrupt: v.bankrupt, bankruptAt: v.bankruptAt, netWorth: v.bankrupt ? 0 : this.netWorth(k),
+          bankrupt: v.bankrupt, bankruptAt: v.bankruptAt, outRound: v.outRound || null, netWorth: v.bankrupt ? 0 : this.netWorth(k),
+          ...(this.phase === 'ended' ? { stats: v.stats } : {}),
         }])),
         props: g.props,
         housesLeft: g.housesLeft,
@@ -1119,6 +1138,7 @@ class MonoRoom {
         log: g.log.slice(-80),
         winner: g.winner,
         round: g.round,
+        ...(this.phase === 'ended' ? { worth: g.worth, highlights: g.highlights } : {}),
         unmortgageCosts: Object.fromEntries(Object.keys(g.props).map(sq => [sq, this.unmortgageCost(Number(sq))])),
       };
     }

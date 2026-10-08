@@ -952,3 +952,40 @@ button.brand:hover:not(:disabled) { background: var(--surface-2); border: 0; }
   .reaction { animation: react-fade 1.8s ease both; }
 }
 @keyframes react-fade { 0% { opacity: 0; } 15%, 70% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ---------- shared: Monopoly group colours (also used on profiles) ---------- */
+.g-brown { --gc: #8b5a2b; } .g-lightblue { --gc: #7dd3fc; } .g-pink { --gc: #f472b6; } .g-orange { --gc: #fb923c; }
+.g-red { --gc: #ef4444; } .g-yellow { --gc: #facc15; } .g-green { --gc: #22c55e; } .g-darkblue { --gc: #2563eb; }
+.g-railway { --gc: #94a3b8; } .g-utility { --gc: #a3e635; }
+.mband { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--gc); flex: none; }
+
+/* ---------- "back to my game" ---------- */
+.active-games { display: flex; flex-direction: column; gap: 8px; }
+.active-game { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; text-decoration: none; color: var(--text);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, transparent), var(--surface-2)); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  animation: msg-pop .35s ease both; }
+.active-game:hover { border-color: var(--accent); }
+.active-game.g-mono { --accent: #22c55e; } .active-game.g-mafia { --accent: #e5484d; }
+.ag-ico { font-size: 1.5rem; }
+.ag-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ag-text .small-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-go { font-weight: 700; white-space: nowrap; color: var(--accent); }
+
+/* ---------- profile tabs ---------- */
+.profile-tabs { margin: 4px 0 0; }
+.profile-tab-body { display: flex; flex-direction: column; gap: 16px; }
+.account-actions { margin-top: 8px; }
+
+/* ---------- admin: online, rooms, account fixes ---------- */
+.online-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.online-user { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); }
+.online-user .avatar { width: 28px; height: 28px; font-size: .7rem; }
+.online-user::after { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+.admin-room { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); margin-bottom: 8px; }
+.admin-room-id { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.admin-account { flex-wrap: wrap; }
+.admin-account form { flex: 1; min-width: 200px; }
+.admin-account input { flex: 1; min-width: 0; }
+.temp-pass { padding: 8px 12px; border-radius: 10px; background: rgba(245, 197, 66, .12); border: 1px solid rgba(245, 197, 66, .4); font-size: .85rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.temp-pass code { font: 700 1rem 'Geist Mono', monospace; letter-spacing: .05em; user-select: all; }
+.profile-id .status, .admin-id .status { align-self: flex-start; }
