@@ -224,6 +224,7 @@ document.body.insertAdjacentHTML('beforeend', `
           <button data-admin-tab="live" data-i18n="admin.tab.live"></button>
           <button data-admin-tab="users" data-i18n="admin.tab.users"></button>
           <button data-admin-tab="invites" data-i18n="admin.tab.invites"></button>
+          <button data-admin-tab="features" data-i18n="admin.tab.features"></button>
         </div>
         <div id="adminBody" class="admin-body"></div>
       </div>
@@ -892,7 +893,7 @@ const gameName = g => t(g === 'mono' ? 'site.monopoly' : 'site.mafia');
 
 async function renderAdmin() {
   for (const b of $$('[data-admin-tab]')) b.classList.toggle('active', b.dataset.adminTab === adminTab);
-  return adminTab === 'live' ? renderAdminLive() : adminTab === 'invites' ? renderAdminInvites() : renderAdminUsers();
+  return adminTab === 'live' ? renderAdminLive() : adminTab === 'invites' ? renderAdminInvites() : adminTab === 'features' ? renderAdminFeatures() : renderAdminUsers();
 }
 
 async function renderAdminLive() {
@@ -991,6 +992,24 @@ async function renderAdminUsers() {
       box.innerHTML = `${esc(t('admin.tempPassword', { name }))} <code>${esc(r.password)}</code> <button class="small" type="button">${esc(t('ui.copy'))}</button>`;
       box.classList.remove('hidden');
       box.querySelector('button').onclick = () => navigator.clipboard.writeText(r.password).then(() => toast(t('toast.copiedText'), 'info'), () => {});
+    };
+  }
+}
+
+// ---------- site features (admin): switch family mode, voice chat, transcripts on or off ----------
+async function renderAdminFeatures() {
+  const res = await fetch('/api/features').then(r => r.json()).catch(() => null);
+  if (!res || !res.ok || adminTab !== 'features') return;
+  const f = res.features;
+  const body = $('#adminBody');
+  body.innerHTML = `<p class="muted small-text">${esc(t('features.hint'))}</p>
+    <div class="checks feature-list">${['voice', 'transcripts', 'family'].map(k => `
+      <label class="check"><input type="checkbox" class="switch" data-feature="${k}" ${f[k] ? 'checked' : ''} ${k === 'transcripts' && !f.voice ? 'disabled' : ''}>
+        <span>${esc(t('features.' + k))}</span><small class="hint">${esc(t('features.' + k + '.hint'))}</small></label>`).join('')}</div>`;
+  for (const input of body.querySelectorAll('[data-feature]')) {
+    input.onchange = async () => {
+      const r = await api('admin/features', { [input.dataset.feature]: input.checked });
+      if (r.ok) { toast(t('features.saved'), 'info'); renderAdmin(); }
     };
   }
 }

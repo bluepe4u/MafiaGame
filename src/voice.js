@@ -44,12 +44,13 @@ function createVoiceHub(nsp) {
   }
 
   // ctx() -> { room, pid } for the socket's current room (throws when not in one)
-  function attach(socket, ctx, { onTranscript } = {}) {
+  function attach(socket, ctx, { onTranscript, allowed = () => true } = {}) {
     let window = { start: Date.now(), n: 0 };
     const quietAck = ack => typeof ack === 'function' && ack({ ok: true });
     socket.on('voice:join', (_p, ack) => {
       try {
         const { room, pid } = ctx();
+        if (!allowed(room)) throw new Error('voice off');
         if (socket.data.voiceRoom && socket.data.voiceRoom !== room.code) leave(socket);
         if (!rooms.has(room.code)) rooms.set(room.code, new Map());
         rooms.get(room.code).set(pid, socket.id);
@@ -58,7 +59,7 @@ function createVoiceHub(nsp) {
         announce(room.code);
         quietAck(ack);
       } catch {
-        if (typeof ack === 'function') ack({ ok: false, error: { key: 'err.notInRoom', params: {} } });
+        if (typeof ack === 'function') ack({ ok: false, error: { key: 'err.voiceOff', params: {} } });
       }
     });
     socket.on('voice:leave', (_p, ack) => { leave(socket); quietAck(ack); });
@@ -88,7 +89,17 @@ function createVoiceHub(nsp) {
     socket.on('disconnect', () => leave(socket));
   }
 
-  return { attach, leave, peersOf };
+  // everyone out of a room's voice chat (the admin or the host turned it off)
+  function closeRoom(code) {
+    for (const sid of rooms.get(code)?.values() || []) {
+      const s = nsp.sockets.get(sid);
+      if (s) { s.data.voiceRoom = s.data.voicePid = null; s.emit('voice:off'); }
+    }
+    rooms.delete(code);
+    announce(code);
+  }
+
+  return { attach, leave, peersOf, closeRoom };
 }
 
 module.exports = { createVoiceHub, iceServers };

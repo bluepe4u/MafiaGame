@@ -43,8 +43,10 @@ class MonoRoom {
   constructor({
     code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout,
     profileOf = () => null, onGameEnd = () => {}, onStart = () => {}, onArchive = () => {}, tableId = null,
+    features = () => ({ family: true, voice: true, transcripts: true }),
   } = {}) {
     this.code = code;
+    this.features = features; // the admin's site-wide switches
     this.tableId = tableId; // the table that started this room, if any
     this.onStart = onStart; // (room) when a game starts: the table remembers its settings
     this.onArchive = onArchive; // (record) a finished game, for the game night archive
@@ -62,6 +64,7 @@ class MonoRoom {
       startingCash: 1500 * SCALE, doubleGo: true, freeParking: false, auctions: true, noRentInJail: false, turnSeconds: 90, mortgageTurns: 15,
       roundLimit: 0, // a shorter game: after this many rounds the richest player wins (0 = play to the end)
       family: false,
+      voice: true, // voice chat in this room (when the admin has it on for the site)
     };
     this.phase = 'lobby';
     this.g = null; // the running game, see start()
@@ -241,7 +244,10 @@ class MonoRoom {
       this.assert(Number.isInteger(v) && (v === 0 || (v >= 5 && v <= 200)), 'err.mono.roundRange', { min: 5, max: 200 });
       this.settings.roundLimit = v;
     }
-    for (const k of ['doubleGo', 'freeParking', 'auctions', 'noRentInJail', 'family']) if (s[k] !== undefined) this.settings[k] = !!s[k];
+    const f = this.features();
+    this.assert(!s.family || f.family, 'err.featureOff');
+    this.assert(!s.voice || f.voice, 'err.featureOff');
+    for (const k of ['doubleGo', 'freeParking', 'auctions', 'noRentInJail', 'family', 'voice']) if (s[k] !== undefined) this.settings[k] = !!s[k];
     this.touch();
   }
 
@@ -1168,6 +1174,7 @@ class MonoRoom {
       hostId: this.hostId,
       serverNow: Date.now(),
       settings: { ...this.settings },
+      features: this.features(),
       minPlayers: MIN_PLAYERS,
       maxPlayers: MAX_PLAYERS,
       tokens: TOKENS,

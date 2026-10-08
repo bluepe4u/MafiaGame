@@ -13,6 +13,7 @@ const { createVoiceHub } = require('../voice');
 const ROOM_IDLE_MS = 60 * 60 * 1000;
 
 function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, onArchive = () => {}, onStart = () => {} }) {
+  const voiceAllowed = room => users.features.voice && room.settings.voice !== false;
   const nsp = io.of('/monopoly');
   const voice = createVoiceHub(nsp);
   const rooms = new Map(); // code -> MonoRoom
@@ -47,6 +48,7 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
     onGameEnd: results => users.recordMonoGame(results),
     onArchive,
     onStart,
+    features: () => users.features,
   });
 
   function newCode() {
@@ -119,7 +121,7 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
       if (!member) throw new GameError('err.sessionExpired');
       attach(room, member);
     });
-    voice.attach(socket, ctx);
+    voice.attach(socket, ctx, { allowed: voiceAllowed });
 
     on('leave', () => {
       const { room, pid } = ctx();
@@ -138,7 +140,11 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
     });
 
     const act = (event, method, args = () => []) => on(event, p => { const { room, pid } = ctx(); return room[method](pid, ...args(p)); });
-    act('settings', 'updateSettings', p => [p]);
+    on('settings', p => {
+      const { room, pid } = ctx();
+      room.updateSettings(pid, p);
+      if (!voiceAllowed(room)) voice.closeRoom(room.code);
+    });
     act('ready', 'setReady', p => [p.ready]);
     act('watch', 'setSpectating', p => [p.on]);
     act('piece', 'setPiece', p => [p.piece]);
@@ -207,6 +213,14 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
     has: code => rooms.has(code),
     list: () => [...rooms.values()].map(summary),
     info: code => (rooms.has(code) ? summary(rooms.get(code)) : null),
+    // the admin switched a feature off: turn it off in every room
+    applyFeatures: f => {
+      for (const room of rooms.values()) {
+        if (!f.family) room.settings.family = false;
+        if (!f.voice) { room.settings.voice = false; voice.closeRoom(room.code); }
+        room.touch();
+      }
+    },
     // an empty room for a table's next game: the first one in becomes the host
     create: (tableId = null, settings = null) => {
       const room = new MonoRoom({ code: newCode(), tableId, ...roomOptions() });

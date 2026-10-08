@@ -133,7 +133,7 @@ function render() {
   if (inRoom && urlRoom !== state.code) { urlRoom = state.code; history.replaceState(null, '', `/monopoly/?room=${state.code}`); }
   renderReactBar();
   updateTurnAlert(monoNeed());
-  Voice.update(!!(state && state.me));
+  Voice.update(!!(state && state.me && state.features && state.features.voice && state.settings.voice !== false));
   if (!inRoom) return show('home');
   if (state.phase === 'lobby') { show('lobby'); return renderLobby(); }
   show('game');
@@ -197,6 +197,7 @@ function renderLobby() {
     s.roundLimit ? t('mono.sumRounds', { n: s.roundLimit }) : '',
     ...['doubleGo', 'auctions', 'freeParking', 'noRentInJail'].filter(k => s[k]).map(k => t('mono.rule.' + k)),
     s.family ? t('ui.family') : '',
+    state.features && state.features.voice ? t(s.voice !== false ? 'sum.voiceOn' : 'sum.voiceOff') : '',
   ].filter(Boolean).map(x => `<li>${esc(x)}</li>`).join('');
   $('#hostSettings').classList.toggle('hidden', !isHost());
   $('#startBtn').classList.toggle('hidden', !isHost());
@@ -208,7 +209,11 @@ function renderLobby() {
     setIfNotFocused($('#turnSeconds'), s.turnSeconds);
     setIfNotFocused($('#mortgageTurns'), s.mortgageTurns);
     setIfNotFocused($('#roundLimit'), s.roundLimit || 0);
-    for (const input of $$('[data-rule]')) input.checked = !!s[input.dataset.rule];
+    for (const input of $$('[data-rule]')) input.checked = input.dataset.rule === 'voice' ? s.voice !== false : !!s[input.dataset.rule];
+    // switches the admin turned off for the whole site aren't offered at all
+    const f = state.features || {};
+    $('[data-rule="family"]').closest('label').classList.toggle('hidden', !f.family);
+    $('[data-rule="voice"]').closest('label').classList.toggle('hidden', !f.voice);
   }
 }
 

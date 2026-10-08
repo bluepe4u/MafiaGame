@@ -424,15 +424,30 @@ const DICT = {
     'auth.password': 'Password',
     'auth.hint': 'Friends only, by invite: pick any username and password, no email needed. Your photo and decency status stay with your account.',
     'auth.invite': 'Invite code',
+    'ui.voice': 'Voice chat',
+    'ui.voice.hint': 'Talk right on the site, without Discord. Off: no voice chat in this game.',
+    'sum.voiceOn': 'Voice chat on',
+    'sum.voiceOff': 'No voice chat',
+    'err.featureOff': 'The admin has turned this off for the site',
+    'err.voiceOff': 'Voice chat is off in this room',
+    'admin.tab.features': 'Features',
+    'features.hint': 'Site-wide switches. A feature that is off disappears from every lobby; when it is on, the host still decides for each game.',
+    'features.voice': 'Voice chat',
+    'features.voice.hint': 'Push-to-talk voice right on the site (Mafia keeps its night channels).',
+    'features.transcripts': 'Voice transcripts',
+    'features.transcripts.hint': 'Lets Mafia hosts turn on speech-to-text of the voice chat (shown after the game; with an AI key, also an AI read of the game).',
+    'features.family': 'Family mode',
+    'features.family.hint': 'Lets hosts pick gentle wording and no ratings (and a shorter Monopoly).',
+    'features.saved': 'Saved',
     'voice.join': 'Voice chat',
     'voice.leave': 'Leave voice chat',
     'voice.inVoice': 'In voice chat',
-    'voice.hold': 'Hold to talk',
+    'voice.hold': 'Hold V to talk',
     'voice.mute': 'On air — tap to mute',
     'voice.unmute': 'Muted — tap to talk',
     'voice.ptt': 'Push to talk',
     'voice.open': 'Open mic',
-    'voice.holdKey': 'or hold V',
+    'voice.holdKey': 'or hold this button',
     'voice.silentNight': 'Night: the town sleeps',
     'voice.ch.all': 'Everyone hears you',
     'voice.ch.mafia': 'Mafia channel',
@@ -443,7 +458,7 @@ const DICT = {
     'voice.denied': 'No microphone access — allow it in the browser to talk',
     'voice.failed': 'Couldn\'t start the voice chat',
     'ui.transcripts': 'Voice transcripts',
-    'ui.transcripts.hint': 'Everyone in voice chat is turned into text on their own device (in Chrome, Google\'s speech recognition does it) and the transcript is shown after the game; with an AI key on the server, the game also gets a short analysis. Everyone sees that it\'s on.',
+    'ui.transcripts.hint': 'Everyone\'s speech in voice chat is turned into text in their own browser (in Chrome, Google\'s speech recognition does it) and the transcript is shown after the game; with an AI key on the server, the game also gets a short analysis. Everyone sees that it\'s on.',
     'sum.transcripts': 'Voice transcripts on (shown after the game)',
     'err.transcriptsOff': 'Transcripts are off in this room',
     'transcript.title': p => `Transcript (${p.n} lines)`,
@@ -542,7 +557,7 @@ const DICT = {
     'onboard.title': 'How it works',
     'onboard.1': 'Create a table for your group and send friends its link (new people need an invite).',
     'onboard.2': 'Pick the next game on the table — everyone at it is taken into the room.',
-    'onboard.3': 'Talk in your voice call; your phone is your cards, votes and moves.',
+    'onboard.3': 'Talk in voice chat; your screen is your cards, votes and moves.',
     'onboard.ok': 'Got it',
     'mono.rule.doubleGo.hint': 'Landing exactly on GO pays 400 instead of 200.',
     'mono.rule.auctions.hint': 'If the player declines to buy, everyone bids; bidding opens at half the price.',
@@ -567,7 +582,7 @@ The town wins when every Mafia member is out. The Mafia wins when there are as m
 - Hooker — visits one player each night and cancels their move; visiting any Mafia member means nobody dies that night.
 
 ## A round
-Night: everyone with a role makes a move on their phone, in secret. Morning: the app announces who died. Day: each living player speaks in turn (the timer is on screen), then everyone votes — for a player or to skip.
+Night: everyone with a role makes a move on their screen, in secret. Morning: the app announces who died. Day: each living player speaks in turn (the timer is on screen), then everyone votes — for a player or to skip.
 
 ## The vote
 The player with the most votes is out, but only with more votes than "skip" and with no tie for first place. Otherwise nobody leaves.
@@ -1339,15 +1354,30 @@ Space — roll / end turn / pay. B — buy. A — auction. P — pay bail. 1–3
     'auth.password': 'Пароль',
     'auth.hint': 'Только для своих, по приглашениям: любое имя и пароль, без почты. Фото и статус порядочности сохраняются в аккаунте.',
     'auth.invite': 'Код приглашения',
+    'ui.voice': 'Голосовой чат',
+    'ui.voice.hint': 'Общаться прямо на сайте, без Discord. Выключено — в этой игре голосового чата нет.',
+    'sum.voiceOn': 'Голосовой чат включён',
+    'sum.voiceOff': 'Без голосового чата',
+    'err.featureOff': 'Админ выключил это для всего сайта',
+    'err.voiceOff': 'Голосовой чат в этой комнате выключен',
+    'admin.tab.features': 'Функции',
+    'features.hint': 'Переключатели для всего сайта. Выключенная функция пропадает из всех лобби; включённая — хост решает для каждой игры.',
+    'features.voice': 'Голосовой чат',
+    'features.voice.hint': 'Рация прямо на сайте (в Мафии — с ночными каналами).',
+    'features.transcripts': 'Расшифровка голоса',
+    'features.transcripts.hint': 'Разрешает хостам Мафии включать расшифровку голосового чата (видна после игры; с ключом ИИ — ещё и разбор партии).',
+    'features.family': 'Семейный режим',
+    'features.family.hint': 'Разрешает хостам выбирать мягкие слова и игру без оценок (и короткую Монополию).',
+    'features.saved': 'Сохранено',
     'voice.join': 'Голосовой чат',
     'voice.leave': 'Выйти из голосового чата',
     'voice.inVoice': 'В голосовом чате',
-    'voice.hold': 'Держите — говорите',
+    'voice.hold': 'Держите V — говорите',
     'voice.mute': 'В эфире — нажмите, чтобы выключить',
     'voice.unmute': 'Выключен — нажмите, чтобы говорить',
     'voice.ptt': 'Рация',
     'voice.open': 'Микрофон',
-    'voice.holdKey': 'или держите V',
+    'voice.holdKey': 'или удерживайте кнопку',
     'voice.silentNight': 'Ночь: город спит',
     'voice.ch.all': 'Вас слышат все',
     'voice.ch.mafia': 'Канал мафии',
@@ -1358,7 +1388,7 @@ Space — roll / end turn / pay. B — buy. A — auction. P — pay bail. 1–3
     'voice.denied': 'Нет доступа к микрофону — разрешите его в браузере',
     'voice.failed': 'Не удалось включить голосовой чат',
     'ui.transcripts': 'Расшифровка голоса',
-    'ui.transcripts.hint': 'Речь каждого в голосовом чате превращается в текст на его устройстве (в Chrome это делает распознавание речи Google), стенограмма показывается после игры; если на сервере есть ключ ИИ — ещё и короткий разбор партии. Все видят, что расшифровка включена.',
+    'ui.transcripts.hint': 'Речь каждого в голосовом чате превращается в текст в его браузере (в Chrome это делает распознавание речи Google), стенограмма показывается после игры; если на сервере есть ключ ИИ — ещё и короткий разбор партии. Все видят, что расшифровка включена.',
     'sum.transcripts': 'Расшифровка голоса включена (после игры)',
     'err.transcriptsOff': 'Расшифровка в этой комнате выключена',
     'transcript.title': p => `Стенограмма (${p.n} ${ruPlural(p.n, 'реплика', 'реплики', 'реплик')})`,
@@ -1457,7 +1487,7 @@ Space — roll / end turn / pay. B — buy. A — auction. P — pay bail. 1–3
     'onboard.title': 'Как это устроено',
     'onboard.1': 'Создайте стол для своей компании и отправьте друзьям ссылку (новичкам нужно приглашение).',
     'onboard.2': 'Выберите следующую игру за столом — все, кто за ним, сразу переходят в комнату.',
-    'onboard.3': 'Общайтесь в голосовом чате, а телефон — это ваши карты, голосование и ходы.',
+    'onboard.3': 'Общайтесь в голосовом чате, а на экране — ваши карты, голосование и ходы.',
     'onboard.ok': 'Понятно',
     'mono.rule.doubleGo.hint': 'Если встать ровно на «Вперёд», платят 400 ₽ вместо 200 ₽.',
     'mono.rule.auctions.hint': 'Если игрок отказывается покупать, участок идёт с аукциона; торги начинаются с половины цены.',
@@ -1482,7 +1512,7 @@ Space — roll / end turn / pay. B — buy. A — auction. P — pay bail. 1–3
 - Путана — каждую ночь навещает одного игрока и отменяет его ход; если навестила кого-то из мафии — этой ночью никто не умирает.
 
 ## Круг
-Ночь: у кого есть роль, тайно делает ход на телефоне. Утро: приложение объявляет, кто погиб. День: живые по очереди говорят (таймер на экране), потом все голосуют — за игрока или «пропустить».
+Ночь: у кого есть роль, тайно делает ход на своём экране. Утро: приложение объявляет, кто погиб. День: живые по очереди говорят (таймер на экране), потом все голосуют — за игрока или «пропустить».
 
 ## Голосование
 Выбывает игрок с наибольшим числом голосов — но только если их больше, чем «пропустить», и нет ничьей за первое место. Иначе никто не выбывает.

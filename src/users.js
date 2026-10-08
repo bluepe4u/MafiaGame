@@ -16,6 +16,7 @@ const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
 const RATING_LOG_KEEP = 5000;
 const LOWEST_SCORE = -10; // the bottom decency status starts here
+const DEFAULT_FEATURES = { family: false, voice: true, transcripts: true };
 const MAX_TITLE = 32;
 const MAX_BADGES = 12;
 const THEMES = ['ocean', 'violet', 'sunset', 'forest', 'rose', 'mono'];
@@ -64,6 +65,8 @@ class UserStore {
     this.sessions = {}; // sha256(token) -> userId
     this.ratingLog = []; // [{ from, to, value, at }]: who rated whom, for the admin
     this.invites = {}; // code -> { createdBy, createdAt, maxUses, uses, usedBy, tableId, admin }
+    // site-wide switches from the admin panel; a feature that's off is hidden in every lobby
+    this.features = { ...DEFAULT_FEATURES };
     this.failures = new Map(); // username (lowercase) -> [timestamps]
     this.saveTimer = null;
     try {
@@ -72,6 +75,7 @@ class UserStore {
       this.sessions = data.sessions || {};
       this.ratingLog = data.ratingLog || [];
       this.invites = data.invites || {};
+      this.features = { ...DEFAULT_FEATURES, ...data.features };
     } catch (e) {
       if (e.code !== 'ENOENT') console.error('Could not read users:', e.message);
     }
@@ -83,7 +87,7 @@ class UserStore {
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const tmp = `${this.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ users: this.users, sessions: this.sessions, ratingLog: this.ratingLog, invites: this.invites }));
+      fs.writeFileSync(tmp, JSON.stringify({ users: this.users, sessions: this.sessions, ratingLog: this.ratingLog, invites: this.invites, features: this.features }));
       fs.renameSync(tmp, this.file);
     } catch (e) {
       console.error('Saving users failed:', e.message);
@@ -242,6 +246,12 @@ class UserStore {
     this.failures.delete(user.username.toLowerCase());
     this.save();
     return password;
+  }
+
+  setFeatures(changes) {
+    for (const k of Object.keys(DEFAULT_FEATURES)) if (changes[k] !== undefined) this.features[k] = !!changes[k];
+    this.save();
+    return this.features;
   }
 
   // ---------- personal touches ----------

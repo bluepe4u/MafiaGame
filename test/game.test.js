@@ -719,3 +719,14 @@ test('transcripts: only when on, tagged by channel, secret until the game ends, 
   room.setInsights(room.gameId, { summary: 'x' });
   assert.strictEqual(room.viewFor(by.E.id).insights.summary, 'x');
 });
+
+test('site features: a switch the admin turned off can\'t be turned on in a lobby', () => {
+  const features = { family: false, voice: true, transcripts: false };
+  const room = new Room({ code: 'S', setTimer: () => 0, clearTimer: () => {}, features: () => features });
+  const ann = room.join('Ann');
+  assert.throws(() => room.updateSettings(ann.id, { family: true }), /err\.featureOff/);
+  assert.throws(() => room.updateSettings(ann.id, { transcripts: true }), /err\.featureOff/);
+  room.updateSettings(ann.id, { voice: false, family: false });
+  assert.strictEqual(room.settings.voice, false);
+  assert.deepStrictEqual(room.viewFor(ann.id).features, features);
+});

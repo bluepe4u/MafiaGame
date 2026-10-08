@@ -167,6 +167,21 @@ app.post('/api/admin/gift', api(req => {
   for (const sock of allSockets()) if (sock.data.userId === u.id) sock.emit('gift', { itemId: req.body.itemId });
   return { user: users.adminView(u) };
 }));
+// site-wide feature switches (family mode, voice chat, transcripts)
+app.get('/api/features', (_req, res) => res.json({ ok: true, features: users.features }));
+app.post('/api/admin/features', api(req => {
+  adminUser(req);
+  const f = users.setFeatures(req.body);
+  for (const room of rooms.values()) {
+    if (!f.family) room.settings.family = false;
+    if (!f.voice || !f.transcripts) room.settings.transcripts = false;
+    if (!f.voice) { room.settings.voice = false; voiceHub.closeRoom(room.code); }
+    room.touch();
+  }
+  mono.applyFeatures(f);
+  return { features: f };
+}));
+
 // invite codes: registration needs one; an invite can also seat the newcomer at a table
 app.get('/api/admin/invites', api(req => {
   adminUser(req);
@@ -369,6 +384,7 @@ const mono = attachMonopoly({
 });
 
 const voiceHub = createVoiceHub(io.of('/'));
+const voiceAllowed = room => users.features.voice && room.settings.voice !== false;
 const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets()];
 const roomSummary = room => ({
   game: 'mafia', code: room.code, phase: room.phase, lastActivity: room.lastActivity,
@@ -406,6 +422,7 @@ const roomOptions = () => ({
     }
   },
   onStart: room => room.tableId && tables.saveSettings(room.tableId, 'mafia', room.settings),
+  features: () => users.features,
   onRate: (targetUserId, oldValue, newValue, fromUserId) => {
     users.applyRating(targetUserId, oldValue, newValue, fromUserId);
     refreshUser(targetUserId);
@@ -535,7 +552,7 @@ io.on('connection', socket => {
     attach(room, player);
   });
 
-  voiceHub.attach(socket, ctx, { onTranscript: (room, pid, text) => room.addTranscript(pid, text) });
+  voiceHub.attach(socket, ctx, { onTranscript: (room, pid, text) => room.addTranscript(pid, text), allowed: voiceAllowed });
 
   on('leave', () => {
     const { room, pid } = ctx();
@@ -559,7 +576,11 @@ io.on('connection', socket => {
     }
   });
 
-  on('settings', s => { const { room, pid } = ctx(); room.updateSettings(pid, s); });
+  on('settings', s => {
+    const { room, pid } = ctx();
+    room.updateSettings(pid, s);
+    if (!voiceAllowed(room)) voiceHub.closeRoom(room.code);
+  });
   on('start', () => { const { room, pid } = ctx(); room.start(pid); });
   on('restart', () => { const { room, pid } = ctx(); room.restart(pid); });
   on('nightAction', ({ targetId }) => { const { room, pid } = ctx(); room.nightAction(pid, targetId); });

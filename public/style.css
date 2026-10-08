@@ -459,7 +459,7 @@ select option, select optgroup { background: #1b1b24; color: #f1f1f4; }
 .sheet { width: min(760px, 100%); max-height: min(88vh, 900px); display: flex; flex-direction: column; border-radius: 22px; background: rgba(20, 20, 28, .97); border: 1px solid var(--border-strong); box-shadow: 0 40px 100px -20px rgba(0, 0, 0, .9); animation: pop .25s cubic-bezier(.2, 1.2, .4, 1); }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid var(--border); }
 .sheet-head h2 { font-size: 1.15rem; }
-.sheet-body { padding: 20px 22px 24px; overflow: auto; }
+.sheet-body { padding: 20px 22px 24px; overflow: auto; min-height: 0; flex: 1 1 auto; }
 .recap-winner { font-family: var(--serif); font-size: 2.4rem; line-height: 1.1; margin-bottom: 18px; }
 .recap-roles { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
 .recap-player { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 5px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--border); font-size: .85rem; }
@@ -1105,6 +1105,7 @@ body[data-theme="mono"]:not(.halloween) { --accent: #9ca3af; --accent-soft: rgba
 
 /* ---------- the game night archive ---------- */
 .archive-body { display: flex; flex-direction: column; gap: 10px; }
+.archive-body > *, .night-body > * { flex-shrink: 0; } /* scroll the list rather than squeeze the cards */
 .night { border-radius: 16px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
 .night-head { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; text-align: left; padding: 12px 14px; border: 0; background: transparent; border-radius: 0; }
 .night-head:hover { background: var(--surface-3); }
@@ -1157,3 +1158,4 @@ body[data-theme="mono"]:not(.halloween) { --accent: #9ca3af; --accent-soft: rgba
 .voice-talk svg { width: 24px !important; height: 24px !important; }
 .voice-talk span { line-height: 1.25; }
 .voice-key { text-align: center; margin-top: -4px; font-size: .72rem; }
+.feature-list .check { flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--border); }

@@ -111,8 +111,10 @@ class Room {
   constructor({
     code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout,
     profileOf = () => null, onRate = () => {}, onGameEnd = () => {}, onStart = () => {}, onArchive = () => {}, tableId = null,
+    features = () => ({ family: true, voice: true, transcripts: true }),
   } = {}) {
     this.code = code;
+    this.features = features; // the admin's site-wide switches
     this.tableId = tableId; // the table that started this room, if any
     this.onStart = onStart; // (room) when a game starts: the table remembers its settings
     this.onArchive = onArchive; // (record) a finished game, for the game night archive
@@ -132,6 +134,7 @@ class Room {
       speechSeconds: 60, voteSeconds: 360, nightSeconds: 240, revealRoleOnDeath: true, firstNightKill: true, roleCounts: null,
       family: false, // gentler words, no likes/dislikes
       transcripts: false, // speech-to-text of the voice chat (everyone is told), shown after the game
+      voice: true, // voice chat in this room (when the admin has it on for the site)
     };
     this.resetGameState();
     this.lastActivity = Date.now();
@@ -408,8 +411,10 @@ class Room {
     }
     if (s.revealRoleOnDeath !== undefined) this.settings.revealRoleOnDeath = !!s.revealRoleOnDeath;
     if (s.firstNightKill !== undefined) this.settings.firstNightKill = !!s.firstNightKill;
-    if (s.family !== undefined) this.settings.family = !!s.family;
-    if (s.transcripts !== undefined) this.settings.transcripts = !!s.transcripts;
+    const f = this.features();
+    if (s.family !== undefined) { this.assert(!s.family || f.family, 'err.featureOff'); this.settings.family = !!s.family; }
+    if (s.voice !== undefined) { this.assert(!s.voice || f.voice, 'err.featureOff'); this.settings.voice = !!s.voice; }
+    if (s.transcripts !== undefined) { this.assert(!s.transcripts || (f.voice && f.transcripts), 'err.featureOff'); this.settings.transcripts = !!s.transcripts; }
     if (s.roleCounts !== undefined) {
       if (s.roleCounts === null) {
         this.settings.roleCounts = null;
@@ -881,7 +886,7 @@ class Room {
 
   // A line of speech recognised on a player's own device (each phone transcribes only its owner).
   addTranscript(pid, text) {
-    this.assert(this.settings.transcripts, 'err.transcriptsOff');
+    this.assert(this.settings.transcripts && this.settings.voice !== false, 'err.transcriptsOff');
     this.assert(this.phase !== PHASES.LOBBY, 'err.gameNotRunning');
     const m = this.member(pid);
     this.assert(m, 'err.notInRoom');
@@ -950,6 +955,7 @@ class Room {
       hostId: this.hostId,
       serverNow: Date.now(),
       settings: { ...this.settings },
+      features: this.features(),
       roleCounts: this.effectiveRoleCounts(),
       roleCountsError: this.phase === PHASES.LOBBY ? validateRoleCounts(this.effectiveRoleCounts(), this.players.length) : null,
       minPlayers: MIN_PLAYERS,

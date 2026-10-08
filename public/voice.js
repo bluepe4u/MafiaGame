@@ -58,7 +58,7 @@ const Voice = (() => {
         ${svgIcon(mode === 'open' && openMuted ? MIC_OFF : MIC)}
         <span>${esc(silent ? t('voice.silentNight') : mode === 'ptt' ? t('voice.hold') : openMuted ? t('voice.unmute') : t('voice.mute'))}</span>
       </button>
-      ${mode === 'ptt' && !silent && matchMedia('(hover: hover)').matches ? `<span class="voice-key muted small-text">${esc(t('voice.holdKey'))}</span>` : ''}
+      ${mode === 'ptt' && !silent ? `<span class="voice-key muted small-text">${esc(t('voice.holdKey'))}</span>` : ''}
       <div class="voice-modes">
         <button class="${mode === 'ptt' ? 'on' : ''}" data-vmode="ptt" type="button">${esc(t('voice.ptt'))}</button>
         <button class="${mode === 'open' ? 'on' : ''}" data-vmode="open" type="button">${esc(t('voice.open'))}</button>
@@ -271,6 +271,8 @@ const Voice = (() => {
       cfg = options;
       cfg.socket.on('voice:peers', onPeers);
       cfg.socket.on('voice:signal', onSignal);
+      // the host or the admin turned voice off for this room
+      cfg.socket.on('voice:off', () => { if (joined) leave(); present = []; render(); });
       // after a reconnect the server has forgotten us: join again
       cfg.socket.on('connect', () => { if (joined) cfg.socket.emit('voice:join', {}); });
     },

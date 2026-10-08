@@ -299,6 +299,7 @@ $('#revealRole').addEventListener('change', e => send('settings', { revealRoleOn
 $('#firstNightKill').addEventListener('change', e => send('settings', { firstNightKill: e.target.checked }));
 $('#familyMode').addEventListener('change', e => send('settings', { family: e.target.checked }));
 $('#transcripts').addEventListener('change', e => send('settings', { transcripts: e.target.checked }));
+$('#voiceOn').addEventListener('change', e => send('settings', { voice: e.target.checked, ...(e.target.checked ? {} : { transcripts: false }) }));
 
 function setIfNotFocused(el, prop, value) {
   if (document.activeElement !== el) el[prop] = value;
@@ -337,6 +338,7 @@ function renderLobby() {
     t(s.firstNightKill ? 'sum.firstNightKill' : 'sum.noFirstNightKill'),
     t(s.revealRoleOnDeath ? 'sum.reveal' : 'sum.noReveal'),
     s.family ? t('sum.family') : '',
+    state.features && state.features.voice ? t(s.voice !== false ? 'sum.voiceOn' : 'sum.voiceOff') : '',
     s.transcripts ? t('sum.transcripts') : '',
   ].filter(Boolean).map(t => `<li>${esc(t)}</li>`).join('');
   const rce = state.roleCountsError;
@@ -372,6 +374,12 @@ function renderLobby() {
     $('#firstNightKill').checked = s.firstNightKill;
     $('#familyMode').checked = !!s.family;
     $('#transcripts').checked = !!s.transcripts;
+    $('#voiceOn').checked = s.voice !== false;
+    // switches the admin turned off for the whole site aren't offered at all
+    const f = state.features || {};
+    $('#familyMode').closest('label').classList.toggle('hidden', !f.family);
+    $('#voiceOn').closest('label').classList.toggle('hidden', !f.voice);
+    $('#transcripts').closest('label').classList.toggle('hidden', !(f.voice && f.transcripts && s.voice !== false));
   }
 }
 
@@ -973,7 +981,7 @@ function render() {
   }
   fxOnState();
   renderTopbar();
-  Voice.update(!!(state && state.me));
+  Voice.update(!!(state && state.me && state.features && state.features.voice && state.settings.voice !== false));
   // the AI's read arrives a little after the game: refresh an open recap
   if (state && state.insights && !recapInsights && !$('#recap').classList.contains('hidden')) openRecap();
   updateAlerts();

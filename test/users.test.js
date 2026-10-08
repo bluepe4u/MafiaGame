@@ -227,3 +227,12 @@ test('personal touches: admin titles and badges, your own birthday (birthday hat
   assert.strictEqual(store.publicProfile(user).badges.length, 0);
   assert.strictEqual(store.publicProfile(user).equipped.hat, undefined);
 });
+
+test('site features: defaults (family off), changed by the admin, saved', () => {
+  const dir = tmp();
+  const store = new UserStore(dir);
+  assert.deepStrictEqual(store.features, { family: false, voice: true, transcripts: true });
+  store.setFeatures({ family: true, voice: false, bogus: true });
+  store.saveNow();
+  assert.deepStrictEqual(new UserStore(dir).features, { family: true, voice: false, transcripts: true });
+});
