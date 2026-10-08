@@ -191,3 +191,16 @@ test('invites: required, single or multi use, admin bootstrap only on an empty s
   store.revokeInvite(code);
   assert.ok(!store.invites[code]);
 });
+
+test('recovery code: shown once at registration, resets the password, then rotates', () => {
+  const store = new UserStore(tmp());
+  const { user, token, recoveryCode } = reg(store, 'Ann', 'pass');
+  assert.match(recoveryCode, /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  assert.throws(() => store.recover('Ann', 'AAAA-BBBB-CCCC', 'newpass'), /err\.badRecovery/);
+  const r = store.recover('ann', recoveryCode.toLowerCase().replace(/-/g, ' '), 'newpass');
+  assert.strictEqual(store.byToken(token), null);
+  assert.ok(store.login('Ann', 'newpass').token);
+  assert.throws(() => store.recover('Ann', recoveryCode, 'again'), /err\.badRecovery/);
+  assert.ok(store.recover('Ann', r.recoveryCode, 'again'));
+  assert.strictEqual(store.publicProfile(user).hasRecovery, true);
+});

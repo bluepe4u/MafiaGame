@@ -658,8 +658,8 @@ body.halloween[data-phase="vote"] { --glow-a: #ff2d3a; --glow-b: #ff7518; --felt
 body.halloween[data-phase="ended"] { --glow-a: #39ff88; --glow-b: #ff7518; }
 body.halloween .orb-a { opacity: .28; }
 body.halloween .brand-mark rect:first-child { fill: #ff7518; }
-body.halloween .hero h1, body.halloween .brand span, body.halloween .big, body.halloween .winner, body.halloween .recap-winner,
-body.halloween .phase-card-title, body.halloween .role-name, body.halloween .flip-tap, body.halloween .profile-name {
+/* the spooky display font only on big headlines: names, numbers and buttons stay readable */
+body.halloween .hero h1, body.halloween .winner, body.halloween .recap-winner, body.halloween .phase-card-title {
   font-family: var(--display); letter-spacing: .02em; font-weight: 400;
 }
 body.halloween .hero h1 em { background: linear-gradient(100deg, #ffb35c, #ff7518 55%, #c2410c); -webkit-background-clip: text; background-clip: text; }
@@ -1027,3 +1027,47 @@ button.brand:hover:not(:disabled) { background: var(--surface-2); border: 0; }
 .tc-now.g-mono { --accent: #22c55e; } .tc-now.g-mafia { --accent: #e5484d; }
 .back-home { align-self: flex-start; margin-bottom: 12px; }
 #lobby { display: flex; flex-direction: column; } #lobby.hidden { display: none; }
+
+/* ---------- drawn icons in the chrome ---------- */
+.ui-ico { display: inline-flex; width: 1.15em; height: 1.15em; vertical-align: -.2em; flex: none; }
+.ui-ico svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn > svg, .icon-btn .ui-ico { width: 18px; height: 18px; }
+.icon-btn > svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.site-menu .site-ico { width: 18px; height: 18px; }
+.tc-ico .ui-ico { width: 22px; height: 22px; color: var(--muted); }
+.ag-ico .ui-ico { width: 22px; height: 22px; }
+
+/* ---------- settings menu (gear) ---------- */
+.settings-wrap { position: relative; }
+.settings-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 80; min-width: 240px; padding: 6px; border-radius: 14px;
+  background: rgba(18, 18, 24, .98); border: 1px solid var(--border-strong); box-shadow: 0 20px 50px -12px rgba(0, 0, 0, .8); display: flex; flex-direction: column; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 10px; font-size: .88rem; color: var(--text); }
+.set-row:hover { background: var(--surface-2); }
+.set-link { width: 100%; border: 0; background: transparent; text-align: left; font: inherit; cursor: pointer; }
+.set-row .lang-select { margin: 0; }
+
+/* ---------- dialogs ---------- */
+.ask-sheet { width: min(440px, 100%); }
+.ask-sheet h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.ask-actions { justify-content: flex-end; margin-top: 18px; }
+.recovery-code { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: rgba(245, 197, 66, .12); border: 1px solid rgba(245, 197, 66, .4); }
+.recovery-code code { flex: 1; font: 700 1.15rem 'Geist Mono', monospace; letter-spacing: .08em; user-select: all; }
+
+/* ---------- loading, passwords, hints, rules, onboarding ---------- */
+.boot-loader { display: flex; justify-content: center; padding: 60px 0; }
+.boot-loader .spinner { width: 28px; height: 28px; }
+.pass-wrap { position: relative; display: flex; flex: 1; min-width: 0; }
+.pass-wrap input { flex: 1; min-width: 0; padding-right: 42px; }
+.pass-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; padding: 6px; border: 0; background: transparent; color: var(--muted); }
+.pass-eye:hover { color: var(--text); background: transparent; }
+.pass-eye svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.link-btn { align-self: center; border: 0; background: transparent; color: var(--muted); font-size: .82rem; text-decoration: underline; text-underline-offset: 3px; padding: 4px; }
+.link-btn:hover { color: var(--text); background: transparent; }
+.hint { display: block; flex-basis: 100%; margin-top: 2px; color: var(--muted); font-size: .74rem; line-height: 1.35; font-weight: 400; }
+.check .hint { padding-left: 48px; }
+.rules-link { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.rules-body h3 { margin: 18px 0 6px; }
+.rules-body p, .rules-body li { line-height: 1.55; color: var(--text); opacity: .9; }
+.rules-body ul { padding-left: 20px; margin: 4px 0; }
+.onboarding { padding: 14px 16px; border-radius: 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), var(--surface-2)); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+.onboarding ol { margin: 8px 0 12px; padding-left: 20px; line-height: 1.5; font-size: .9rem; }

@@ -424,6 +424,93 @@ const DICT = {
     'auth.password': 'Password',
     'auth.hint': 'Friends only, by invite: pick any username and password, no email needed. Your photo and decency status stay with your account.',
     'auth.invite': 'Invite code',
+    'ui.ok': 'OK',
+    'ui.confirm': 'Confirm',
+    'settings.language': 'Language',
+    'settings.sound': 'Sounds & turn alerts',
+    'settings.halloween': 'Halloween mode',
+    'auth.forgot': 'Forgot your password?',
+    'auth.backToLogin': 'Back to login',
+    'auth.recoverSubmit': 'Set new password',
+    'auth.recoveryCode': 'Recovery code',
+    'auth.newPassword': 'New password',
+    'auth.showPassword': 'Show password',
+    'err.badRecovery': 'Wrong username or recovery code',
+    'recovery.title': 'Recovery code',
+    'recovery.afterRegister': 'Save this code somewhere safe (notes, password manager). If you forget your password, it lets you set a new one — there is no email reset.',
+    'recovery.afterReset': 'Password changed. Your old recovery code no longer works — here is the new one, save it.',
+    'recovery.afterRenew': 'Your new recovery code. The previous one no longer works.',
+    'recovery.saved': 'I saved it',
+    'recovery.have': 'You have a recovery code. If you lost it, make a new one (the old one stops working).',
+    'recovery.none': 'No recovery code yet: without it, only the admin can reset a forgotten password.',
+    'recovery.renew': 'Make a new code',
+    'recovery.create': 'Get a recovery code',
+    'recovery.renewWarn': 'The current recovery code will stop working.',
+    'mono.confirmBankrupt': 'Everything you own goes to your creditor and you are out of the game.',
+    'mono.log.title': 'Game log',
+    'mono.log.all': p => `Full log (${p.n})`,
+    'rules.title': 'Rules',
+    'rules.open': 'Rules',
+    'onboard.title': 'How it works',
+    'onboard.1': 'Create a table for your group and send friends its link (new people need an invite).',
+    'onboard.2': 'Pick the next game on the table — everyone at it is taken into the room.',
+    'onboard.3': 'Talk in your voice call; your phone is your cards, votes and moves.',
+    'onboard.ok': 'Got it',
+    'mono.rule.doubleGo.hint': 'Landing exactly on GO pays 400 instead of 200.',
+    'mono.rule.auctions.hint': 'If the player declines to buy, everyone bids; bidding opens at half the price.',
+    'mono.rule.freeParking.hint': 'Taxes and fines go into a pot; whoever lands on Free Parking takes it.',
+    'mono.rule.noRentInJail.hint': 'Owners in jail can\'t collect rent.',
+    'mono.turnTime.hint': 'When time runs out, the turn plays itself (roll, auction, end turn). 0 = no limit.',
+    'mono.mortgageTurns.hint': 'A property not bought back within this many of its owner\'s turns returns to the bank. 0 = forever.',
+    'mono.startingCash.hint': 'The official game starts with 1 500 ₽.',
+    'ui.firstNightKill.hint': 'Off: the first night is only for getting to know roles — nobody dies.',
+    'ui.revealRole.hint': 'Everyone sees the role of a player who is killed or voted out.',
+    'ui.speechTime.hint': 'Each player\'s turn to speak during the day.',
+    'ui.voteTime.hint': 'After this, the vote closes with the votes so far. 0 = no limit.',
+    'ui.nightTime.hint': 'After this, the night ends; missing moves count as "nobody". 0 = no limit.',
+    'rules.mafia': `## The goal
+The town wins when every Mafia member is out. The Mafia wins when there are as many of them as everyone else.
+
+## Roles
+- Citizen — no night move; finds the Mafia by talking and voting.
+- Mafia — knows the other Mafia members; together they pick a victim each night (or nobody).
+- Cop — checks one player each night and learns whether they are Mafia.
+- Doctor — saves one player each night (or nobody); not the same player two nights in a row, and themselves only once per game.
+- Hooker — visits one player each night and cancels their move; visiting any Mafia member means nobody dies that night.
+
+## A round
+Night: everyone with a role makes a move on their phone, in secret. Morning: the app announces who died. Day: each living player speaks in turn (the timer is on screen), then everyone votes — for a player or to skip.
+
+## The vote
+The player with the most votes is out, but only with more votes than "skip" and with no tie for first place. Otherwise nobody leaves.
+
+## After the game
+The recap shows every role and night move. Players can like or dislike each other — that is the decency status.`,
+    'rules.mono': `## The goal
+Be the last player who isn't bankrupt. Buy streets, collect full colour sets, build, and charge rent.
+
+## A turn
+Roll two dice and move. Doubles roll again; three doubles in a row send you to jail. Passing GO pays 200 ₽.
+
+## Landing
+- Unowned property: buy it at its price, or it goes to auction (bidding opens at half price).
+- Someone else's property: pay rent. A full colour set doubles the rent of unbuilt streets.
+- Chance / Community Chest: take a card. Taxes: pay the bank. Go to Jail: straight to jail.
+
+## Building
+With a full colour set you can build houses (evenly across the set), then a hotel. Manage everything from a property's card: tap the square.
+
+## Money trouble
+Mortgage a property for half its price (buying back costs +10%; with a mortgage time limit set, an unredeemed property returns to the bank). Sell houses back for half. If you still can't pay, you are bankrupt.
+
+## Jail
+Pay 50 ₽, use a "Get out of jail" card, or try for doubles; after three tries you pay and move.
+
+## Deals
+Click a player's card to offer a deal: properties, cash and jail cards. Everyone at the table sees it. Clearly lopsided deals (giving away a colour set cheaply, more than twice the value for nothing) are refused.
+
+## Keyboard
+Space — roll / end turn / pay. B — buy. A — auction. P — pay bail. 1–3 — quick bids.`,
     'ui.toHome': '← Home',
     'err.inviteRequired': 'Registration is by invite: enter the code from your invite',
     'err.inviteInvalid': 'This invite code is wrong or already used up',
@@ -1164,6 +1251,93 @@ const DICT = {
     'auth.password': 'Пароль',
     'auth.hint': 'Только для своих, по приглашениям: любое имя и пароль, без почты. Фото и статус порядочности сохраняются в аккаунте.',
     'auth.invite': 'Код приглашения',
+    'ui.ok': 'Хорошо',
+    'ui.confirm': 'Подтвердить',
+    'settings.language': 'Язык',
+    'settings.sound': 'Звук и оповещения',
+    'settings.halloween': 'Режим Хэллоуина',
+    'auth.forgot': 'Забыли пароль?',
+    'auth.backToLogin': 'Назад ко входу',
+    'auth.recoverSubmit': 'Задать новый пароль',
+    'auth.recoveryCode': 'Код восстановления',
+    'auth.newPassword': 'Новый пароль',
+    'auth.showPassword': 'Показать пароль',
+    'err.badRecovery': 'Неверное имя или код восстановления',
+    'recovery.title': 'Код восстановления',
+    'recovery.afterRegister': 'Сохраните этот код в надёжном месте (заметки, менеджер паролей). Если забудете пароль, с ним можно задать новый — сброса по почте нет.',
+    'recovery.afterReset': 'Пароль изменён. Старый код восстановления больше не работает — вот новый, сохраните его.',
+    'recovery.afterRenew': 'Ваш новый код восстановления. Предыдущий больше не работает.',
+    'recovery.saved': 'Я сохранил(а)',
+    'recovery.have': 'Код восстановления есть. Если потеряли — создайте новый (старый перестанет работать).',
+    'recovery.none': 'Кода восстановления пока нет: без него забытый пароль сможет сбросить только админ.',
+    'recovery.renew': 'Новый код',
+    'recovery.create': 'Получить код восстановления',
+    'recovery.renewWarn': 'Текущий код восстановления перестанет работать.',
+    'mono.confirmBankrupt': 'Всё ваше имущество перейдёт кредитору, а вы выбываете из игры.',
+    'mono.log.title': 'Журнал игры',
+    'mono.log.all': p => `Весь журнал (${p.n})`,
+    'rules.title': 'Правила',
+    'rules.open': 'Правила',
+    'onboard.title': 'Как это устроено',
+    'onboard.1': 'Создайте стол для своей компании и отправьте друзьям ссылку (новичкам нужно приглашение).',
+    'onboard.2': 'Выберите следующую игру за столом — все, кто за ним, сразу переходят в комнату.',
+    'onboard.3': 'Общайтесь в голосовом чате, а телефон — это ваши карты, голосование и ходы.',
+    'onboard.ok': 'Понятно',
+    'mono.rule.doubleGo.hint': 'Если встать ровно на «Вперёд», платят 400 ₽ вместо 200 ₽.',
+    'mono.rule.auctions.hint': 'Если игрок отказывается покупать, участок идёт с аукциона; торги начинаются с половины цены.',
+    'mono.rule.freeParking.hint': 'Налоги и штрафы копятся в банке стоянки; кто встанет на «Бесплатную стоянку» — забирает всё.',
+    'mono.rule.noRentInJail.hint': 'Пока владелец в тюрьме, рента с его участков не берётся.',
+    'mono.turnTime.hint': 'Когда время выходит, ход делается сам (бросок, аукцион, конец хода). 0 — без ограничения.',
+    'mono.mortgageTurns.hint': 'Если участок не выкуплен за столько ходов владельца, он возвращается банку. 0 — бессрочно.',
+    'mono.startingCash.hint': 'По официальным правилам — 1 500 ₽.',
+    'ui.firstNightKill.hint': 'Выключено: первая ночь только для знакомства ролей — никто не умирает.',
+    'ui.revealRole.hint': 'Все увидят роль игрока, которого убили или выгнали голосованием.',
+    'ui.speechTime.hint': 'Сколько времени у каждого игрока на речь днём.',
+    'ui.voteTime.hint': 'Потом голосование закрывается с теми голосами, что есть. 0 — без ограничения.',
+    'ui.nightTime.hint': 'Потом ночь заканчивается; несделанные ходы считаются «никого». 0 — без ограничения.',
+    'rules.mafia': `## Цель
+Мирные побеждают, когда выбыла вся мафия. Мафия побеждает, когда её столько же, сколько остальных.
+
+## Роли
+- Мирный житель — ночного хода нет; ищет мафию разговором и голосованием.
+- Мафия — знает своих; вместе выбирают жертву каждую ночь (или никого).
+- Комиссар — каждую ночь проверяет одного игрока и узнаёт, мафия ли он.
+- Доктор — каждую ночь спасает одного игрока (или никого); не одного и того же две ночи подряд, а себя — только раз за игру.
+- Путана — каждую ночь навещает одного игрока и отменяет его ход; если навестила кого-то из мафии — этой ночью никто не умирает.
+
+## Круг
+Ночь: у кого есть роль, тайно делает ход на телефоне. Утро: приложение объявляет, кто погиб. День: живые по очереди говорят (таймер на экране), потом все голосуют — за игрока или «пропустить».
+
+## Голосование
+Выбывает игрок с наибольшим числом голосов — но только если их больше, чем «пропустить», и нет ничьей за первое место. Иначе никто не выбывает.
+
+## После игры
+В итогах видны все роли и ночные ходы. Игроки ставят друг другу лайки и дизлайки — из них складывается статус порядочности.`,
+    'rules.mono': `## Цель
+Остаться последним, кто не обанкротился. Покупайте улицы, собирайте цветные группы, стройте дома и берите ренту.
+
+## Ход
+Бросьте два кубика и идите вперёд. Дубль — бросаете ещё раз; три дубля подряд — в тюрьму. За проход поля «Вперёд» — 200 ₽.
+
+## Куда встали
+- Свободный участок: купите по цене или он уйдёт с аукциона (торги с половины цены).
+- Чужой участок: платите ренту. Полная цветная группа удваивает ренту незастроенных улиц.
+- «Шанс» / «Общественная казна»: возьмите карточку. Налог: платите банку. «Отправляйтесь в тюрьму»: сразу в тюрьму.
+
+## Строительство
+С полной группой можно строить дома (равномерно по группе), потом отель. Всё управление — в карточке участка: нажмите на клетку.
+
+## Если не хватает денег
+Заложите участок за половину цены (выкуп +10%; если включён срок залога, невыкупленный участок вернётся банку). Продайте дома за полцены. Если всё равно не хватает — банкротство.
+
+## Тюрьма
+Заплатите 50 ₽, используйте карточку «Освобождение из тюрьмы» или пробуйте выбросить дубль; после трёх попыток платите и идёте.
+
+## Сделки
+Нажмите на карточку игрока, чтобы предложить сделку: участки, деньги, карточки тюрьмы. Её видит весь стол. Явно нечестные сделки (отдать группу за бесценок, больше чем вдвое дороже без выгоды) не пройдут.
+
+## Клавиатура
+Пробел — бросок / конец хода / оплата. B — купить. A — аукцион. P — залог за выход из тюрьмы. 1–3 — быстрые ставки.`,
     'ui.toHome': '← На главную',
     'err.inviteRequired': 'Регистрация по приглашениям: введите код из приглашения',
     'err.inviteInvalid': 'Код приглашения неверный или уже использован',

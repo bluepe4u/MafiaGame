@@ -117,7 +117,35 @@ class UserStore {
     this.users[user.id] = user;
     invite.uses += 1;
     invite.usedBy.push(user.id);
-    return { user, token: this.newSession(user), invite };
+    const recoveryCode = this.newRecoveryCode(user);
+    return { user, token: this.newSession(user), invite, recoveryCode };
+  }
+
+  // ---------- self-service password reset (no email): a recovery code shown once ----------
+  newRecoveryCode(user) {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const raw = Array.from(crypto.randomBytes(12), b => alphabet[b % alphabet.length]).join('');
+    user.recovery = hashPassword(raw);
+    this.save();
+    return raw.match(/.{4}/g).join('-');
+  }
+
+  recover(username, code, newPassword) {
+    const key = String(username || '').trim().toLowerCase();
+    const now = Date.now();
+    const recent = (this.failures.get(key) || []).filter(t => now - t < LOGIN_WINDOW_MS);
+    if (recent.length >= LOGIN_MAX_FAILURES) throw new GameError('err.tooManyLogins');
+    const user = this.byName(key);
+    const clean = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!user || !user.recovery || !passwordMatches(clean, user.recovery)) {
+      this.failures.set(key, [...recent, now]);
+      throw new GameError('err.badRecovery');
+    }
+    if (String(newPassword || '').length < MIN_PASSWORD) throw new GameError('err.passwordShort', { min: MIN_PASSWORD });
+    this.failures.delete(key);
+    Object.assign(user, hashPassword(String(newPassword)));
+    for (const [h, id] of Object.entries(this.sessions)) if (id === user.id) delete this.sessions[h];
+    return { user, token: this.newSession(user), recoveryCode: this.newRecoveryCode(user) };
   }
 
   // ---------- invites ----------
@@ -363,6 +391,7 @@ class UserStore {
       stats: { ...emptyStats(), ...user.stats },
       monoStats: { ...emptyMonoStats(), ...user.monoStats },
       admin: !!user.admin,
+      hasRecovery: !!user.recovery,
       inventory,
       equipped: Object.fromEntries(Object.entries(user.equipped || {}).filter(([, i]) => inventory.includes(i))),
       reactions: inventory.filter(i => ITEMS[i].slot === 'reaction').map(i => ITEMS[i].emoji),

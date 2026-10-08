@@ -419,3 +419,12 @@ body.mono[data-phase="playing"] main, body.mono[data-phase="ended"] main { max-w
 .hl-text .small-text { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .results-sheet { width: min(720px, 100%); }
 .results + .player-section { margin-top: 18px; }
+
+/* ---------- the whole game log ---------- */
+.log-btn { align-self: center; display: inline-flex; align-items: center; gap: 6px; color: #475569; border-color: rgba(15, 23, 42, .15); background: rgba(255, 255, 255, .55); }
+.log-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.log-sheet { width: min(620px, 100%); }
+.log-list { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 2px; max-height: 70vh; overflow-y: auto; }
+.log-list li { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--border); font-size: .88rem; }
+.log-time { font: 500 .74rem 'Geist Mono', monospace; color: var(--muted); flex: none; width: 44px; }
+.pdot.blank { visibility: hidden; }

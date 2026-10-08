@@ -84,11 +84,17 @@ const currentUser = req => {
 
 app.use('/api', express.json({ limit: '2mb' }));
 app.post('/api/register', api(req => {
-  const { user, token, invite } = users.register(req.body.username, req.body.password, req.body.invite);
+  const { user, token, invite, recoveryCode } = users.register(req.body.username, req.body.password, req.body.invite);
   if (invite.tableId) { try { tables.join(invite.tableId, user); } catch {} }
   if (invite.admin) fs.rm(path.join(DATA_DIR, 'admin-invite.txt'), { force: true }, () => {});
-  return { token, user: users.publicProfile(user) };
+  return { token, user: users.publicProfile(user), recoveryCode };
 }));
+// forgot the password: username + recovery code sets a new one (and issues a fresh code)
+app.post('/api/recover', api(req => {
+  const { user, token, recoveryCode } = users.recover(req.body.username, req.body.code, req.body.password);
+  return { token, user: users.publicProfile(user), recoveryCode };
+}));
+app.post('/api/recovery', api(req => ({ recoveryCode: users.newRecoveryCode(currentUser(req)) })));
 app.post('/api/login', api(req => {
   const { user, token } = users.login(req.body.username, req.body.password);
   return { token, user: users.publicProfile(user) };

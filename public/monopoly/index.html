@@ -30,7 +30,7 @@
     <button id="topRoom" class="room-pill hidden" type="button"><span data-i18n="ui.room"></span> <span id="topCode" class="code"></span></button>
     <div id="topRound" class="phase-chip"></div>
     <div class="spacer"></div>
-    <button id="boardBtn" class="icon-btn hidden" type="button"><span class="trophy">🏆</span></button>
+    <button id="boardBtn" class="icon-btn hidden" type="button"><span class="trophy"></span></button>
     <button id="alertsBtn" class="icon-btn" type="button" aria-pressed="true"></button>
     <select id="langSelect" class="lang-select" aria-label="Language"></select>
     <button id="leaveBtn" class="ghost small hidden" data-i18n="ui.leaveRoom"></button>
@@ -47,6 +47,7 @@
         <h1><span data-i18n="mono.heroA"></span> <em data-i18n="mono.heroB"></em></h1>
         <p class="muted hero-sub" data-i18n="mono.tagline"></p>
       </div>
+      <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
       <form id="authCard" class="card home-card hidden" autocomplete="on">
         <div class="tabs auth-tabs" role="tablist">
           <button type="button" data-auth-mode="login" data-i18n="auth.login"></button>
@@ -148,6 +149,7 @@
               <div id="turnInfo" class="turn-info"></div>
               <div id="actions" class="actions"></div>
               <ul id="feed" class="feed"></ul>
+              <button id="logBtn" class="ghost small log-btn" type="button"></button>
               <div id="cardShow" class="card-show hidden"></div>
               <div id="dealShow" class="deal-show hidden"></div>
             </div>
@@ -167,6 +169,14 @@
     <div class="sheet trade-sheet">
       <div class="sheet-head"><h2 id="tradeTitle"></h2><button id="tradeClose" class="ghost small" data-i18n="ui.close"></button></div>
       <div id="tradeBody" class="sheet-body trade-body"></div>
+    </div>
+  </div>
+
+  <!-- the whole game log -->
+  <div id="logSheet" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet log-sheet">
+      <div class="sheet-head"><h2 data-i18n="mono.log.title"></h2><button id="logClose" class="ghost small" data-i18n="ui.close"></button></div>
+      <ol id="logList" class="sheet-body log-list"></ol>
     </div>
   </div>
 

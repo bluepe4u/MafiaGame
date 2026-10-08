@@ -23,7 +23,23 @@ const COMMON_ICONS = {
   bellOff: svgIcon('<path d="M8.7 3A6 6 0 0 1 18 8c0 2.9.5 5 1.2 6.5M17 17H3s3-2 3-9c0-.8.1-1.5.4-2.2"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0M3 3l18 18"/>'),
   up: svgIcon('<path d="M7 10v11H4V10zM7 10l4-7c1.7 0 2.6 1.2 2.2 2.8L12.5 9H19a2 2 0 0 1 2 2.3l-1.3 7.5A2.5 2.5 0 0 1 17.3 21H7"/>'),
   down: svgIcon('<path d="M17 14V3h3v11zM17 14l-4 7c-1.7 0-2.6-1.2-2.2-2.8L11.5 15H5a2 2 0 0 1-2-2.3l1.3-7.5A2.5 2.5 0 0 1 6.7 3H17"/>'),
+  trophy: svgIcon('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>'),
+  hat: svgIcon('<path d="M4 17h16l-1.8-7.2c-.3-1-1.3-1.4-2.2-1l-1.9 1a3 3 0 0 1-2.2 0l-1.9-1c-.9-.4-1.9 0-2.2 1z"/><path d="M2 17.5h20"/>'),
+  dice: svgIcon('<rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r="1.1" fill="currentColor"/><circle cx="15" cy="15" r="1.1" fill="currentColor"/><circle cx="12" cy="12" r="1.1" fill="currentColor"/>'),
+  table: svgIcon('<ellipse cx="12" cy="9" rx="9" ry="3.5"/><path d="M5 11.5V19M19 11.5V19M12 12.5V20"/>'),
+  gear: svgIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  book: svgIcon('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>'),
+  eye: svgIcon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+  eyeOff: svgIcon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>'),
+  list: svgIcon('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
 };
+const ico = (name, cls = '') => `<span class="ui-ico ${cls}">${COMMON_ICONS[name]}</span>`;
+// drawn icons instead of emoji in the site's chrome (trophy buttons, the game switcher)
+for (const el of document.querySelectorAll('.trophy')) el.outerHTML = ico('trophy');
+for (const a of document.querySelectorAll('#siteMenu a')) {
+  const i = a.querySelector('.site-ico');
+  if (i) i.outerHTML = ico(a.getAttribute('href').includes('monopoly') ? 'dice' : 'hat', 'site-ico');
+}
 
 // The page's settings and hooks (filled in by Site.init)
 const Site = {
@@ -31,6 +47,7 @@ const Site = {
   socket: null,
   baseTitle: document.title,
   home: false,
+  ready: false, // the account check on page load is done
   urlRoom: () => '',
   hooks: {
     onAccount() {}, onLang() {}, onItems() {}, celebrate() {},
@@ -39,7 +56,7 @@ const Site = {
   },
 };
 const gameUrl = (game, code) => `${game === 'mono' ? '/monopoly/' : '/'}?room=${code}&join=1`;
-const gameIcon = game => (game === 'mono' ? '🎲' : '🎩');
+const gameIcon = game => ico(game === 'mono' ? 'dice' : 'hat');
 
 function toast(msg, kind = '') {
   const el = $('#toast');
@@ -239,6 +256,142 @@ document.addEventListener('keydown', e => {
   $('#siteMenu').classList.add('hidden');
 });
 
+// ---------- dialogs: a styled confirm, and a "save this" notice ----------
+document.body.insertAdjacentHTML('beforeend', `<div id="askBox" class="overlay hidden" role="alertdialog" aria-modal="true">
+  <div class="sheet ask-sheet"><div class="sheet-body"><h2 id="askTitle"></h2><p id="askText" class="muted"></p><div id="askExtra"></div>
+  <div class="row ask-actions"><button id="askNo" class="ghost"></button><button id="askYes" class="primary"></button></div></div></div></div>`);
+let askResolve = null;
+function askConfirm({ title, text = '', ok, cancel, danger = false, extra = '', alert = false }) {
+  if (askResolve) askResolve(false);
+  $('#askTitle').textContent = title;
+  $('#askText').textContent = text;
+  $('#askExtra').innerHTML = extra;
+  $('#askYes').textContent = ok || t(alert ? 'ui.ok' : 'ui.confirm');
+  $('#askYes').className = danger ? 'danger' : 'primary';
+  $('#askNo').textContent = cancel || t('ui.cancel');
+  $('#askNo').classList.toggle('hidden', alert);
+  $('#askBox').classList.remove('hidden');
+  (alert ? $('#askYes') : $('#askNo')).focus(); // a stray Enter cancels rather than confirms
+  return new Promise(resolve => { askResolve = resolve; });
+}
+function closeAsk(answer) {
+  $('#askBox').classList.add('hidden');
+  const r = askResolve;
+  askResolve = null;
+  if (r) r(answer);
+}
+$('#askYes').onclick = () => closeAsk(true);
+$('#askNo').onclick = () => closeAsk(false);
+$('#askBox').addEventListener('pointerdown', e => { if (e.target.id === 'askBox') closeAsk(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && askResolve) closeAsk(false); });
+
+function showRecoveryCode(code, key) {
+  askConfirm({
+    title: t('recovery.title'), text: t(key), alert: true, ok: t('recovery.saved'),
+    extra: `<div class="recovery-code"><code>${esc(code)}</code><button class="small" type="button" id="copyRecovery">${esc(t('ui.copy'))}</button></div>`,
+  });
+  $('#copyRecovery').onclick = () => copyText(code);
+}
+
+// ---------- settings menu (gear): language, sound, Halloween ----------
+(() => {
+  const top = $('.topbar');
+  const langEl = $('#langSelect');
+  langEl.insertAdjacentHTML('beforebegin', `<div class="settings-wrap"><button id="settingsBtn" class="icon-btn" type="button" aria-haspopup="true"></button>
+    <div id="settingsMenu" class="settings-menu hidden" role="menu">
+      <label class="set-row"><span data-i18n="settings.language"></span></label>
+      <div class="set-row"><span data-i18n="settings.sound"></span></div>
+      <button class="set-row set-link" id="rulesBtn" type="button"><span data-i18n="rules.title"></span>${ico('book')}</button>
+    </div></div>`);
+  const menu = $('#settingsMenu');
+  menu.children[0].append(langEl);
+  menu.children[1].append($('#alertsBtn'));
+  const spooky = $('#spookyBtn');
+  if (spooky) {
+    menu.children[1].insertAdjacentHTML('afterend', '<div class="set-row"><span data-i18n="settings.halloween"></span></div>');
+    menu.children[2].append(spooky);
+  }
+  $('#settingsBtn').innerHTML = COMMON_ICONS.gear;
+  $('#settingsBtn').onclick = e => { e.stopPropagation(); menu.classList.toggle('hidden'); };
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('.settings-wrap')) menu.classList.add('hidden'); });
+  $('#rulesBtn').onclick = () => { menu.classList.add('hidden'); openRules(); };
+  void top;
+})();
+
+// ---------- show / hide password ----------
+function addPasswordToggles(root = document) {
+  for (const input of root.querySelectorAll('input[type="password"]:not([data-eye])')) {
+    input.dataset.eye = '1';
+    const wrap = document.createElement('span');
+    wrap.className = 'pass-wrap';
+    input.replaceWith(wrap);
+    wrap.append(input);
+    wrap.insertAdjacentHTML('beforeend', `<button type="button" class="pass-eye" aria-label="${esc(t('auth.showPassword'))}" title="${esc(t('auth.showPassword'))}">${COMMON_ICONS.eye}</button>`);
+    const b = wrap.querySelector('.pass-eye');
+    b.onclick = () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      b.innerHTML = show ? COMMON_ICONS.eyeOff : COMMON_ICONS.eye;
+      input.focus();
+    };
+  }
+}
+addPasswordToggles();
+
+// ---------- rules reference ----------
+document.body.insertAdjacentHTML('beforeend', `<div id="rules" class="overlay hidden" role="dialog" aria-modal="true">
+  <div class="sheet player-sheet"><div class="sheet-head"><h2 data-i18n="rules.title"></h2><button id="rulesClose" class="ghost small" data-i18n="ui.close"></button></div>
+  <div class="sheet-body"><div class="tabs" role="tablist"><button data-rules="mafia" data-i18n="site.mafia"></button><button data-rules="mono" data-i18n="site.monopoly"></button></div>
+  <div id="rulesBody" class="rules-body"></div></div></div></div>`);
+let rulesTab = null;
+function openRules(game) {
+  rulesTab = game || rulesTab || Site.game;
+  for (const b of $$('[data-rules]')) b.classList.toggle('active', b.dataset.rules === rulesTab);
+  // line by line: "## " is a heading, "- " lines make a list, anything else is a paragraph
+  let html = '';
+  let list = false;
+  for (const line of t('rules.' + rulesTab).split('\n').map(l => l.trim()).filter(Boolean)) {
+    const item = line.startsWith('- ');
+    if (list && !item) { html += '</ul>'; list = false; }
+    if (line.startsWith('## ')) html += `<h3>${esc(line.slice(3))}</h3>`;
+    else if (item) { if (!list) { html += '<ul>'; list = true; } html += `<li>${esc(line.slice(2))}</li>`; }
+    else html += `<p>${esc(line)}</p>`;
+  }
+  $('#rulesBody').innerHTML = html + (list ? '</ul>' : '');
+  $('#rules').classList.remove('hidden');
+}
+for (const b of $$('[data-rules]')) b.onclick = () => openRules(b.dataset.rules);
+$('#rulesClose').onclick = () => closeOverlay('rules');
+$('#rules').addEventListener('pointerdown', e => { if (e.target.id === 'rules') closeOverlay('rules'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeOverlay('rules'); });
+
+// ---------- a short explanation under each lobby setting that has one (key + ".hint") ----------
+for (const el of document.querySelectorAll('#lobby label [data-i18n]')) {
+  const key = el.dataset.i18n + '.hint';
+  if (DICT.en[key]) el.closest('label').insertAdjacentHTML('beforeend', `<small class="hint" data-i18n="${key}"></small>`);
+}
+// and a "rules" link next to the lobby's setup heading
+for (const h of document.querySelectorAll('#lobby .card-head')) {
+  if (h.querySelector('h2')?.closest('.card')?.querySelector('#startBtn')) h.insertAdjacentHTML('beforeend', `<button class="ghost small rules-link" type="button">${ico('book')}<span data-i18n="rules.open"></span></button>`);
+}
+for (const b of document.querySelectorAll('.rules-link')) b.onclick = () => openRules();
+
+// ---------- first visit: how this works ----------
+const ONBOARD_KEY = 'site.onboarded';
+function renderOnboarding() {
+  let box = $('#onboarding');
+  if (!box) {
+    $('#playCard').insertAdjacentHTML('afterbegin', `<div id="onboarding" class="onboarding hidden"><b data-i18n="onboard.title"></b>
+      <ol><li data-i18n="onboard.1"></li><li data-i18n="onboard.2"></li><li data-i18n="onboard.3"></li></ol>
+      <div class="row"><button class="small" id="onboardRules" type="button" data-i18n="rules.open"></button><button class="ghost small" id="onboardOk" type="button" data-i18n="onboard.ok"></button></div></div>`);
+    box = $('#onboarding');
+    applyStaticTranslations(box);
+    $('#onboardOk').onclick = () => { store.set(ONBOARD_KEY, '1'); box.classList.add('hidden'); };
+    $('#onboardRules').onclick = () => openRules();
+  }
+  box.classList.toggle('hidden', !!store.get(ONBOARD_KEY) || !account);
+}
+
 // ---------- accounts ----------
 let account = null; // the logged-in user's profile (see UserStore.publicProfile)
 let authMode = 'login';
@@ -253,24 +406,38 @@ function setAccount(user, token) {
 
 function renderAuthMode() {
   for (const b of $$('[data-auth-mode]')) b.classList.toggle('active', b.dataset.authMode === authMode);
-  $('#authSubmit').textContent = t(authMode === 'login' ? 'auth.login' : 'auth.register');
+  $('#authSubmit').textContent = t({ login: 'auth.login', register: 'auth.register', recover: 'auth.recoverSubmit' }[authMode]);
   $('#authPass').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+  $('#authPassLabel').textContent = t(authMode === 'recover' ? 'auth.newPassword' : 'auth.password');
   $('#inviteField').classList.toggle('hidden', authMode !== 'register');
+  $('#recoverField').classList.toggle('hidden', authMode !== 'recover');
+  $('#forgotBtn').textContent = t(authMode === 'recover' ? 'auth.backToLogin' : 'auth.forgot');
+  $('#forgotBtn').classList.toggle('hidden', authMode === 'register');
 }
+// the password label, the recovery-code field and "Forgot password?" join the login form
+$('#authPass').closest('label').querySelector('span').id = 'authPassLabel';
+$('#inviteField').insertAdjacentHTML('afterend', `<label id="recoverField" class="field hidden"><span data-i18n="auth.recoveryCode"></span>
+  <input id="authRecovery" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX"></label>`);
+$('#authSubmit').insertAdjacentHTML('afterend', '<button type="button" id="forgotBtn" class="link-btn"></button>');
+$('#forgotBtn').onclick = () => { authMode = authMode === 'recover' ? 'login' : 'recover'; renderAuthMode(); };
 for (const b of $$('[data-auth-mode]')) b.onclick = () => { authMode = b.dataset.authMode; renderAuthMode(); };
 $('#authCard').addEventListener('submit', async e => {
   e.preventDefault();
-  const res = await api(authMode, { username: $('#authUser').value, password: $('#authPass').value, invite: $('#authInvite').value });
+  const res = await api(authMode, { username: $('#authUser').value, password: $('#authPass').value, invite: $('#authInvite').value, code: $('#authRecovery').value });
   if (!res.ok) return;
   $('#authPass').value = '';
+  $('#authRecovery').value = '';
   setAccount(res.user, res.token);
   toast(t('toast.welcome', { name: res.user.username }), 'info');
+  if (res.recoveryCode) showRecoveryCode(res.recoveryCode, authMode === 'register' ? 'recovery.afterRegister' : 'recovery.afterReset');
+  if (authMode === 'recover') { authMode = 'login'; renderAuthMode(); }
   joinPendingTable();
 });
 
 function renderAccount() {
-  $('#authCard').classList.toggle('hidden', !!account);
-  $('#playCard').classList.toggle('hidden', !account);
+  $('#authCard').classList.toggle('hidden', !!account || !Site.ready);
+  $('#playCard').classList.toggle('hidden', !account || !Site.ready);
+  $('#bootLoader').classList.toggle('hidden', Site.ready);
   $('#profileBtn').classList.toggle('hidden', !account);
   $('#boardBtn').classList.toggle('hidden', !account);
   if (account) {
@@ -281,6 +448,7 @@ function renderAccount() {
     queueGifts(account.gifts);
   }
   Site.hooks.onAccount();
+  renderOnboarding();
   refreshHome();
 }
 
@@ -343,7 +511,7 @@ async function renderActive() {
   box.classList.toggle('hidden', !shown.length);
   box.innerHTML = shown.map(r => `
     <a class="active-game g-${r.game}" href="${r.game === 'mono' ? '/monopoly/' : '/'}?room=${r.code}" data-active="${r.game}:${r.code}">
-      <span class="ag-ico">${r.game === 'mono' ? '🎲' : '🎩'}</span>
+      <span class="ag-ico">${gameIcon(r.game)}</span>
       <span class="ag-text"><b>${esc(t('active.title', { game: t(r.game === 'mono' ? 'site.monopoly' : 'site.mafia') }))}</b>
         <span class="muted small-text">${esc(t('ui.room'))} <span class="code">${r.code}</span> · ${esc(t(r.phase === 'lobby' ? 'active.lobby' : 'active.playing'))} · ${r.players.map(p => esc(p.name)).join(', ')}</span></span>
       <span class="ag-go">${esc(t('active.back'))} →</span>
@@ -433,6 +601,13 @@ function bindProfileControls() {
       setAccount(null, null);
     };
     $('#adminBtn').onclick = () => { closeOverlay('profile'); openAdmin(); };
+    $('#recoveryBtn').onclick = async () => {
+      if (account.hasRecovery && !(await askConfirm({ title: t('recovery.renew'), text: t('recovery.renewWarn') }))) return;
+      const r = await api('recovery', {});
+      if (!r.ok) return;
+      showRecoveryCode(r.recoveryCode, 'recovery.afterRenew');
+      refreshAccount().then(renderProfile);
+    };
   }
 }
 
@@ -607,6 +782,11 @@ function accountHtml() {
         <button type="submit">${esc(t('profile.save'))}</button>
       </div>
     </form>
+    <section class="player-section">
+      <h3>${esc(t('recovery.title'))}</h3>
+      <p class="muted small-text">${esc(t(account.hasRecovery ? 'recovery.have' : 'recovery.none'))}</p>
+      <button id="recoveryBtn" class="small">${esc(t(account.hasRecovery ? 'recovery.renew' : 'recovery.create'))}</button>
+    </section>
     <div class="row account-actions">
       <button id="logoutBtn" class="danger">${esc(t('profile.logout'))}</button>
       ${account.admin ? `<button id="adminBtn" class="ghost">${esc(t('admin.open'))}</button>` : '<span id="adminBtn" hidden></span>'}
@@ -686,7 +866,7 @@ async function renderAdminLive() {
     </section>
     <section class="player-section"><h3>${esc(t('admin.rooms', { n: res.rooms.length }))}</h3>
       ${res.rooms.length ? res.rooms.map(r => `<div class="admin-room">
-        <span class="ag-ico">${r.game === 'mono' ? '🎲' : '🎩'}</span>
+        <span class="ag-ico">${gameIcon(r.game)}</span>
         <span class="admin-room-id"><b><span class="code">${r.code}</span> · ${esc(gameName(r.game))}</b>
           <span class="muted small-text">${esc(t('admin.phase.' + (r.phase === 'lobby' ? 'lobby' : r.phase === 'ended' ? 'ended' : 'playing')))} · ${esc(ago(r.lastActivity))}${r.spectators ? ` · 👁 ${r.spectators}` : ''}</span>
           <span class="small-text">${r.players.map(p => `<span class="${p.connected ? '' : 'muted'}">${esc(p.name)}</span>`).join(', ') || '—'}</span></span>
@@ -697,7 +877,7 @@ async function renderAdminLive() {
   for (const b of body.querySelectorAll('[data-end]')) {
     b.onclick = async () => {
       const [game, code] = b.dataset.end.split(':');
-      if (!confirm(t('admin.endConfirm', { code }))) return;
+      if (!(await askConfirm({ title: t('admin.endRoom'), text: t('admin.endConfirm', { code }), danger: true }))) return;
       const r = await api('admin/endRoom', { game, code });
       if (r.ok) { toast(t('admin.ended', { code }), 'info'); renderAdmin(); }
     };
@@ -751,7 +931,7 @@ async function renderAdminUsers() {
     });
     row.querySelector('[data-reset]').onclick = async () => {
       const name = row.querySelector('.admin-id b').textContent;
-      if (!confirm(t('admin.resetConfirm', { name }))) return;
+      if (!(await askConfirm({ title: t('admin.resetPassword'), text: t('admin.resetConfirm', { name }), danger: true }))) return;
       const r = await api('admin/resetPassword', { userId });
       if (!r.ok) return;
       const box = row.querySelector('[data-temp]');
@@ -779,7 +959,7 @@ async function renderAdminInvites() {
     <p class="muted small-text">${esc(t('invite.hint'))}</p>
     ${res.invites.length ? res.invites.map(i => `<div class="admin-room invite-row ${i.uses >= i.maxUses ? 'used' : ''}">
       <span class="admin-room-id"><b><span class="code">${esc(i.code)}</span> · ${esc(t('invite.usedOf', { n: i.uses, max: i.maxUses }))}</b>
-        <span class="muted small-text">${i.table ? `🪑 ${esc(i.table)} · ` : ''}${i.admin ? esc(t('invite.admin')) + ' · ' : ''}${esc(ago(i.createdAt))}${i.usedBy.length ? ` · ${esc(i.usedBy.join(', '))}` : ''}</span></span>
+        <span class="muted small-text">${i.table ? `${esc(i.table)} · ` : ''}${i.admin ? esc(t('invite.admin')) + ' · ' : ''}${esc(ago(i.createdAt))}${i.usedBy.length ? ` · ${esc(i.usedBy.join(', '))}` : ''}</span></span>
       ${i.uses < i.maxUses ? `<button class="small" data-copy-invite="${esc(i.code)}">${esc(t('invite.copyLink'))}</button>` : ''}
       <button class="ghost small" data-revoke="${esc(i.code)}">${esc(t('invite.revoke'))}</button>
     </div>`).join('') : `<p class="muted small-text">${esc(t('invite.none'))}</p>`}`;
@@ -818,14 +998,14 @@ function renderTables() {
   if (!account || !Site.home) return;
   const createForm = `<form class="row table-create hidden" id="tableCreate"><input id="tableName" maxlength="40" placeholder="${esc(t('table.namePlaceholder'))}"><button class="primary small" type="submit">${esc(t('table.create'))}</button></form>`;
   if (!myTables.length) {
-    box.innerHTML = `<button class="ghost table-new" id="tableNew">🪑 ${esc(t('table.createFirst'))}</button>${createForm}<p class="muted small-text table-help">${esc(t('table.help'))}</p>`;
+    box.innerHTML = `<button class="ghost table-new" id="tableNew">${ico('table')} ${esc(t('table.createFirst'))}</button>${createForm}<p class="muted small-text table-help">${esc(t('table.help'))}</p>`;
   } else {
     box.innerHTML = myTables.map(tb => {
       const online = tb.members.filter(m => m.online).length;
       const cur = tb.current && tb.current.phase !== 'ended' ? tb.current : null;
       const open = tableMenu === tb.id;
       return `<div class="table-card">
-        <div class="tc-head"><span class="tc-ico">🪑</span><span class="tc-title"><b>${esc(tb.name)}</b>
+        <div class="tc-head"><span class="tc-ico">${ico('table')}</span><span class="tc-title"><b>${esc(tb.name)}</b>
           <span class="muted small-text">${esc(t('table.online', { n: online, total: tb.members.length }))}</span></span>
           <button class="ghost small icon-only" data-tmenu="${tb.id}" aria-label="${esc(t('table.settings'))}" title="${esc(t('table.settings'))}">⋯</button></div>
         <div class="tc-members">${tb.members.map(m => `<span class="tc-member ${m.online ? 'on' : ''}" title="${esc(m.username)}">${avatar(m.username, m.avatar, m.equipped)}</span>`).join('')}</div>
@@ -834,7 +1014,7 @@ function renderTables() {
           <span class="muted small-text">${esc(t(cur.phase === 'lobby' ? 'active.lobby' : 'active.playing'))} · ${cur.players.map(p => esc(p.name)).join(', ') || esc(t('table.empty'))}</span></span>
           <span class="ag-go">${esc(t('table.join'))} →</span></a>` : ''}
         ${tb.canStart ? `<div class="tc-pick"><span class="muted small-text">${esc(t(cur ? 'table.newGame' : 'table.nextGame'))}</span>
-          <button data-start="${tb.id}:mafia">🎩 ${esc(t('site.mafia'))}</button><button data-start="${tb.id}:mono">🎲 ${esc(t('site.monopoly'))}</button></div>` : ''}
+          <button data-start="${tb.id}:mafia">${ico('hat')} ${esc(t('site.mafia'))}</button><button data-start="${tb.id}:mono">${ico('dice')} ${esc(t('site.monopoly'))}</button></div>` : ''}
         ${open ? `<div class="tc-settings">
           <div class="row"><button class="small" data-tcopy="${tb.id}">${esc(t('table.copyLink'))}</button>
             ${account.admin ? `<button class="small" data-tinvite="${tb.id}">${esc(t('table.inviteNew'))}</button>` : ''}</div>
@@ -886,7 +1066,7 @@ function renderTables() {
     b.onclick = () => { const [id, userId] = b.dataset.tkick.split(':'); api('tables/kick', { id, userId }).then(after); };
   }
   for (const b of box.querySelectorAll('[data-tleave]')) {
-    b.onclick = () => confirm(t('table.leaveConfirm')) && api('tables/leave', { id: b.dataset.tleave }).then(r => { tableMenu = null; after(r); });
+    b.onclick = async () => (await askConfirm({ title: t('table.leave'), text: t('table.leaveConfirm'), danger: true })) && api('tables/leave', { id: b.dataset.tleave }).then(r => { tableMenu = null; after(r); });
   }
 }
 
@@ -971,6 +1151,7 @@ Site.init = function init({ game, socket, urlRoom, hooks }) {
       else if (res) store.set(AUTH_KEY, null); // expired or logged out elsewhere
     }
     if (!account && qs.get('table')) toast(t('table.loginFirst'), 'info');
+    Site.ready = true;
     renderAccount();
     if (!account) { $('#authUser').focus(); return; }
     // a table link (?table=…), possibly kept from before logging in

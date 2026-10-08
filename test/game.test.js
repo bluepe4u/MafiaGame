@@ -674,3 +674,21 @@ test('game results count decisive votes and Mafia voted out by Town', () => {
   const r = results.filter(x => x.team === 'town');
   assert.deepStrictEqual(r.map(x => [x.decisive, x.mafiaVotedOut]).sort(), [[0, 0], [0, 0], [1, 1], [1, 1], [1, 1]]);
 });
+
+test('lobby: a disconnected host keeps the role for 30 s; coming back cancels the hand-over', () => {
+  const timers = [];
+  const room = new Room({ code: 'H', setTimer: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length - 1; }, clearTimer: i => { if (timers[i]) timers[i].live = false; } });
+  const ann = room.join('Ann');
+  const bob = room.join('Bob');
+  room.setConnected(ann.id, true);
+  room.setConnected(bob.id, true);
+  room.setConnected(ann.id, false);
+  assert.strictEqual(room.hostId, ann.id);
+  const t = timers.at(-1);
+  assert.strictEqual(t.ms, 30000);
+  room.setConnected(ann.id, true); // a refresh
+  assert.strictEqual(t.live, false);
+  room.setConnected(ann.id, false);
+  timers.at(-1).fn();
+  assert.strictEqual(room.hostId, bob.id);
+});

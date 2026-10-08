@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const { SCALE, SQUARES, JAIL, GO_TO_JAIL, RAILWAY_RENT, GROUPS, CHANCE, CHEST, isProperty } = require('./board');
 const { GameError } = require('../game');
 
+const HOST_GRACE_MS = 30 * 1000; // how long a disconnected host keeps the lobby
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 8;
 const MAX_SPECTATORS = 20;
@@ -88,6 +89,8 @@ class MonoRoom {
   dispose() {
     if (this.timer) this.clearTimer(this.timer);
     this.timer = null;
+    if (this.hostTimer) this.clearTimer(this.hostTimer.handle);
+    this.hostTimer = null;
   }
 
   touch() {
@@ -148,9 +151,16 @@ class MonoRoom {
     const p = this.member(pid);
     if (!p) return;
     p.connected = connected;
+    // a host who drops out of the lobby keeps the role for a while (a refresh, a flaky phone)
+    if (this.hostTimer && this.hostTimer.pid === pid) { this.clearTimer(this.hostTimer.handle); this.hostTimer = null; }
     if (!connected && this.phase === 'lobby' && this.hostId === pid) {
-      const next = [...this.players, ...this.spectators].find(x => x.connected);
-      if (next) this.hostId = next.id;
+      this.hostTimer = { pid, handle: this.setTimer(() => {
+        this.hostTimer = null;
+        const host = this.member(pid);
+        if (this.hostId !== pid || (host && host.connected) || this.phase !== 'lobby') return;
+        const next = [...this.players, ...this.spectators].find(x => x.connected);
+        if (next) { this.hostId = next.id; this.touch(); }
+      }, HOST_GRACE_MS) };
     }
     this.touch();
   }
@@ -1135,7 +1145,7 @@ class MonoRoom {
         trades: g.trades,
         lastCard: g.lastCard,
         lastDice: g.lastDice,
-        log: g.log.slice(-80),
+        log: g.log.slice(-200),
         winner: g.winner,
         round: g.round,
         ...(this.phase === 'ended' ? { worth: g.worth, highlights: g.highlights } : {}),

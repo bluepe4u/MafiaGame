@@ -178,7 +178,7 @@ $('#homeProfile').onclick = () => openProfile();
 // ---------- top bar ----------
 $('#leaveBtn').onclick = async () => {
   const inGame = state && state.phase !== 'lobby' && state.phase !== 'ended';
-  if (inGame && !confirm(t('confirm.leave'))) return;
+  if (inGame && !(await askConfirm({ title: t('ui.leaveRoom'), text: t('confirm.leave'), danger: true }))) return;
   await send('leave');
   leftRoom();
 };
@@ -1181,7 +1181,7 @@ function renderBoard() {
   for (const row of $$('#boardList [data-player]')) row.onclick = () => openPlayer(row.dataset.player);
 }
 for (const b of $$('[data-board]')) b.onclick = () => { boardTab = b.dataset.board; renderBoard(); };
-$('#boardBtn').innerHTML = '<span class="trophy">🏆</span>';
+$('#boardBtn').innerHTML = COMMON_ICONS.trophy;
 $('#boardBtn').onclick = openBoard;
 $('#homeBoard').onclick = openBoard;
 $('#boardClose').onclick = () => $('#board').classList.add('hidden');

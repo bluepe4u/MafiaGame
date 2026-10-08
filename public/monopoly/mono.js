@@ -85,7 +85,7 @@ $('#joinBtn').onclick = () => send('join', { code: $('#joinCode').value });
 $('#watchBtn').onclick = () => send('join', { code: $('#joinCode').value, spectate: true });
 $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joinBtn').click(); });
 $('#leaveBtn').onclick = async () => {
-  if (state && state.phase === 'playing' && !state.me.spectator && !confirm(t('mono.confirmResign'))) return;
+  if (state && state.phase === 'playing' && !state.me.spectator && !(await askConfirm({ title: t('ui.leaveRoom'), text: t('mono.confirmResign'), danger: true }))) return;
   await send('leave');
   leftRoom();
 };
@@ -704,7 +704,7 @@ function renderCenter() {
   bind('#declineBtn', () => send('decline'));
   bind('#endBtn', () => send('endTurn'));
   bind('#payDebtBtn', () => send('payDebt'));
-  bind('#bankruptBtn', () => confirm(t('mono.goBankrupt') + '?') && send('bankrupt'));
+  bind('#bankruptBtn', async () => (await askConfirm({ title: t('mono.goBankrupt'), text: t('mono.confirmBankrupt'), danger: true })) && send('bankrupt'));
   bind('#bidBtn', () => send('bid', { amount: parseInt($('#bidInput').value, 10) }));
   for (const b of $$('[data-bid]')) b.onclick = () => send('bid', { amount: Number(b.dataset.bid) });
 
@@ -722,6 +722,8 @@ function renderCenter() {
     cs.className = `card-show deck-${card.deck}`;
     cs.innerHTML = `<div class="card-deck">${esc(t('mono.deck.' + card.deck))}</div><div class="card-text">${esc(t('mono.card.' + card.id))}</div>`;
   } else cs.classList.add('hidden');
+  $('#logBtn').innerHTML = `${COMMON_ICONS.list}<span>${esc(t('mono.log.all', { n: g.log.length }))}</span>`;
+  if (!$('#logSheet').classList.contains('hidden')) renderLog();
   tickTimer();
 }
 
@@ -1011,7 +1013,7 @@ function highlightsHtml(g, rows) {
 }
 $('#resultsClose').onclick = () => $('#results').classList.add('hidden');
 $('#restartBtn').onclick = () => send('restart');
-$('#resignBtn').onclick = () => confirm(t('mono.confirmResign')) && send('resign');
+$('#resignBtn').onclick = async () => (await askConfirm({ title: t('mono.resign'), text: t('mono.confirmResign'), danger: true })) && send('resign');
 
 // ---------- reactions ----------
 const REACTIONS = ['👍', '👎', '😂', '🤔', '😱', '🤥', '🔥', '💀', '💸', '🏠', '🎲'];
@@ -1079,10 +1081,23 @@ $('#boardBtn').onclick = openBoard;
 $('#homeBoard').onclick = openBoard;
 $('#boardClose').onclick = () => $('#boardSheet').classList.add('hidden');
 
-for (const id of ['boardSheet', 'results']) $('#' + id).addEventListener('pointerdown', e => { if (e.target.id === id) $('#' + id).classList.add('hidden'); });
+// ---------- the whole game log ----------
+$('#logBtn').onclick = () => { renderLog(); $('#logSheet').classList.remove('hidden'); };
+$('#logClose').onclick = () => $('#logSheet').classList.add('hidden');
+function renderLog() {
+  if (!state || !state.game) return;
+  const byName = name => [...state.players, ...state.spectators].find(p => p.name === name);
+  const time = ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  $('#logList').innerHTML = state.game.log.slice().reverse().map(e => {
+    const who = e.params && byName(e.params.name);
+    return `<li><span class="log-time">${time(e.at)}</span>${who ? dot(who.id) : '<span class="pdot blank"></span>'}<span>${esc(fmtLog(e))}</span></li>`;
+  }).join('');
+}
+
+for (const id of ['boardSheet', 'results', 'logSheet']) $('#' + id).addEventListener('pointerdown', e => { if (e.target.id === id) $('#' + id).classList.add('hidden'); });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  for (const id of ['boardSheet', 'results', 'sqInfo', 'tradeModal', 'playerMenu']) $('#' + id).classList.add('hidden');
+  for (const id of ['boardSheet', 'results', 'sqInfo', 'tradeModal', 'playerMenu', 'logSheet']) $('#' + id).classList.add('hidden');
 });
 
 applyStaticTranslations();

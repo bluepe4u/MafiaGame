@@ -1,5 +1,6 @@
 'use strict';
 
+const HOST_GRACE_MS = 30 * 1000; // how long a disconnected host keeps the lobby
 const crypto = require('crypto');
 
 const ROLES = {
@@ -160,6 +161,8 @@ class Room {
   dispose() {
     if (this.timer) this.clearTimer(this.timer);
     this.timer = null;
+    if (this.hostTimer) this.clearTimer(this.hostTimer.handle);
+    this.hostTimer = null;
   }
 
   toJSON() {
@@ -348,9 +351,16 @@ class Room {
     const p = this.member(pid);
     if (!p) return;
     p.connected = connected;
+    // a host who drops out of the lobby keeps the role for a while (a refresh, a flaky phone)
+    if (this.hostTimer && this.hostTimer.pid === pid) { this.clearTimer(this.hostTimer.handle); this.hostTimer = null; }
     if (!connected && this.phase === PHASES.LOBBY && this.hostId === pid) {
-      const next = [...this.players, ...this.spectators].find(x => x.connected);
-      if (next) this.hostId = next.id;
+      this.hostTimer = { pid, handle: this.setTimer(() => {
+        this.hostTimer = null;
+        const host = this.member(pid);
+        if (this.hostId !== pid || (host && host.connected) || this.phase !== PHASES.LOBBY) return;
+        const next = [...this.players, ...this.spectators].find(x => x.connected);
+        if (next) { this.hostId = next.id; this.touch(); }
+      }, HOST_GRACE_MS) };
     }
     this.touch();
   }
