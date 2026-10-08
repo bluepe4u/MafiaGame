@@ -11,6 +11,8 @@ const NOTES_PREFIX = 'mafia.notes.';
 const HOLD_MS = 1500;
 
 let state = null;
+// "← Home" from the lobby shows the home screen but keeps the seat (back via the banner)
+let homeView = false;
 let clockOffset = 0; // serverNow - clientNow
 let roleShown = false; // true only while the role card is pressed
 // room code in the address bar (?room=ABCD): from an invite link, or the room we're in
@@ -139,7 +141,7 @@ socket.on('connect', () => {
   }
 });
 socket.on('disconnect', () => { if (everConnected) $('#offline').classList.remove('hidden'); });
-socket.on('session', s => saveSession(s));
+socket.on('session', s => { saveSession(s); homeView = false; });
 socket.on('state', s => {
   clockOffset = s.serverNow - Date.now();
   state = s;
@@ -166,6 +168,8 @@ $('#createBtn').onclick = () => send('create');
 $('#joinBtn').onclick = () => send('join', { code: $('#joinCode').value });
 $('#watchBtn').onclick = () => send('join', { code: $('#joinCode').value, spectate: true });
 $('#joinCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#joinBtn').click(); });
+
+$('#homeBtn').onclick = () => { homeView = true; render(); };
 
 // ---------- accounts (shared, see common.js) ----------
 $('#profileBtn').onclick = () => openProfile();
@@ -931,7 +935,7 @@ function render() {
   fxOnState();
   renderTopbar();
   updateAlerts();
-  const inRoom = !!(state && state.me);
+  const inRoom = !!(state && state.me) && !homeView;
   document.body.dataset.phase = inRoom ? state.phase : 'home';
   document.body.dataset.winner = (state && state.winner) || '';
   if (inRoom && urlRoom !== state.code) {

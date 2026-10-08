@@ -1007,7 +1007,8 @@ button.brand:hover:not(:disabled) { background: var(--surface-2); border: 0; }
 .tc-member.on::after { content: ''; position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%; background: #22c55e; border: 2px solid var(--surface-2); }
 .tc-now { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; text-decoration: none; color: var(--text); font-size: 1.2rem;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); }
-.tc-now > span:nth-child(2) { display: flex; flex-direction: column; flex: 1; min-width: 0; font-size: .9rem; }
+.tc-now .tc-text { display: flex; flex-direction: column; flex: 1; min-width: 0; font-size: .9rem; }
+.tc-now .ag-go { white-space: nowrap; }
 .tc-now .small-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tc-now .ag-go { font-size: .9rem; }
 .tc-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1024,3 +1025,5 @@ button.brand:hover:not(:disabled) { background: var(--surface-2); border: 0; }
 .invite-form .field { flex: 1; min-width: 140px; }
 .invite-row.used { opacity: .55; }
 .tc-now.g-mono { --accent: #22c55e; } .tc-now.g-mafia { --accent: #e5484d; }
+.back-home { align-self: flex-start; margin-bottom: 12px; }
+#lobby { display: flex; flex-direction: column; } #lobby.hidden { display: none; }

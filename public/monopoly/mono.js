@@ -11,6 +11,8 @@ const tagMoney = n => (typeof n !== 'number' ? n : n < 1000 ? String(n) : `${+(n
 const socket = io('/monopoly', { auth: cb => cb({ token: store.get(AUTH_KEY) }) });
 
 let state = null;
+// "← Home" from the lobby shows the home screen but keeps the seat (back via the banner)
+let homeView = false;
 let BOARD = null; // { squares, groups, railwayRent }
 let clockOffset = 0;
 let urlRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase().slice(0, 4);
@@ -27,6 +29,7 @@ Site.init({
     leave: async () => { if (state && state.me) await send('leave'); store.set(SESSION_KEY, null); },
   },
 });
+$('#homeBtn').onclick = () => { homeView = true; render(); };
 $('#profileBtn').onclick = () => openProfile();
 $('#homeProfile').onclick = () => openProfile();
 
@@ -58,7 +61,7 @@ socket.on('connect', () => {
   }
 });
 socket.on('disconnect', () => { if (everConnected) $('#offline').classList.remove('hidden'); });
-socket.on('session', s => store.set(SESSION_KEY, JSON.stringify(s)));
+socket.on('session', s => { store.set(SESSION_KEY, JSON.stringify(s)); homeView = false; });
 socket.on('state', s => {
   clockOffset = s.serverNow - Date.now();
   const prev = state;
@@ -119,7 +122,7 @@ function show(screen) {
 }
 
 function render() {
-  const inRoom = !!(state && state.me);
+  const inRoom = !!(state && state.me) && !homeView;
   document.body.dataset.phase = inRoom ? state.phase : 'home';
   $('#topRoom').classList.toggle('hidden', !inRoom);
   $('#leaveBtn').classList.toggle('hidden', !inRoom);

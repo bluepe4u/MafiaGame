@@ -281,8 +281,13 @@ function renderAccount() {
     queueGifts(account.gifts);
   }
   Site.hooks.onAccount();
-  renderActive();
-  loadTables();
+  refreshHome();
+}
+
+// the home screen's group parts: tables first (the "you're in a game" list skips their rooms)
+async function refreshHome() {
+  await loadTables();
+  await renderActive();
 }
 
 async function refreshAccount() {
@@ -310,21 +315,33 @@ function shrinkImage(file) {
 
 // ---------- "back to my game": rooms this account is still in, in either game ----------
 let activeRooms = [];
+let autoJoinDone = false;
 async function renderActive() {
   let box = $('#activeGames');
   if (!box) {
-    $('#playCard').insertAdjacentHTML('afterbegin', '<div id="activeGames" class="active-games hidden"></div>');
+    const html = '<div id="activeGames" class="active-games hidden"></div>';
+    if ($('#tables')) $('#tables').insertAdjacentHTML('afterend', html); // tables stay on top
+    else $('#playCard').insertAdjacentHTML('afterbegin', html);
     box = $('#activeGames');
   }
+  if (account && !Site.home) autoJoinDone = true; // the page opened inside a room: nothing to auto-join later
   if (!account || !Site.home) { box.classList.add('hidden'); return; }
   const res = await fetch('/api/active', { headers: { Authorization: `Bearer ${store.get(AUTH_KEY)}` } }).then(r => r.json()).catch(() => null);
   activeRooms = (res && res.ok && res.rooms) || [];
   if (!Site.home) return;
-  // an invite link to a room we're already in: go straight back in
-  const here = activeRooms.find(r => r.game === Site.game && r.code === Site.urlRoom());
-  if (here) { send('join', { code: here.code }); return; }
-  box.classList.toggle('hidden', !activeRooms.length);
-  box.innerHTML = activeRooms.map(r => `
+  // Right after opening the page: a link to a room we're in, or to a table's game, goes straight in.
+  // (Only once: "← Home" from the lobby keeps the room in the address bar.)
+  if (!autoJoinDone && Site.urlRoom()) {
+    autoJoinDone = true;
+    const url = Site.urlRoom();
+    const atTable = myTables.some(tb => tb.current && tb.current.game === Site.game && tb.current.code === url && tb.current.phase !== 'ended');
+    if (atTable || activeRooms.some(r => r.game === Site.game && r.code === url)) { send('join', { code: url }); return; }
+  }
+  autoJoinDone = true;
+  // rooms a table is playing in are already shown on the table card
+  const shown = activeRooms.filter(r => !myTables.some(tb => tb.current && tb.current.code === r.code));
+  box.classList.toggle('hidden', !shown.length);
+  box.innerHTML = shown.map(r => `
     <a class="active-game g-${r.game}" href="${r.game === 'mono' ? '/monopoly/' : '/'}?room=${r.code}" data-active="${r.game}:${r.code}">
       <span class="ag-ico">${r.game === 'mono' ? '🎲' : '🎩'}</span>
       <span class="ag-text"><b>${esc(t('active.title', { game: t(r.game === 'mono' ? 'site.monopoly' : 'site.mafia') }))}</b>
@@ -812,8 +829,8 @@ function renderTables() {
           <span class="muted small-text">${esc(t('table.online', { n: online, total: tb.members.length }))}</span></span>
           <button class="ghost small icon-only" data-tmenu="${tb.id}" aria-label="${esc(t('table.settings'))}" title="${esc(t('table.settings'))}">⋯</button></div>
         <div class="tc-members">${tb.members.map(m => `<span class="tc-member ${m.online ? 'on' : ''}" title="${esc(m.username)}">${avatar(m.username, m.avatar, m.equipped)}</span>`).join('')}</div>
-        ${cur ? `<a class="tc-now g-${cur.game}" href="${gameUrl(cur.game, cur.code)}" data-go="${cur.game}:${cur.code}">${gameIcon(cur.game)}
-          <span><b>${esc(t('table.now', { game: t(cur.game === 'mono' ? 'site.monopoly' : 'site.mafia') }))}</b>
+        ${cur ? `<a class="tc-now g-${cur.game}" href="${gameUrl(cur.game, cur.code)}" data-go="${cur.game}:${cur.code}"><span class="ag-ico">${gameIcon(cur.game)}</span>
+          <span class="tc-text"><b>${esc(t('table.now', { game: t(cur.game === 'mono' ? 'site.monopoly' : 'site.mafia') }))}</b>
           <span class="muted small-text">${esc(t(cur.phase === 'lobby' ? 'active.lobby' : 'active.playing'))} · ${cur.players.map(p => esc(p.name)).join(', ') || esc(t('table.empty'))}</span></span>
           <span class="ag-go">${esc(t('table.join'))} →</span></a>` : ''}
         ${tb.canStart ? `<div class="tc-pick"><span class="muted small-text">${esc(t(cur ? 'table.newGame' : 'table.nextGame'))}</span>
@@ -986,6 +1003,5 @@ try { if (qs.get('table')) sessionStorage.setItem(PENDING_TABLE_KEY, qs.get('tab
 Site.setHome = function setHome(home) {
   if (home === Site.home) return;
   Site.home = home;
-  renderActive();
-  loadTables();
+  refreshHome();
 };
