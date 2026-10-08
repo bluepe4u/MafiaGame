@@ -166,6 +166,10 @@ document.addEventListener('keydown', e => {
   for (const id of ['recap', 'board', 'playerPage']) $('#' + id).classList.add('hidden');
 });
 
+// ---------- site switcher (top-left menu) ----------
+$('#brandBtn').onclick = e => { e.stopPropagation(); $('#siteMenu').classList.toggle('hidden'); };
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.brand-switch')) $('#siteMenu').classList.add('hidden'); });
+
 // ---------- socket ----------
 let everConnected = false;
 socket.on('connect', () => {

@@ -37,6 +37,11 @@ function imageType(buf) {
 }
 
 const RECENT_KEEP = 20;
+const emptyMonoStats = () => ({
+  games: 0, wins: 0, bankruptcies: 0, placeSum: 0, netWorthSum: 0, bestNetWorth: 0, peakNetWorth: 0,
+  rentCollected: 0, rentPaid: 0, bought: 0, housesBuilt: 0, hotelsBuilt: 0, auctionsWon: 0, trades: 0,
+  jailed: 0, doubles: 0, passedGo: 0, cardsDrawn: 0, rounds: 0, groups: {}, streak: 0, bestStreak: 0, recent: [],
+});
 const emptyStats = () => ({
   games: 0, wins: 0, survived: 0, mafiaGames: 0, mafiaWins: 0, townGames: 0, townWins: 0, roles: {}, roleWins: {},
   // detailed numbers, recorded since the player page was added (detailedGames counts those games)
@@ -252,6 +257,28 @@ class UserStore {
     this.save();
   }
 
+  // One finished Monopoly game: results from MonoRoom.onGameEnd.
+  recordMonoGame(results) {
+    for (const r of results) {
+      const u = this.users[r.userId];
+      if (!u) continue;
+      const s = (u.monoStats = { ...emptyMonoStats(), ...u.monoStats });
+      s.games += 1;
+      s.wins += r.won ? 1 : 0;
+      s.bankruptcies += r.bankrupt ? 1 : 0;
+      s.placeSum += r.place;
+      s.netWorthSum += r.netWorth;
+      s.bestNetWorth = Math.max(s.bestNetWorth, r.netWorth);
+      s.peakNetWorth = Math.max(s.peakNetWorth, r.peakNetWorth || 0);
+      for (const k of ['rentCollected', 'rentPaid', 'bought', 'housesBuilt', 'hotelsBuilt', 'auctionsWon', 'trades', 'jailed', 'doubles', 'passedGo', 'cardsDrawn', 'rounds']) s[k] += r[k] || 0;
+      if (r.topGroup) s.groups[r.topGroup] = (s.groups[r.topGroup] || 0) + 1;
+      s.streak = r.won ? s.streak + 1 : 0;
+      s.bestStreak = Math.max(s.bestStreak, s.streak);
+      s.recent = [{ at: r.at || Date.now(), won: r.won, place: r.place, players: r.players, netWorth: r.netWorth }, ...s.recent].slice(0, RECENT_KEEP);
+    }
+    this.save();
+  }
+
   // What other players (and the user) get to see.
   publicProfile(user) {
     if (!user) return null;
@@ -266,6 +293,7 @@ class UserStore {
       dislikes: user.dislikes,
       score: likes - user.dislikes + (user.bonus || 0),
       stats: { ...emptyStats(), ...user.stats },
+      monoStats: { ...emptyMonoStats(), ...user.monoStats },
       admin: !!user.admin,
       inventory,
       equipped: Object.fromEntries(Object.entries(user.equipped || {}).filter(([, i]) => inventory.includes(i))),

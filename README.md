@@ -35,6 +35,22 @@ Rooms are saved to disk (`/var/lib/mafia`, or `DATA_DIR`) about once a second an
 
 **Docker alternative:** `docker compose up -d --build` serves on port 3000 (put your own HTTPS proxy in front).
 
+## Monopoly
+
+The site also hosts Monopoly at `/monopoly/` (switch games from the menu on the logo). It shares
+accounts, photos and decency status with Mafia, and keeps its own stats and leaderboard.
+
+- Official rules for 2–8 players: the 40 squares in order with official prices and rents (street
+  names from the Russian edition, amounts in ₽), 16 Chance and 16 Community Chest cards, salary on GO,
+  doubles and three-doubles-to-jail, jail (bail, card, or doubles within three turns), buying or
+  auctioning, colour sets with double rent, even building with the bank's 32 houses and 12 hotels,
+  mortgages (+10% to lift), trades (10% interest on mortgaged property), debts and bankruptcy.
+- Lobby settings: starting cash, turn timer (idle turns play themselves), double salary on GO,
+  auctions, Free Parking jackpot, no rent in jail.
+- `src/monopoly/` holds the board, the rules engine (no I/O, tested in `test/monopoly.test.js`,
+  including a random-play test) and its Socket.IO namespace; rooms are saved to
+  `monopoly-rooms.json` in the data directory.
+
 ## Rules as implemented
 
 **Roles:** Citizen, Mafia, Cop, Doctor, Hooker (Cop/Doctor/Hooker are on the town side).

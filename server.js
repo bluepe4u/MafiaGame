@@ -9,6 +9,7 @@ const { Server } = require('socket.io');
 const { Room, GameError } = require('./src/game');
 const { UserStore } = require('./src/users');
 const { ITEMS } = require('./src/items');
+const { attachMonopoly } = require('./src/monopoly/server');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -133,7 +134,8 @@ app.post('/api/avatar', api(req => {
 app.get('/qr.svg', async (req, res) => {
   const code = String(req.query.room || '').toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) return res.status(400).end();
-  const svg = await QRCode.toString(`${req.protocol}://${req.get('host')}/?room=${code}`, { type: 'svg', margin: 1 });
+  const page = req.query.game === 'mono' ? '/monopoly/' : '/';
+  const svg = await QRCode.toString(`${req.protocol}://${req.get('host')}${page}?room=${code}`, { type: 'svg', margin: 1 });
   res.type('image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(svg);
 });
 
@@ -141,19 +143,22 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const rooms = new Map(); // code -> Room
+// Monopoly: its own namespace and rooms, same accounts; room codes are unique across both games
+const mono = attachMonopoly({ io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) });
 
 function newCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   let code;
   do {
     code = Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
-  } while (rooms.has(code));
+  } while (rooms.has(code) || mono.has(code));
   return code;
 }
 
 // rooms show each player's avatar and decency status: re-send them when a profile changes
 function refreshUser(userId) {
   for (const room of rooms.values()) if (room.byUser(userId)) broadcast(room);
+  mono.refreshUser(userId);
 }
 
 const roomOptions = () => ({
@@ -359,6 +364,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, () => {
     console.log(`${sig} received, shutting down`);
     saveNow();
+    mono.shutdown();
     users.saveNow();
     shuttingDown = true;
     io.close();

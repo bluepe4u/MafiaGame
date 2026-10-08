@@ -899,6 +899,21 @@ button.icon-only { padding: 2px 8px; font-size: .9rem; }
   .role-bar .muted { grid-column: 1 / -1; }
 }
 
+/* ---------- site switcher: the logo opens a menu of games ---------- */
+.brand-switch { position: relative; }
+button.brand { background: none; border: 0; padding: 4px 8px 4px 4px; border-radius: 12px; color: var(--text); display: flex; align-items: center; gap: 9px; }
+button.brand:hover:not(:disabled) { background: var(--surface-2); border: 0; }
+.brand .caret { width: 14px; height: 14px; stroke: var(--muted); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.site-menu {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 40; min-width: 210px; padding: 6px; border-radius: 14px;
+  background: rgba(20, 20, 28, .97); border: 1px solid var(--border-strong); box-shadow: 0 24px 60px -16px rgba(0, 0, 0, .9);
+  display: flex; flex-direction: column; gap: 2px; animation: pop .18s ease;
+}
+.site-menu a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; color: var(--text); text-decoration: none; font-weight: 550; }
+.site-menu a:hover { background: var(--surface-3); }
+.site-menu a.current { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); }
+.site-ico { font-size: 1.2rem; }
+
 /* narrow screens: stacked */
 @media (max-width: 1000px) {
   main { padding: 16px; }

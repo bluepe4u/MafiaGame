@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#06120c">
+  <title>Монополия</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2322c55e'/%3E%3Crect x='7' y='7' width='18' height='18' rx='4' fill='%23fff'/%3E%3Ccircle cx='12' cy='12' r='2' fill='%2322c55e'/%3E%3Ccircle cx='20' cy='20' r='2' fill='%2322c55e'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%2322c55e'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..800&family=Geist+Mono:wght@500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/monopoly/mono.css">
+</head>
+<body class="mono" data-phase="home">
+  <div class="backdrop" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="grain"></div></div>
+
+  <header class="topbar">
+    <div class="brand-switch">
+      <button id="brandBtn" class="brand" type="button" aria-haspopup="true">
+        <svg class="brand-mark mono-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><rect x="7" y="7" width="18" height="18" rx="4" class="die"/><circle cx="12" cy="12" r="2"/><circle cx="20" cy="20" r="2"/><circle cx="16" cy="16" r="2"/></svg>
+        <span data-i18n="site.monopoly"></span>
+        <svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <nav id="siteMenu" class="site-menu hidden">
+        <a href="/"><span class="site-ico">🎩</span><span data-i18n="site.mafia"></span></a>
+        <a href="/monopoly/" class="current"><span class="site-ico">🎲</span><span data-i18n="site.monopoly"></span></a>
+      </nav>
+    </div>
+    <button id="topRoom" class="room-pill hidden" type="button"><span data-i18n="ui.room"></span> <span id="topCode" class="code"></span></button>
+    <div id="topRound" class="phase-chip"></div>
+    <div class="spacer"></div>
+    <button id="boardBtn" class="icon-btn hidden" type="button"><span class="trophy">🏆</span></button>
+    <button id="soundBtn" class="icon-btn" type="button" aria-pressed="true"></button>
+    <select id="langSelect" class="lang-select" aria-label="Language"></select>
+    <button id="leaveBtn" class="ghost small hidden" data-i18n="ui.leaveRoom"></button>
+    <button id="profileBtn" class="profile-btn hidden" type="button"></button>
+  </header>
+
+  <div id="offline" class="offline-banner hidden" role="status"><span class="spinner"></span><span data-i18n="ui.reconnecting"></span></div>
+
+  <main id="app">
+    <!-- home -->
+    <section id="home" class="screen hidden">
+      <div class="hero">
+        <p class="eyebrow" data-i18n="mono.eyebrow"></p>
+        <h1><span data-i18n="mono.heroA"></span> <em data-i18n="mono.heroB"></em></h1>
+        <p class="muted hero-sub" data-i18n="mono.tagline"></p>
+      </div>
+      <form id="authCard" class="card home-card hidden" autocomplete="on">
+        <div class="tabs auth-tabs" role="tablist">
+          <button type="button" data-auth-mode="login" data-i18n="auth.login"></button>
+          <button type="button" data-auth-mode="register" data-i18n="auth.register"></button>
+        </div>
+        <label class="field"><span data-i18n="auth.username"></span> <input id="authUser" name="username" maxlength="20" autocomplete="username" spellcheck="false"></label>
+        <label class="field"><span data-i18n="auth.password"></span> <input id="authPass" name="password" type="password" autocomplete="current-password"></label>
+        <button id="authSubmit" type="submit" class="primary big-btn"></button>
+        <p class="muted small-text auth-hint" data-i18n="auth.hint"></p>
+      </form>
+      <div id="playCard" class="card home-card hidden">
+        <button id="homeProfile" class="me-row" type="button"></button>
+        <button id="createBtn" class="primary big-btn" data-i18n="mono.createRoom"></button>
+        <button id="homeBoard" class="ghost home-board"><span class="trophy">🏆</span> <span data-i18n="mono.board.title"></span></button>
+        <div class="divider"><span data-i18n="ui.orJoin"></span></div>
+        <div class="row join-row">
+          <input id="joinCode" class="code-input" data-i18n-placeholder="ui.roomCode" maxlength="4" autocapitalize="characters" spellcheck="false">
+          <button id="joinBtn" data-i18n="ui.join"></button>
+          <button id="watchBtn" class="ghost" data-i18n="ui.watch"></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- lobby -->
+    <section id="lobby" class="screen hidden">
+      <div class="lobby-grid">
+        <div class="lobby-col">
+          <div class="card">
+            <div class="card-head"><h2 data-i18n="mono.players"></h2><span id="lobbyCount" class="count-pill"></span></div>
+            <ul id="lobbyPlayers" class="list mono-list"></ul>
+            <div class="row lobby-me">
+              <button id="readyBtn" class="ready-btn"></button>
+              <button id="watchToggle" class="ghost small"></button>
+              <span id="readyCount" class="count-pill"></span>
+            </div>
+            <div id="pieceBox" class="piece-box">
+              <h3 data-i18n="mono.pickPiece"></h3>
+              <div id="pieces" class="pieces"></div>
+            </div>
+            <div id="spectatorBox" class="spectator-box hidden">
+              <h3 data-i18n="ui.spectators"></h3>
+              <div id="spectatorList" class="spectator-list"></div>
+            </div>
+            <div class="invite">
+              <img id="inviteQr" class="qr" alt="" width="104" height="104">
+              <div class="invite-body">
+                <p id="shareCode" class="share muted"></p>
+                <p class="muted small-text" data-i18n="ui.scanToJoin"></p>
+                <div class="row"><button id="copyLink" class="small" data-i18n="ui.copyLink"></button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2 data-i18n="mono.setup"></h2></div>
+          <div id="hostSettings" class="hidden">
+            <div class="grid2">
+              <label class="field"><span data-i18n="mono.startingCash"></span> <input type="number" min="500" max="5000" step="100" id="startingCash"></label>
+              <label class="field"><span data-i18n="mono.turnTime"></span> <input type="number" min="0" max="600" step="10" id="turnSeconds"></label>
+            </div>
+            <div class="checks settings-rest">
+              <label class="check"><input type="checkbox" class="switch" data-rule="doubleGo"> <span data-i18n="mono.rule.doubleGo"></span></label>
+              <label class="check"><input type="checkbox" class="switch" data-rule="auctions"> <span data-i18n="mono.rule.auctions"></span></label>
+              <label class="check"><input type="checkbox" class="switch" data-rule="freeParking"> <span data-i18n="mono.rule.freeParking"></span></label>
+              <label class="check"><input type="checkbox" class="switch" data-rule="noRentInJail"> <span data-i18n="mono.rule.noRentInJail"></span></label>
+            </div>
+          </div>
+          <ul id="setupSummary" class="summary"></ul>
+          <button id="startBtn" class="primary big-btn hidden" data-i18n="mono.start"></button>
+          <p id="waitHost" class="wait muted hidden"><span class="dots"><i></i><i></i><i></i></span> <span data-i18n="ui.waitHost"></span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- game -->
+    <section id="game" class="screen hidden">
+      <div class="mono-grid">
+        <div class="board-wrap">
+          <div id="board" class="mboard">
+            <div id="squares" class="squares"></div>
+            <div class="board-center">
+              <div class="center-brand">МОНОПОЛИЯ</div>
+              <div id="dice" class="dice"><span class="die"></span><span class="die"></span></div>
+              <div id="turnInfo" class="turn-info"></div>
+              <div id="actions" class="actions"></div>
+              <div id="cardShow" class="card-show hidden"></div>
+            </div>
+            <div id="tokens" class="tokens"></div>
+          </div>
+          <div id="reactBar" class="react-bar mono-react hidden"></div>
+        </div>
+        <aside class="sidebar mono-side">
+          <div class="card"><div id="playerList" class="player-list"></div><p id="bankInfo" class="muted small-text bank-info"></p></div>
+          <div class="card grow tabs-card">
+            <div class="tabs" role="tablist">
+              <button data-tab="props" data-i18n="mono.tab.props"></button>
+              <button data-tab="trade"><span data-i18n="mono.tab.trade"></span><span id="tradeBadge" class="badge hidden"></span></button>
+              <button data-tab="log" data-i18n="mono.tab.log"></button>
+            </div>
+            <div class="tab-panel" data-panel="props"><div id="myProps" class="my-props"></div></div>
+            <div class="tab-panel" data-panel="trade"><div id="tradePanel" class="trade-panel"></div></div>
+            <div class="tab-panel" data-panel="log"><ul id="log" class="log"></ul></div>
+          </div>
+          <div id="hostPanel" class="card host-panel hidden">
+            <button id="restartBtn" class="danger small" data-i18n="mono.backToLobby"></button>
+          </div>
+          <button id="resignBtn" class="ghost small resign-btn hidden" data-i18n="mono.resign"></button>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <!-- square details -->
+  <div id="sqInfo" class="overlay hidden" role="dialog" aria-modal="true"><div id="sqCard" class="sq-card"></div></div>
+
+  <!-- results -->
+  <div id="results" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet results-sheet">
+      <div class="sheet-head"><h2 data-i18n="mono.results"></h2><button id="resultsClose" class="ghost small" data-i18n="ui.close"></button></div>
+      <div id="resultsBody" class="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- leaderboard and player page -->
+  <div id="boardSheet" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet board-sheet">
+      <div class="sheet-head">
+        <h2><span class="trophy">🏆</span> <span data-i18n="mono.board.title"></span></h2>
+        <button id="boardClose" class="ghost small" data-i18n="ui.close"></button>
+      </div>
+      <div class="sheet-body">
+        <div class="tabs board-tabs" role="tablist">
+          <button data-board="wins" data-i18n="mono.board.tab.wins"></button>
+          <button data-board="winrate" data-i18n="mono.board.tab.winrate"></button>
+          <button data-board="worth" data-i18n="mono.board.tab.worth"></button>
+          <button data-board="rent" data-i18n="mono.board.tab.rent"></button>
+          <button data-board="games" data-i18n="mono.board.tab.games"></button>
+        </div>
+        <ol id="boardList" class="board-list"></ol>
+        <p id="boardNote" class="muted small-text"></p>
+      </div>
+    </div>
+  </div>
+  <div id="playerPage" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet player-sheet">
+      <div class="sheet-head"><h2 id="playerTitle"></h2><button id="playerClose" class="ghost small" data-i18n="ui.close"></button></div>
+      <div id="playerBody" class="sheet-body player-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/i18n.js"></script>
+  <script src="/monopoly/mono.js"></script>
+</body>
+</html>

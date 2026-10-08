@@ -139,3 +139,15 @@ test('detailed game numbers add up; old stats without them still load', () => {
     [5, 2, 3, 2, 1, 4, 1, 1, 2, 2, { citizen: 1, mafia: 1 }],
   );
 });
+
+test('Monopoly results add up into their own stats', () => {
+  const store = new UserStore(tmp());
+  const { user } = store.register('Tessio', 'pass');
+  const base = { userId: user.id, players: 4, rentCollected: 300, rentPaid: 100, bought: 5, housesBuilt: 4, hotelsBuilt: 1, auctionsWon: 1, trades: 2, jailed: 1, doubles: 3, passedGo: 6, cardsDrawn: 4, rounds: 20, peakNetWorth: 3000 };
+  store.recordMonoGame([{ ...base, won: true, place: 1, bankrupt: false, netWorth: 2500, topGroup: 'orange' }]);
+  store.recordMonoGame([{ ...base, won: false, place: 3, bankrupt: true, netWorth: 0, topGroup: 'orange' }]);
+  const m = store.publicProfile(user).monoStats;
+  assert.deepStrictEqual([m.games, m.wins, m.bankruptcies, m.placeSum, m.rentCollected, m.hotelsBuilt, m.bestNetWorth, m.groups, m.streak, m.bestStreak],
+    [2, 1, 1, 4, 600, 2, 2500, { orange: 2 }, 0, 1]);
+  assert.strictEqual(store.publicProfile(user).stats.games, 0, 'Mafia stats are separate');
+});
