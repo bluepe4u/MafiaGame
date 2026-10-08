@@ -98,6 +98,16 @@ accounts, photos and decency status with Mafia, and keeps its own stats and lead
   including a random-play test) and its Socket.IO namespace; rooms are saved to
   `monopoly-rooms.json` in the data directory.
 
+## Find the spy (Spyfall)
+
+`/spyfall/` — 3–12 players. Everyone but the spy gets the same location (30 of our own, with 6 roles
+each, in Russian and English) and a role there; the spy sees only the list. The app keeps whose turn
+it is to ask (no asking straight back), the round clock, accusations (once per player per round;
+unanimous or majority, set in the lobby), the spy's guess, the final vote when time runs out, and
+points over several rounds (spy 2/4, town 1, the successful accuser 2). Your card stays hidden until
+you hold it. Same accounts, tables, voice chat, stats (profile tab), archive and admin tools as the
+other games; `src/spyfall/` holds the locations, the engine (no I/O, tested) and its namespace.
+
 ## Rules as implemented
 
 **Roles:** Citizen, Mafia, Cop, Doctor, Hooker (Cop/Doctor/Hooker are on the town side).

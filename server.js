@@ -10,6 +10,7 @@ const { Room, GameError } = require('./src/game');
 const { UserStore } = require('./src/users');
 const { ITEMS } = require('./src/items');
 const { attachMonopoly } = require('./src/monopoly/server');
+const { attachSpyfall } = require('./src/spyfall/server');
 const { limitSocket } = require('./src/ratelimit');
 const { TableStore } = require('./src/tables');
 const { Archive } = require('./src/archive');
@@ -133,7 +134,7 @@ app.post('/api/gifts/seen', api(req => { users.giftsSeen(currentUser(req)); retu
 // rooms this account is still in, in either game: the "back to my game" button
 app.get('/api/active', api(req => {
   const user = currentUser(req);
-  const mine = [...rooms.values()].filter(r => r.byUser(user.id)).map(roomSummary).concat(mono.userRooms(user.id));
+  const mine = [...rooms.values()].filter(r => r.byUser(user.id)).map(roomSummary).concat(mono.userRooms(user.id), spy.userRooms(user.id));
   return { rooms: mine.filter(r => r.phase !== 'ended') };
 }));
 
@@ -180,6 +181,7 @@ app.post('/api/admin/features', api(req => {
     room.touch();
   }
   mono.applyFeatures(f);
+  spy.applyFeatures(f);
   return { features: f };
 }));
 
@@ -228,13 +230,13 @@ app.get('/api/admin/live', api(req => {
   }
   return {
     online: Object.values(online).sort((a, b) => a.username.localeCompare(b.username)),
-    rooms: [...rooms.values()].map(roomSummary).concat(mono.list()).sort((a, b) => b.lastActivity - a.lastActivity),
+    rooms: [...rooms.values()].map(roomSummary).concat(mono.list(), spy.list()).sort((a, b) => b.lastActivity - a.lastActivity),
   };
 }));
 app.post('/api/admin/endRoom', api(req => {
   adminUser(req);
   const code = String(req.body.code || '');
-  if (req.body.game === 'mono') { if (!mono.end(code)) throw new GameError('err.roomNotFound'); return {}; }
+  if (req.body.game === 'mono' || req.body.game === 'spy') { if (!(req.body.game === 'mono' ? mono : spy).end(code)) throw new GameError('err.roomNotFound'); return {}; }
   const room = rooms.get(code);
   if (!room) throw new GameError('err.roomNotFound');
   for (const s of io.sockets.adapter.rooms.get(code) || []) {
@@ -269,8 +271,8 @@ app.post('/api/avatar', api(req => {
 }));
 
 // ---------- tables: a permanent space for a group, with a game picker ----------
-const GAMES = ['mafia', 'mono'];
-const gameInfo = (game, code) => (game === 'mono' ? mono.info(code) : rooms.has(code) ? roomSummary(rooms.get(code)) : null);
+const GAMES = ['mafia', 'mono', 'spy'];
+const gameInfo = (game, code) => (game === 'mono' ? mono.info(code) : game === 'spy' ? spy.info(code) : rooms.has(code) ? roomSummary(rooms.get(code)) : null);
 function tableView(table, user) {
   const online = new Set(allSockets().map(s => s.data.userId));
   const current = table.current && gameInfo(table.current.game, table.current.code);
@@ -314,6 +316,7 @@ app.post('/api/tables/start', api(req => {
   const saved = tables.settingsFor(table.id, game);
   let code;
   if (game === 'mono') code = mono.create(table.id, saved);
+  else if (game === 'spy') code = spy.create(table.id, saved);
   else {
     const room = createRoom();
     room.tableId = table.id;
@@ -432,7 +435,7 @@ app.post('/api/admin/badge', api(req => {
 app.get('/qr.svg', async (req, res) => {
   const code = String(req.query.room || '').toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) return res.status(400).end();
-  const page = req.query.game === 'mono' ? '/monopoly/' : '/';
+  const page = req.query.game === 'mono' ? '/monopoly/' : req.query.game === 'spy' ? '/spyfall/' : '/';
   const svg = await QRCode.toString(`${req.protocol}://${req.get('host')}${page}?room=${code}`, { type: 'svg', margin: 1 });
   res.type('image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(svg);
 });
@@ -443,14 +446,20 @@ const io = new Server(server);
 const rooms = new Map(); // code -> Room
 // Monopoly: its own namespace and rooms, same accounts; room codes are unique across both games
 const mono = attachMonopoly({
-  io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code),
+  io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) || spy.has(code),
   onArchive: record => archive.add(record),
   onStart: room => room.tableId && tables.saveSettings(room.tableId, 'mono', room.settings),
 });
 
 const voiceHub = createVoiceHub(io.of('/'));
 const voiceAllowed = room => users.features.voice && room.settings.voice !== false;
-const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets()];
+// Spyfall: its own namespace and rooms too; codes are unique across all three games
+const spy = attachSpyfall({
+  io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) || mono.has(code),
+  onArchive: record => archive.add(record),
+  onStart: room => room.tableId && tables.saveSettings(room.tableId, 'spy', room.settings),
+});
+const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets(), ...spy.sockets()];
 const roomSummary = room => ({
   game: 'mafia', code: room.code, phase: room.phase, lastActivity: room.lastActivity,
   players: room.players.map(p => ({ name: p.name, connected: p.connected })), spectators: room.spectators.length,
@@ -461,7 +470,7 @@ function newCode() {
   let code;
   do {
     code = Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
-  } while (rooms.has(code) || mono.has(code));
+  } while (rooms.has(code) || mono.has(code) || spy.has(code));
   return code;
 }
 
@@ -469,6 +478,7 @@ function newCode() {
 function refreshUser(userId) {
   for (const room of rooms.values()) if (room.byUser(userId)) broadcast(room);
   mono.refreshUser(userId);
+  spy.refreshUser(userId);
 }
 
 const roomOptions = () => ({
@@ -691,6 +701,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     console.log(`${sig} received, shutting down`);
     saveNow();
     mono.shutdown();
+    spy.shutdown();
     users.saveNow();
     tables.saveNow();
     archive.saveNow();

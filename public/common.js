@@ -32,13 +32,15 @@ const COMMON_ICONS = {
   eye: svgIcon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   eyeOff: svgIcon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>'),
   list: svgIcon('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
+  spy: svgIcon('<circle cx="7" cy="15" r="3.5"/><circle cx="17" cy="15" r="3.5"/><path d="M10.5 15h3M3 11l3.5-5h11L21 11"/>'),
 };
 const ico = (name, cls = '') => `<span class="ui-ico ${cls}">${COMMON_ICONS[name]}</span>`;
 // drawn icons instead of emoji in the site's chrome (trophy buttons, the game switcher)
 for (const el of document.querySelectorAll('.trophy')) el.outerHTML = ico('trophy');
 for (const a of document.querySelectorAll('#siteMenu a')) {
   const i = a.querySelector('.site-ico');
-  if (i) i.outerHTML = ico(a.getAttribute('href').includes('monopoly') ? 'dice' : 'hat', 'site-ico');
+  const href = a.getAttribute('href');
+  if (i) i.outerHTML = ico(href.includes('monopoly') ? 'dice' : href.includes('spyfall') ? 'spy' : 'hat', 'site-ico');
 }
 
 // The page's settings and hooks (filled in by Site.init)
@@ -55,8 +57,12 @@ const Site = {
     leave: async () => {}, // leave the current room (before following the table to a new one)
   },
 };
-const gameUrl = (game, code) => `${game === 'mono' ? '/monopoly/' : '/'}?room=${code}&join=1`;
-const gameIcon = game => ico(game === 'mono' ? 'dice' : 'hat');
+// the games: page, icon and name in one place
+const GAME_INFO = { mafia: { path: '/', icon: 'hat', name: 'site.mafia' }, mono: { path: '/monopoly/', icon: 'dice', name: 'site.monopoly' }, spy: { path: '/spyfall/', icon: 'spy', name: 'site.spyfall' } };
+const gameInfoOf = game => GAME_INFO[game] || GAME_INFO.mafia;
+const gameTitle = game => t(gameInfoOf(game).name);
+const gameUrl = (game, code) => `${gameInfoOf(game).path}?room=${code}&join=1`;
+const gameIcon = game => ico(gameInfoOf(game).icon);
 
 function toast(msg, kind = '') {
   const el = $('#toast');
@@ -346,7 +352,7 @@ addPasswordToggles();
 // ---------- rules reference ----------
 document.body.insertAdjacentHTML('beforeend', `<div id="rules" class="overlay hidden" role="dialog" aria-modal="true">
   <div class="sheet player-sheet"><div class="sheet-head"><h2 data-i18n="rules.title"></h2><button id="rulesClose" class="ghost small" data-i18n="ui.close"></button></div>
-  <div class="sheet-body"><div class="tabs" role="tablist"><button data-rules="mafia" data-i18n="site.mafia"></button><button data-rules="mono" data-i18n="site.monopoly"></button></div>
+  <div class="sheet-body"><div class="tabs" role="tablist"><button data-rules="mafia" data-i18n="site.mafia"></button><button data-rules="mono" data-i18n="site.monopoly"></button><button data-rules="spy" data-i18n="site.spyfall"></button></div>
   <div id="rulesBody" class="rules-body"></div></div></div></div>`);
 let rulesTab = null;
 function openRules(game) {
@@ -516,9 +522,9 @@ async function renderActive() {
   const shown = activeRooms.filter(r => !myTables.some(tb => tb.current && tb.current.code === r.code));
   box.classList.toggle('hidden', !shown.length);
   box.innerHTML = shown.map(r => `
-    <a class="active-game g-${r.game}" href="${r.game === 'mono' ? '/monopoly/' : '/'}?room=${r.code}" data-active="${r.game}:${r.code}">
+    <a class="active-game g-${r.game}" href="${gameInfoOf(r.game).path}?room=${r.code}" data-active="${r.game}:${r.code}">
       <span class="ag-ico">${gameIcon(r.game)}</span>
-      <span class="ag-text"><b>${esc(t('active.title', { game: t(r.game === 'mono' ? 'site.monopoly' : 'site.mafia') }))}</b>
+      <span class="ag-text"><b>${esc(t('active.title', { game: gameTitle(r.game) }))}</b>
         <span class="muted small-text">${esc(t('ui.room'))} <span class="code">${r.code}</span> · ${esc(t(r.phase === 'lobby' ? 'active.lobby' : 'active.playing'))} · ${r.players.map(p => esc(p.name)).join(', ')}</span></span>
       <span class="ag-go">${esc(t('active.back'))} →</span>
     </a>`).join('');
@@ -570,11 +576,11 @@ function renderProfile() {
   if (!badgeRow) { $('#profileTop').insertAdjacentHTML('afterend', '<div id="profileBadges" class="badge-row"></div>'); badgeRow = $('#profileBadges'); }
   badgeRow.innerHTML = badges;
   badgeRow.classList.toggle('hidden', !badges);
-  const tabs = ['mafia', 'mono', ...(self ? ['wardrobe', 'account'] : [])];
+  const tabs = ['mafia', 'mono', 'spy', ...(self ? ['wardrobe', 'account'] : [])];
   if (!tabs.includes(profileTab)) profileTab = Site.game;
   $('#profileTabs').innerHTML = tabs.map(k => `<button class="${k === profileTab ? 'active' : ''}" data-ptab="${k}">${esc(t('profile.tab.' + k))}</button>`).join('');
   for (const b of $$('#profileTabs [data-ptab]')) b.onclick = () => { profileTab = b.dataset.ptab; renderProfile(); };
-  $('#profileBody').innerHTML = { mafia: mafiaStatsHtml, mono: monoStatsHtml, wardrobe: wardrobeHtml, account: accountHtml }[profileTab](u);
+  $('#profileBody').innerHTML = { mafia: mafiaStatsHtml, mono: monoStatsHtml, spy: spyStatsHtml, wardrobe: wardrobeHtml, account: accountHtml }[profileTab](u);
   if (self) bindProfileControls();
 }
 
@@ -770,6 +776,25 @@ function monoStatsHtml(u) {
     </section>`;
 }
 
+function spyStatsHtml(u) {
+  const m = u.spyStats || {};
+  if (!m.games) return `<p class="muted">${esc(t('player.noGames'))}</p>`;
+  return `
+    <div class="stat-grid four">
+      ${statTile(m.games, t('player.games'))}${statTile(pctOf(m.wins, m.games) + '%', t('player.winRate'))}
+      ${statTile(m.points, t('spy.stat.points'))}${statTile(m.bestStreak, t('player.bestStreak'))}
+    </div>
+    <section class="player-section"><h3>${esc(t('player.highlights'))}</h3>
+      <div class="stat-grid four">
+        ${statTile(`${m.spyWins}/${m.spyRounds}`, t('spy.stat.asSpy'))}${statTile(m.guessed, t('spy.stat.guessed'))}
+        ${statTile(m.townWins, t('spy.stat.townWins'))}${statTile(m.caught, t('spy.stat.caught'))}
+      </div>
+    </section>
+    <section class="player-section"><h3>${esc(t('mono.player.recent'))}</h3>
+      <div class="recent-games">${m.recent.map(r => `<span class="recent ${r.won ? 'won' : 'lost'}"><b>${r.won ? 'W' : 'L'}</b><span>${esc(t('spy.points', { n: r.points }))}</span></span>`).join('')}</div>
+    </section>`;
+}
+
 function itemPreview(id) {
   const it = ITEMS[id] || {};
   if (it.slot === 'hat' || it.slot === 'reaction') return `<span class="item-emoji">${it.emoji}</span>`;
@@ -889,7 +914,7 @@ const ago = ts => {
   const min = Math.round((Date.now() - ts) / 60000);
   return min < 1 ? t('admin.justNow') : min < 60 ? t('admin.minAgo', { n: min }) : t('admin.hAgo', { n: Math.round(min / 60) });
 };
-const gameName = g => t(g === 'mono' ? 'site.monopoly' : 'site.mafia');
+const gameName = gameTitle;
 
 async function renderAdmin() {
   for (const b of $$('[data-admin-tab]')) b.classList.toggle('active', b.dataset.adminTab === adminTab);
@@ -1083,11 +1108,11 @@ function renderTables() {
           <button class="ghost small icon-only" data-tmenu="${tb.id}" aria-label="${esc(t('table.settings'))}" title="${esc(t('table.settings'))}">⋯</button></div>
         <div class="tc-members">${tb.members.map(m => `<span class="tc-member ${m.online ? 'on' : ''}" title="${esc(m.username)}">${avatar(m.username, m.avatar, m.equipped)}</span>`).join('')}</div>
         ${cur ? `<a class="tc-now g-${cur.game}" href="${gameUrl(cur.game, cur.code)}" data-go="${cur.game}:${cur.code}"><span class="ag-ico">${gameIcon(cur.game)}</span>
-          <span class="tc-text"><b>${esc(t('table.now', { game: t(cur.game === 'mono' ? 'site.monopoly' : 'site.mafia') }))}</b>
+          <span class="tc-text"><b>${esc(t('table.now', { game: gameTitle(cur.game) }))}</b>
           <span class="muted small-text">${esc(t(cur.phase === 'lobby' ? 'active.lobby' : 'active.playing'))} · ${cur.players.map(p => esc(p.name)).join(', ') || esc(t('table.empty'))}</span></span>
           <span class="ag-go">${esc(t('table.join'))} →</span></a>` : ''}
         ${tb.canStart ? `<div class="tc-pick"><span class="muted small-text">${esc(t(cur ? 'table.newGame' : 'table.nextGame'))}</span>
-          <button data-start="${tb.id}:mafia">${ico('hat')} ${esc(t('site.mafia'))}</button><button data-start="${tb.id}:mono">${ico('dice')} ${esc(t('site.monopoly'))}</button></div>` : ''}
+          ${Object.keys(GAME_INFO).map(g => `<button data-start="${tb.id}:${g}">${gameIcon(g)} ${esc(gameTitle(g))}</button>`).join('')}</div>` : ''}
         ${open ? `<div class="tc-settings">
           <div class="row"><button class="small" data-tcopy="${tb.id}">${esc(t('table.copyLink'))}</button>
             ${account.admin ? `<button class="small" data-tinvite="${tb.id}">${esc(t('table.inviteNew'))}</button>` : ''}</div>
@@ -1149,7 +1174,7 @@ async function followTable(call, mine = false) {
   const url = gameUrl(call.game, call.code);
   if (!mine && Site.hooks.busy()) {
     const box = $('#tableCall');
-    box.innerHTML = `<span>${gameIcon(call.game)} ${esc(t('table.call', { name: call.by, table: call.table, game: t(call.game === 'mono' ? 'site.monopoly' : 'site.mafia') }))}</span>
+    box.innerHTML = `<span>${gameIcon(call.game)} ${esc(t('table.call', { name: call.by, table: call.table, game: gameTitle(call.game) }))}</span>
       <a class="primary small btn-link" href="${url}">${esc(t('table.go'))}</a><button class="ghost small" type="button" aria-label="×">×</button>`;
     box.classList.remove('hidden');
     box.querySelector('button').onclick = () => box.classList.add('hidden');
@@ -1158,7 +1183,7 @@ async function followTable(call, mine = false) {
     return;
   }
   if (!mine) {
-    toast(t('table.moving', { name: call.by, game: t(call.game === 'mono' ? 'site.monopoly' : 'site.mafia') }), 'info');
+    toast(t('table.moving', { name: call.by, game: gameTitle(call.game) }), 'info');
     if (alertsOn) chime();
     await new Promise(r => setTimeout(r, 1200));
   }
@@ -1287,7 +1312,7 @@ function nightFacts(night) {
   if (unlucky && unlucky[1] >= 2) facts.push(['💀', t(i18nVariant === 'family' ? 'archive.firstOutFamily' : 'archive.firstOut'), `${unlucky[0].join(', ')} · ${t('archive.times', { n: unlucky[1] })}`]);
   if (mafiaWins + townWins) facts.push(['🎩', t('archive.mafiaScore'), t('archive.mafiaScoreLine', { town: townWins, mafia: mafiaWins })]);
   if (bigRent) facts.push(['💸', t('mono.sum.bigRent'), `${money(bigRent.amount)} · ${bigRent.from} → ${bigRent.to}`]);
-  if (longest && night.games.length > 1) facts.push(['⏱️', t('archive.longest'), `${t(longest.game === 'mono' ? 'site.monopoly' : 'site.mafia')} · ${t('archive.minutes', { n: mins(longest.len) })}`]);
+  if (longest && night.games.length > 1) facts.push(['⏱️', t('archive.longest'), `${gameTitle(longest.game)} · ${t('archive.minutes', { n: mins(longest.len) })}`]);
   return facts;
 }
 
@@ -1304,6 +1329,13 @@ function gameHtml(g) {
       <div class="arch-players">${players}</div>${tl ? `<ol class="arch-timeline">${tl}</ol>` : ''}
       ${roundsHtml(g.roundNotes, g.insights)}${insightsHtml(g.insights)}${transcriptHtml(g.transcript)}</div>`;
   }
+  if (g.game === 'spy') {
+    const ranked = g.players.map(p => `<li><b>${esc(p.name)}</b><span class="spacer"></span><span>${esc(t('spy.points', { n: p.points }))}</span></li>`).join('');
+    const rounds = g.rounds.map(r => `<li>${esc(t('spy.round', { n: r.n }))}: ${esc(t('spy.spyWas', { name: r.spy }))} — <span class="tag ${r.winner === 'spy' ? 'mafia' : 'town'}">${esc(t('spy.reason.' + r.reason))}</span></li>`).join('');
+    return `<div class="arch-game"><div class="arch-head">${ico('spy')}<b>${esc(t('site.spyfall'))}</b>${g.winner ? `<span class="tag town">${esc(t('archive.winner', { name: g.winner }))}</span>` : ''}
+      <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)}</span></div>
+      <ol class="arch-standings">${ranked}</ol><ol class="arch-timeline">${rounds}</ol></div>`;
+  }
   const rows = g.players.map(p => `<li><span class="board-rank">${['🥇', '🥈', '🥉'][p.place - 1] || p.place}</span><b>${esc(p.name)}</b><span class="spacer"></span>${p.bankrupt ? `<span class="tag mafia">${esc(t('mono.bankrupt'))}</span>` : `<span>${money(p.netWorth)}</span>`}</li>`).join('');
   return `<div class="arch-game"><div class="arch-head">${ico('dice')}<b>${esc(t('site.monopoly'))}</b>${g.winner ? `<span class="tag town">${esc(t('archive.winner', { name: g.winner }))}</span>` : ''}
     <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)} · ${esc(t('mono.sum.rounds', { n: g.rounds }))}</span></div>
@@ -1315,7 +1347,7 @@ function nightSummaryText(night) {
   for (const [ico_, label, value] of nightFacts(night)) lines.push(`${ico_} ${label}: ${value}`);
   for (const g of night.games) lines.push(g.game === 'mafia'
     ? `🎩 ${t('site.mafia')}: ${g.winner === 'mafia' ? t('archive.mafiaWon') : t('archive.townWon')}`
-    : `🎲 ${t('site.monopoly')}: ${t('archive.winner', { name: g.winner || '—' })}`);
+    : `${g.game === 'spy' ? '🕵️' : '🎲'} ${gameTitle(g.game)}: ${t('archive.winner', { name: g.winner || '—' })}`);
   return lines.join('\n');
 }
 
