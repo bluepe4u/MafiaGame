@@ -57,8 +57,10 @@ function districtHtml(card, { size = 'sm', cls = '', attrs = '', cost } = {}) {
   const price = cost !== undefined && cost !== d.cost ? `<s>${d.cost}</s>${cost}` : d.cost;
   const text = d.color === 'unique' && size !== 'sm' ? `<span class="dc-text">${esc(t('d.' + kind + '.text'))}</span>` : '';
   return `<div class="dcard ${size} c-${d.color} ${cls}" data-kind="${kind}" ${attrs} title="${esc(dName(card))}">
+    <span class="dc-art">${CIT_ART.district(kind)}</span>
     <span class="dc-cost">${d.unbuildable ? '✕' : price}</span>
     <span class="dc-ico">${ICONS[d.color]}</span>
+    ${kind === 'monument' ? `<span class="dc-x2" title="${esc(t('cit.monumentTwo'))}">×2</span>` : ''}
     <span class="dc-name">${esc(dName(card))}</span>${text}
   </div>`;
 }
@@ -67,10 +69,11 @@ function districtHtml(card, { size = 'sm', cls = '', attrs = '', cost } = {}) {
 function charHtml(c, { size = 'full', cls = '', attrs = '', extra = '' } = {}) {
   const color = charColor(c);
   return `<div class="ccard ${size} ch-${c} ${cls}" ${attrs}>
+    <span class="cc-art">${CIT_ART.character(c)}</span>
     <span class="cc-rank">${rankOf(c)}</span>
     <span class="cc-name">${esc(cName(c))}</span>
-    ${color ? `<span class="cc-color c-${color}">${ICONS[color]}</span>` : ''}
     ${size === 'full' ? `<span class="cc-text">${esc(t('char.' + c + '.text'))}</span>` : ''}
+    ${size === 'full' && color ? `<span class="cc-income c-${color}">${ICONS[color]}${esc(t('cit.incomeFrom', { key: color }))}</span>` : ''}
     ${extra}
   </div>`;
 }
@@ -293,9 +296,11 @@ function renderGame() {
   if (targeting && !(myTurn() && G().turn.stage === 'main')) targeting = null;
   document.body.classList.toggle('targeting', !!targeting);
   renderTrack();
-  renderCities();
+  renderOpponents();
+  renderMyBoard();
   renderAction();
-  renderHand();
+  fitTable();
+  renderPop();
   $('#log').innerHTML = g.log.slice().reverse().map(e => `<li>${esc(logText(e))}</li>`).join('');
   $('#restartBtn').classList.toggle('hidden', !(isHost() && state.phase === 'ended'));
   syncPickModal();
@@ -328,49 +333,144 @@ function renderTrack() {
   for (const el of $$('#charTrack [data-char-info]')) el.onclick = () => openCharInfo(el.dataset.charInfo);
 }
 
-function renderCities() {
-  const g = G();
-  const me = myId();
-  // me first, then the others in seat order after me
-  const start = Math.max(0, g.order.indexOf(me));
-  const seats = g.order.map((_, i) => g.order[(start + i) % g.order.length]);
-  $('#cities').innerHTML = seats.map(pid => {
-    const p = gp(pid);
-    const m = member(pid) || { name: '?' };
-    const acting = g.stage === 'turns' && g.turn && g.turn.pid === pid;
-    const picking = g.stage === 'select' && g.sel.seq[g.sel.step] === pid;
-    const cards = p.city.map(card => {
-      let cls = '', attrs = `data-city="${pid}" data-card="${card}"`;
-      if (targeting) {
-        const ok = targeting.can(pid, card);
-        cls = ok ? 'can-target' : 'no-target';
-        if (ok && ok.cost !== undefined) attrs += ` data-tcost="${ok.cost}"`;
-      }
-      return districtHtml(card, { cls: `${cls} ${freshCards.has(card) ? 'fresh' : ''}`, attrs });
-    }).join('');
-    const charTags = p.chars.map(c => `<span class="tag ch-tag ch-${c} ${g.killed === c ? 'dead' : ''}">${rankOf(c)} · ${esc(cName(c))}</span>`).join('');
-    return `<div class="city ${pid === me ? 'me' : ''} ${acting ? 'acting' : ''} ${picking ? 'picking' : ''} ${p.complete ? 'complete' : ''}" data-pid="${pid}">
-      <div class="city-head">
-        <span class="avatar-wrap clickable" data-open-player="${m.userId || ''}">${avatar(m.name, m.avatar, m.cos)}</span>
-        <span class="city-id">
-          <span class="city-name"><b class="${nameCls(m.cos)}">${esc(m.name)}</b>${titleTag(m.title)}
-            ${g.crown === pid ? `<span class="crown" title="${esc(t('cit.crown'))}">${ICONS.crown}</span>` : ''}
-            ${m.left ? `<span class="tag">${esc(t('cit.tag.left'))}</span>` : !m.connected ? `<span class="tag">${esc(t('cit.tag.offline'))}</span>` : ''}
-            ${g.firstComplete === pid ? `<span class="tag first">${esc(t('cit.tag.first'))}</span>` : p.complete ? `<span class="tag done">${esc(t('cit.tag.complete'))}</span>` : ''}
-          </span>
-          <span class="city-chars">${charTags}${acting ? `<span class="tag now">${esc(t('cit.tag.turn'))}</span>` : ''}${picking ? `<span class="tag now">${esc(t('cit.tag.picking'))}</span>` : ''}</span>
-        </span>
-        <span class="city-stats">
-          <span class="stat-chip gold" title="${esc(t('cit.gold'))}">${ICONS.coin}<b>${p.gold}</b></span>
-          <span class="stat-chip" title="${esc(t('cit.handCount'))}">${ICONS.cards}<b>${p.hand}</b></span>
-          <span class="stat-chip size" title="${esc(t('cit.citySize'))}"><b>${p.size}</b>/${state.settings.districtsToEnd}</span>
-        </span>
-      </div>
-      <div class="city-row">${cards || `<span class="muted small-text empty-city">${esc(t('cit.emptyCity'))}</span>`}${p.museum ? `<span class="museum-chip">${esc(t('cit.museumCards', { n: p.museum }))}</span>` : ''}</div>
-    </div>`;
+// ---------- the cities: the others' at the top, mine with my gold and hand below ----------
+const COLOR_ORDER = ['noble', 'religious', 'trade', 'military', 'unique'];
+function colorCounts(pid) {
+  const n = Object.fromEntries(COLOR_ORDER.map(c => [c, 0]));
+  for (const card of gp(pid).city) n[dinfo(card).color] += 1;
+  return n;
+}
+// five coloured counters; a colour the city lacks is dimmed
+function pipsHtml(pid) {
+  const n = colorCounts(pid);
+  return `<span class="pips">${COLOR_ORDER.map(c => `<span class="pip c-${c} ${n[c] ? '' : 'off'}" title="${esc(t('color.' + c))}: ${n[c]}">${ICONS[c]}<b>${n[c]}</b></span>`).join('')}</span>`;
+}
+
+// the points a city shows right now, as the server will count them (a Secret Vault in hand stays secret)
+function visibleScore(pid) {
+  const g = G(), s = state.settings, p = gp(pid);
+  const kinds = p.city.map(kindOf);
+  const districts = p.city.reduce((sum, c) => sum + dinfo(c).cost, 0);
+  const others = new Set(p.city.filter(c => kindOf(c) !== 'hauntedQuarter').map(c => dinfo(c).color));
+  const colors = others.size + (kinds.includes('hauntedQuarter') ? 1 : 0) >= 5 ? s.colorsBonus : 0;
+  const complete = p.complete ? (g.firstComplete === pid ? s.firstBonus : s.completeBonus) : 0;
+  const n = colorCounts(pid);
+  const extras = {
+    dragonGate: kinds.includes('dragonGate') ? 2 : 0,
+    imperialTreasury: kinds.includes('imperialTreasury') ? p.gold : 0,
+    mapRoom: kinds.includes('mapRoom') ? p.hand : 0,
+    statue: kinds.includes('statue') && g.crown === pid ? 5 : 0,
+    wishingWell: kinds.includes('wishingWell') ? n.unique : 0,
+    capitol: kinds.includes('capitol') && Object.values(n).some(x => x >= 3) ? 3 : 0,
+    basilica: kinds.includes('basilica') ? p.city.filter(c => dinfo(c).cost % 2 === 1).length : 0,
+    ivoryTower: kinds.includes('ivoryTower') && n.unique === 1 ? 5 : 0,
+    museum: kinds.includes('museum') ? p.museum : 0,
+  };
+  for (const k of Object.keys(extras)) if (!extras[k]) delete extras[k];
+  return { districts, colors, complete, extras, total: districts + colors + complete + Object.values(extras).reduce((a, b) => a + b, 0) };
+}
+
+function cityCardsHtml(pid) {
+  const p = gp(pid);
+  const cards = p.city.map(card => {
+    let cls = '', attrs = `data-city="${pid}" data-card="${card}"`;
+    if (targeting) {
+      const ok = targeting.can(pid, card);
+      cls = ok ? 'can-target' : 'no-target';
+      if (ok && ok.cost !== undefined) attrs += ` data-tcost="${ok.cost}"`;
+    }
+    return districtHtml(card, { cls: `${cls} ${freshCards.has(card) ? 'fresh' : ''}`, attrs });
   }).join('');
-  for (const el of $$('#cities [data-open-player]')) if (el.dataset.openPlayer) el.onclick = () => openPlayer(el.dataset.openPlayer);
-  for (const el of $$('#cities [data-card]')) {
+  return cards + (p.museum ? `<span class="museum-chip">${esc(t('cit.museumCards', { n: p.museum }))}</span>` : '')
+    || `<span class="muted small-text empty-city">${esc(t('cit.emptyCity'))}</span>`;
+}
+
+// name, crown, tags and this round's revealed characters
+function seatIdHtml(pid) {
+  const g = G(), p = gp(pid), m = member(pid) || { name: '?' };
+  const acting = g.stage === 'turns' && g.turn && g.turn.pid === pid;
+  const picking = g.stage === 'select' && g.sel.seq[g.sel.step] === pid;
+  const charTags = p.chars.map(c => `<span class="tag ch-tag ch-${c} ${g.killed === c ? 'dead' : ''}">${rankOf(c)} · ${esc(cName(c))}</span>`).join('');
+  return `<span class="avatar-wrap clickable" data-open-player="${m.userId || ''}">${avatar(m.name, m.avatar, m.cos)}</span>
+    <span class="city-id">
+      <span class="city-name"><b class="${nameCls(m.cos)}">${esc(m.name)}</b>${titleTag(m.title)}
+        ${g.crown === pid ? `<span class="crown" title="${esc(t('cit.crown'))}">${ICONS.crown}</span>` : ''}
+        ${m.left ? `<span class="tag">${esc(t('cit.tag.left'))}</span>` : !m.connected ? `<span class="tag">${esc(t('cit.tag.offline'))}</span>` : ''}
+        ${g.firstComplete === pid ? `<span class="tag first">${esc(t('cit.tag.first'))}</span>` : p.complete ? `<span class="tag done">${esc(t('cit.tag.complete'))}</span>` : ''}
+      </span>
+      <span class="city-chars">${charTags}${acting ? `<span class="tag now">${esc(t('cit.tag.turn'))}</span>` : ''}${picking ? `<span class="tag now">${esc(t('cit.tag.picking'))}</span>` : ''}</span>
+    </span>`;
+}
+
+const goldChip = pid => `<span class="stat-chip gold" data-gold="${pid}" title="${esc(t('cit.gold'))}">${ICONS.coin}<b>${gp(pid).gold}</b></span>`;
+const handChip = pid => `<span class="stat-chip" title="${esc(t('cit.handCount'))}">${ICONS.cards}<b>${gp(pid).hand}</b></span>`;
+const sizeChip = pid => {
+  const p = gp(pid);
+  const two = p.size > p.city.length; // the Monument counts twice
+  return `<span class="stat-chip size" title="${esc(two ? t('cit.citySizeMonument', { n: p.city.length }) : t('cit.citySize'))}"><b>${p.size}</b>/${state.settings.districtsToEnd}${two ? '<i class="x2">М×2</i>' : ''}</span>`;
+};
+
+function seatClass(pid) {
+  const g = G();
+  return [
+    g.stage === 'turns' && g.turn && g.turn.pid === pid && 'acting',
+    g.stage === 'select' && g.sel.seq[g.sel.step] === pid && 'picking',
+    gp(pid).complete && 'complete',
+  ].filter(Boolean).join(' ');
+}
+
+function renderOpponents() {
+  const g = G();
+  const me = iPlay() ? myId() : null;
+  const start = me ? g.order.indexOf(me) : 0;
+  // in seat order, starting from the player on my left
+  const seats = g.order.map((_, i) => g.order[(start + i) % g.order.length]).filter(pid => pid !== me);
+  $('#opponents').innerHTML = seats.map(pid => `
+    <div class="opp ${seatClass(pid)}" data-pid="${pid}" tabindex="0">
+      <div class="city-head">${seatIdHtml(pid)}<span class="city-stats">${goldChip(pid)}${handChip(pid)}${sizeChip(pid)}</span></div>
+      <div class="opp-colors">${pipsHtml(pid)}<span class="opp-score" title="${esc(t('cit.pop.scoreHint'))}">${esc(t('cit.score.now', { n: visibleScore(pid).total }))}</span></div>
+      <div class="city-row">${cityCardsHtml(pid)}</div>
+    </div>`).join('');
+  bindCityClicks($('#opponents'));
+}
+
+function renderMyBoard() {
+  const g = G();
+  const box = $('#myBoard');
+  box.classList.toggle('hidden', !iPlay());
+  if (!iPlay()) return;
+  const me = myId(), p = gp(me);
+  const tr = g.turn;
+  const canBuild = myTurn() && tr.stage === 'main' && tr.limit > 0;
+  const hand = g.me.hand.map(c => {
+    const cost = g.me.buildCosts[c];
+    const problem = g.me.buildProblems[c];
+    const short = cost - p.gold;
+    const ok = canBuild && !problem && (short <= 0 || buildAlternatives(c).length) && (tr.built < tr.limit || kindOf(c) === 'stables');
+    const note = problem === 'err.cit.unbuildable' ? '' : problem ? `<span class="hand-note bad">${esc(t('cit.hand.dup'))}</span>`
+      : short > 0 ? `<span class="hand-note bad">${esc(t('cit.hand.short', { n: short }))}</span>` : `<span class="hand-note ok">${esc(t('cit.hand.ok'))}</span>`;
+    return `<button class="card-btn ${ok ? 'buildable' : ''} ${freshCards.has(c) ? 'fresh' : ''}" data-hand="${c}">${districtHtml(c, { size: 'md', cost })}${note}</button>`;
+  }).join('') || `<p class="muted small-text">${esc(t('cit.emptyHand'))}</p>`;
+  const sc = visibleScore(me);
+  box.className = `card my-board ${seatClass(me)}`;
+  box.dataset.pid = me;
+  box.innerHTML = `
+    <div class="mb-top">
+      <div class="mb-head">
+        ${seatIdHtml(me)}
+        <span class="mb-gold" data-gold="${me}" title="${esc(t('cit.gold'))}">${ICONS.coin}<b>${p.gold}</b><span>${esc(t('cit.goldWord', { n: p.gold }))}</span></span>
+      </div>
+      <div class="mb-stats">${pipsHtml(me)}${handChip(me)}${sizeChip(me)}<span class="opp-score">${esc(t('cit.score.now', { n: sc.total }))}</span></div>
+    </div>
+    <div class="mb-section"><h3>${esc(t('cit.myCity'))}</h3><div class="city-row">${cityCardsHtml(me)}</div></div>
+    <div class="mb-section"><h3>${esc(t('cit.hand'))}${g.me.museum.length ? ` · ${esc(t('cit.museumCards', { n: g.me.museum.length }))}` : ''}</h3><div class="hand">${hand}</div></div>`;
+  bindCityClicks(box);
+  for (const b of box.querySelectorAll('[data-hand]')) b.onclick = () => openCard(b.dataset.hand, { hand: true });
+}
+
+function bindCityClicks(root) {
+  for (const el of root.querySelectorAll('[data-open-player]')) if (el.dataset.openPlayer) el.onclick = () => openPlayer(el.dataset.openPlayer);
+  for (const el of root.querySelectorAll('[data-card]')) {
     el.onclick = () => {
       const pid = el.dataset.city, card = el.dataset.card;
       if (targeting) {
@@ -383,6 +483,112 @@ function renderCities() {
     };
   }
 }
+
+// ---------- fitting the table to the screen (desktop) ----------
+const fitsScreen = matchMedia('(min-width: 1000px) and (min-height: 600px)');
+// the biggest card width at which n cards fit the row's box
+function fitRow(row, n, { aspect, extra = 0, gap = 5, min, max }) {
+  row.style.removeProperty('--cw');
+  row.classList.remove('tiny', 'compact');
+  if (!fitsScreen.matches || !n) return;
+  const W = row.clientWidth, H = row.clientHeight;
+  if (!W || !H) return;
+  let cw = min;
+  for (let w = max; w >= min; w--) {
+    const perRow = Math.max(1, Math.floor((W + gap) / (w + gap)));
+    const rows = Math.ceil(n / perRow);
+    if (rows * (w * aspect + extra) + (rows - 1) * gap <= H) { cw = w; break; }
+  }
+  row.style.setProperty('--cw', `${cw}px`);
+  return cw;
+}
+function fitTable() {
+  const g = state && state.game;
+  if (!g) return;
+  document.documentElement.style.setProperty('--topbar-h', `${$('.topbar').offsetHeight}px`);
+  const game = $('#game');
+  game.style.setProperty('--chars', g.chars.length);
+  const n = $$('#opponents .opp').length;
+  game.style.setProperty('--opp-cols', n <= 3 ? Math.max(1, n) : n === 4 ? 2 : n <= 6 ? 3 : 4);
+  // a bigger share for my board when there's little else to show
+  game.style.setProperty('--mine-share', n <= 3 ? '1.15fr' : '.95fr');
+  for (const row of $$('#opponents .city-row, #myBoard .city-row')) {
+    const cards = row.querySelectorAll('.dcard').length;
+    const cw = fitRow(row, cards, { aspect: 1.25, min: 30, max: 84 });
+    if (cw && cw < 50) { row.classList.add('tiny'); fitRow2(row, cards); }
+  }
+  const hand = $('#myBoard .hand');
+  if (hand) {
+    const cards = hand.querySelectorAll('.dcard').length;
+    const cw = fitRow(hand, cards, { aspect: 1.32, extra: 18, gap: 8, min: 64, max: 150 });
+    if (cw && cw < 100) { hand.classList.add('compact'); fitRow(hand, cards, { aspect: 1.05, extra: 18, gap: 8, min: 56, max: 150 }); hand.classList.add('compact'); }
+  }
+}
+// small cards drop their name and get shorter: fit again with that shape
+function fitRow2(row, n) {
+  fitRow(row, n, { aspect: 0.9, min: 26, max: 60 });
+  row.classList.add('tiny');
+}
+new ResizeObserver(() => { if (state && state.game && !$('#game').classList.contains('hidden')) fitTable(); }).observe(document.body);
+fitsScreen.addEventListener('change', () => fitTable());
+
+// ---------- hover card: an opponent's city in detail ----------
+const pop = document.createElement('div');
+pop.className = 'city-pop hidden';
+pop.setAttribute('role', 'tooltip');
+document.body.append(pop);
+let popPid = null;
+function popHtml(pid) {
+  const g = G(), p = gp(pid);
+  const sc = visibleScore(pid);
+  const n = colorCounts(pid);
+  const groups = COLOR_ORDER.filter(c => n[c]).map(c => `
+    <div class="pop-group c-${c}"><span class="pop-color">${ICONS[c]}${esc(t('color.' + c))} · ${n[c]}</span>
+      <span class="pop-list">${p.city.filter(x => dinfo(x).color === c).map(x => `<span>${esc(dName(x))} <b>${dinfo(x).cost}</b></span>`).join('')}</span></div>`).join('');
+  const missing = COLOR_ORDER.filter(c => !n[c]);
+  const extras = Object.entries(sc.extras).map(([k, v]) => `${t('d.' + k)} +${v}`);
+  const parts = [t('cit.score.districts', { n: sc.districts }), sc.colors && t('cit.score.colors', { n: sc.colors }),
+    sc.complete && t(g.firstComplete === pid ? 'cit.score.first' : 'cit.score.complete', { n: sc.complete }), ...extras].filter(Boolean);
+  return `<div class="pop-head">${mini(pid)}${p.chars.map(c => `<span class="tag ch-tag ch-${c}">${rankOf(c)} · ${esc(cName(c))}</span>`).join('')}</div>
+    <div class="pop-stats">${goldChip(pid)}${handChip(pid)}${sizeChip(pid)}</div>
+    <div class="pop-score"><b>${esc(t('cit.score.now', { n: sc.total }))}</b><span class="muted small-text">${esc(parts.join(' · '))}</span></div>
+    ${groups || `<p class="muted small-text">${esc(t('cit.emptyCity'))}</p>`}
+    ${p.size > p.city.length ? `<p class="small-text pop-note">${esc(t('cit.monumentTwo'))}</p>` : ''}
+    ${missing.length && p.city.length ? `<p class="pop-missing small-text">${esc(t('cit.pop.missing', { colors: missing.map(c => t('color.' + c + '.short')).join(', ') }))}</p>` : ''}`;
+}
+function renderPop() {
+  const el = popPid && $(`#opponents [data-pid="${popPid}"]`);
+  if (!el || !state || !state.game) { pop.classList.add('hidden'); popPid = null; return; }
+  pop.innerHTML = popHtml(popPid);
+  pop.classList.remove('hidden');
+  const r = el.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let x = r.right + 10, y = r.top;
+  if (x + w > innerWidth - 8) x = Math.max(8, r.left - w - 10);
+  if (x < 8) { x = Math.min(innerWidth - w - 8, Math.max(8, r.left)); y = r.bottom + 8; }
+  y = Math.max(8, Math.min(y, innerHeight - h - 8));
+  pop.style.left = `${x}px`;
+  pop.style.top = `${y}px`;
+}
+const showPop = pid => { if (popPid !== pid) { popPid = pid; renderPop(); } };
+const hidePop = () => { popPid = null; pop.classList.add('hidden'); };
+$('#opponents').addEventListener('pointerover', e => {
+  if (e.pointerType === 'touch') return;
+  const el = e.target.closest('.opp');
+  if (el) showPop(el.dataset.pid);
+});
+$('#opponents').addEventListener('pointerleave', hidePop);
+// touch: tap a player's header to open or close their card
+$('#opponents').addEventListener('click', e => {
+  const head = e.target.closest('.opp .city-head, .opp .opp-colors');
+  if (!head || e.target.closest('[data-open-player]')) return;
+  const pid = head.closest('.opp').dataset.pid;
+  if (popPid === pid) hidePop(); else { popPid = pid; renderPop(); }
+});
+$('#opponents').addEventListener('focusin', e => { const el = e.target.closest('.opp'); if (el) showPop(el.dataset.pid); });
+$('#opponents').addEventListener('focusout', hidePop);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#opponents, .city-pop')) hidePop(); });
+addEventListener('scroll', () => popPid && renderPop(), { passive: true });
 
 // ---------- what I can do now ----------
 function renderAction() {
@@ -410,7 +616,8 @@ function renderAction() {
   }
   const tr = g.turn;
   if (!tr) { panel.innerHTML = ''; return; }
-  const head = `<div class="ap-head"><p class="eyebrow">${esc(t('cit.turnOf', { char: cName(tr.char) }))}${tr.witch ? ` · ${esc(t('cit.asWitch'))}` : ''}</p>${timer(tr.endsAt)}</div>`;
+  const myGold = myTurn() ? `<span class="stat-chip gold" data-gold="${myId()}">${ICONS.coin}<b>${gp(myId()).gold}</b></span>` : '';
+  const head = `<div class="ap-head"><p class="eyebrow">${esc(t('cit.turnOf', { char: cName(tr.char) }))}${tr.witch ? ` · ${esc(t('cit.asWitch'))}` : ''}</p><span class="row">${myGold}${timer(tr.endsAt)}</span></div>`;
   if (!myTurn()) {
     panel.innerHTML = `${head}<div class="big">${esc(nameOf(tr.pid))}</div>
       <p class="muted small-text">${esc(t('cit.stageOther.' + tr.stage, { name: nameOf(tr.pid) }))}</p>
@@ -569,24 +776,6 @@ function startTargeting(title, can, pick) {
   toast(title, 'info');
 }
 
-// ---------- my hand ----------
-function renderHand() {
-  const g = G();
-  $('#handCard').classList.toggle('hidden', !iPlay());
-  if (!iPlay()) return;
-  const tr = g.turn;
-  const canBuild = myTurn() && tr.stage === 'main' && tr.limit > 0;
-  const gold = gp(myId()).gold;
-  $('#handNote').textContent = g.me.museum.length ? t('cit.museumCards', { n: g.me.museum.length }) : '';
-  $('#hand').innerHTML = g.me.hand.map(c => {
-    const cost = g.me.buildCosts[c];
-    const problem = g.me.buildProblems[c];
-    const ok = canBuild && !problem && (cost <= gold || buildAlternatives(c).length) && (tr.built < tr.limit || kindOf(c) === 'stables');
-    return `<button class="card-btn ${ok ? 'buildable' : ''} ${freshCards.has(c) ? 'fresh' : ''}" data-hand="${c}">${districtHtml(c, { size: 'md', cost })}</button>`;
-  }).join('') || `<p class="muted small-text">${esc(t('cit.emptyHand'))}</p>`;
-  for (const b of $$('#hand [data-hand]')) b.onclick = () => openCard(b.dataset.hand, { hand: true });
-}
-
 // other ways to pay for this card: the Framework, the Necropolis, the Thieves' Den
 function buildAlternatives(card) {
   const me = myId();
@@ -610,6 +799,7 @@ function openCard(card, { hand = false, owner = null } = {}) {
     const problem = g.me.buildProblems[card];
     const limitLeft = tr.built < tr.limit || kindOf(card) === 'stables';
     const gold = gp(myId()).gold;
+    acts.push(`<div class="build-gold">${ICONS.coin}<span>${esc(t('cit.build.youHave', { n: gold }))}</span>${!problem && limitLeft && cost <= gold ? `<b>→ ${esc(t('cit.build.after', { n: gold - cost }))}</b>` : ''}</div>`);
     if (problem) acts.push(`<p class="muted small-text">${esc(t(problem))}</p>`);
     else if (!limitLeft) acts.push(`<p class="muted small-text">${esc(t(tr.limit ? 'err.cit.buildLimit' : 'err.cit.noBuildNow'))}</p>`);
     else {
@@ -742,11 +932,35 @@ function fxOnState(prev, s) {
   }
   if (g.me && prev.game.me) for (const c of g.me.hand) if (!prev.game.me.hand.includes(c)) freshCards.add(c);
   if (freshCards.size && [...freshCards].some(c => g.order.some(p => g.players[p].city.includes(c)))) SFX.build();
+  const deltas = g.order.map(pid => [pid, g.players[pid].gold - (prev.game.players[pid] ? prev.game.players[pid].gold : g.players[pid].gold)]).filter(([, d]) => d);
+  if (deltas.length && !reducedMotion()) requestAnimationFrame(() => { for (const [pid, d] of deltas) goldPop(pid, d); });
   const mine = g.players[me], before = prev.game.players[me];
   if (mine && before && mine.gold > before.gold) SFX.coin();
   if (mine && before && mine.gold < before.gold && !freshCards.size) SFX.bad();
   if (s.phase === 'ended' && prev.phase !== 'ended') { SFX.win(); setTimeout(openResults, 900); }
   if (freshCards.size) setTimeout(() => { freshCards.clear(); }, 1600);
+}
+
+const fxLayer = document.createElement('div');
+fxLayer.className = 'fx-layer';
+fxLayer.setAttribute('aria-hidden', 'true');
+document.body.append(fxLayer);
+function goldPop(pid, d) {
+  for (const el of $$(`#game [data-gold="${pid}"]`)) {
+    const r = el.getBoundingClientRect();
+    if (!r.width) continue;
+    const pop = document.createElement('span');
+    pop.className = `gold-pop ${d > 0 ? 'up' : 'down'}`;
+    pop.textContent = `${d > 0 ? '+' : '−'}${Math.abs(d)}`;
+    pop.style.left = `${r.left + r.width / 2}px`;
+    pop.style.top = `${r.top}px`;
+    fxLayer.append(pop);
+    pop.addEventListener('animationend', () => pop.remove());
+    setTimeout(() => pop.remove(), 2000);
+    el.classList.remove('bump');
+    void el.offsetWidth;
+    el.classList.add('bump');
+  }
 }
 
 // the clocks tick between updates
@@ -782,7 +996,7 @@ const reactLayer = document.createElement('div');
 reactLayer.className = 'react-layer';
 document.body.append(reactLayer);
 socket.on('reaction', r => {
-  const anchor = $(`#cities [data-pid="${r.from}"] .avatar-wrap`);
+  const anchor = $(`#game [data-pid="${r.from}"] .avatar-wrap`);
   const rect = anchor ? anchor.getBoundingClientRect() : { left: innerWidth / 2, width: 0, top: innerHeight / 2 };
   const el = document.createElement('span');
   el.className = 'reaction';

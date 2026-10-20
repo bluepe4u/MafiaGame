@@ -9,6 +9,20 @@
   const cards = n => pl(n, 'карту', 'карты', 'карт');
 
   const en = {
+    'cit.incomeFrom': p => `Income: ${{ noble: 'yellow', religious: 'blue', trade: 'green', military: 'red' }[p.key]} districts`,
+    'cit.monumentTwo': 'The Monument counts as 2 districts toward a complete city',
+    'cit.citySizeMonument': 'City size: {n} cards, the Monument counts twice',
+    'cit.myCity': 'My city',
+    'cit.goldWord': 'gold',
+    'cit.hand.ok': 'affordable',
+    'cit.hand.short': '{n} more gold',
+    'cit.hand.dup': 'already built',
+    'cit.score.now': '≈ {n} pts',
+    'cit.pop.scoreHint': 'Points if the game ended now',
+    'cit.pop.missing': 'Missing: {colors}',
+    'cit.build.youHave': 'You have {n} gold',
+    'cit.build.after': '{n} left',
+    'color.noble.short': 'yellow', 'color.religious.short': 'blue', 'color.trade.short': 'green', 'color.military.short': 'red', 'color.unique.short': 'purple',
     'cit.eyebrow': 'The 2016 edition · 9 characters',
     'cit.heroA': 'Build',
     'cit.heroB': 'the finest city.',
@@ -269,6 +283,20 @@
   };
 
   const ru = {
+    'cit.incomeFrom': p => `Доход: ${{ noble: 'жёлтые', religious: 'синие', trade: 'зелёные', military: 'красные' }[p.key]} кварталы`,
+    'cit.monumentTwo': 'Монумент считается за 2 квартала для завершения города',
+    'cit.citySizeMonument': 'Размер города: {n} карт, Монумент считается за два',
+    'cit.myCity': 'Мой город',
+    'cit.goldWord': p => ruPlural(p.n, 'золотой', 'золотых', 'золотых'),
+    'cit.hand.ok': 'хватает',
+    'cit.hand.short': p => `не хватает ${gold(p.n)}`,
+    'cit.hand.dup': 'уже построен',
+    'cit.score.now': p => `≈ ${pl(p.n, 'очко', 'очка', 'очков')}`,
+    'cit.pop.scoreHint': 'Столько очков, если бы игра кончилась сейчас',
+    'cit.pop.missing': 'Не хватает цветов: {colors}',
+    'cit.build.youHave': p => `У вас ${gold(p.n)}`,
+    'cit.build.after': p => `останется ${p.n}`,
+    'color.noble.short': 'жёлтый', 'color.religious.short': 'синий', 'color.trade.short': 'зелёный', 'color.military.short': 'красный', 'color.unique.short': 'фиолетовый',
     'cit.eyebrow': 'Издание 2016 года · 9 героев',
     'cit.heroA': 'Построй',
     'cit.heroB': 'лучший город.',
