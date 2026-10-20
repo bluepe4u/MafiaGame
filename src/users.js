@@ -52,6 +52,10 @@ const emptySpyStats = () => ({
   games: 0, wins: 0, points: 0, rounds: 0, spyRounds: 0, spyWins: 0, guessed: 0, townWins: 0, caught: 0,
   streak: 0, bestStreak: 0, recent: [],
 });
+const emptyCitStats = () => ({
+  games: 0, wins: 0, placeSum: 0, scoreSum: 0, bestScore: 0, built: 0, destroyed: 0, lost: 0, stolen: 0, swaps: 0, kills: 0,
+  firstComplete: 0, completed: 0, rounds: 0, chars: {}, charWins: {}, streak: 0, bestStreak: 0, recent: [],
+});
 const emptyStats = () => ({
   games: 0, wins: 0, survived: 0, mafiaGames: 0, mafiaWins: 0, townGames: 0, townWins: 0, roles: {}, roleWins: {},
   // detailed numbers, recorded since the player page was added (detailedGames counts those games)
@@ -445,6 +449,29 @@ class UserStore {
     this.save();
   }
 
+  // One finished Citadels game: results from CitRoom.onGameEnd.
+  recordCitGame(results) {
+    for (const r of results) {
+      const u = this.users[r.userId];
+      if (!u) continue;
+      const s = (u.citStats = { ...emptyCitStats(), ...u.citStats });
+      s.games += 1;
+      s.wins += r.won ? 1 : 0;
+      s.placeSum += r.place;
+      s.scoreSum += r.score;
+      s.bestScore = Math.max(s.bestScore, r.score);
+      for (const k of ['built', 'destroyed', 'lost', 'stolen', 'swaps', 'kills', 'rounds']) s[k] += r[k] || 0;
+      s.firstComplete += r.firstComplete ? 1 : 0;
+      s.completed += r.completed ? 1 : 0;
+      for (const [c, n] of Object.entries(r.chars || {})) s.chars[c] = (s.chars[c] || 0) + n;
+      if (r.won) for (const c of r.lastChars || []) s.charWins[c] = (s.charWins[c] || 0) + 1;
+      s.streak = r.won ? s.streak + 1 : 0;
+      s.bestStreak = Math.max(s.bestStreak, s.streak);
+      s.recent = [{ at: r.at || Date.now(), won: r.won, place: r.place, players: r.players, score: r.score }, ...s.recent].slice(0, RECENT_KEEP);
+    }
+    this.save();
+  }
+
   // What other players (and the user) get to see.
   publicProfile(user) {
     if (!user) return null;
@@ -461,6 +488,7 @@ class UserStore {
       stats: { ...emptyStats(), ...user.stats },
       monoStats: { ...emptyMonoStats(), ...user.monoStats },
       spyStats: { ...emptySpyStats(), ...user.spyStats },
+      citStats: { ...emptyCitStats(), ...user.citStats },
       admin: !!user.admin,
       hasRecovery: !!user.recovery,
       inventory,

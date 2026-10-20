@@ -1,8 +1,8 @@
 'use strict';
 
-// Shared by both games (Mafia at /, Monopoly at /monopoly/): small helpers, the login,
-// avatars and cosmetics, sounds and turn alerts, one profile window (stats for both games,
-// wardrobe, account), the admin panel, gifts and the "back to my game" banner.
+// Shared by all the games (Mafia at /, Monopoly at /monopoly/, Spyfall at /spyfall/, Citadels at
+// /citadels/): small helpers, the login, avatars and cosmetics, sounds and turn alerts, one profile
+// window (stats for every game, wardrobe, account), the admin panel, gifts and the "back to my game" banner.
 // A page loads i18n.js, then this file, then its own script, which calls Site.init().
 
 const store = {
@@ -33,6 +33,7 @@ const COMMON_ICONS = {
   eyeOff: svgIcon('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/>'),
   list: svgIcon('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
   spy: svgIcon('<circle cx="7" cy="15" r="3.5"/><circle cx="17" cy="15" r="3.5"/><path d="M10.5 15h3M3 11l3.5-5h11L21 11"/>'),
+  castle: svgIcon('<path d="M4 21V11l3 2V8l3 2V5l2-2 2 2v5l3-2v5l3-2v10z"/><path d="M10 21v-4a2 2 0 0 1 4 0v4"/>'),
 };
 const ico = (name, cls = '') => `<span class="ui-ico ${cls}">${COMMON_ICONS[name]}</span>`;
 // drawn icons instead of emoji in the site's chrome (trophy buttons, the game switcher)
@@ -40,12 +41,12 @@ for (const el of document.querySelectorAll('.trophy')) el.outerHTML = ico('troph
 for (const a of document.querySelectorAll('#siteMenu a')) {
   const i = a.querySelector('.site-ico');
   const href = a.getAttribute('href');
-  if (i) i.outerHTML = ico(href.includes('monopoly') ? 'dice' : href.includes('spyfall') ? 'spy' : 'hat', 'site-ico');
+  if (i) i.outerHTML = ico(href.includes('monopoly') ? 'dice' : href.includes('spyfall') ? 'spy' : href.includes('citadels') ? 'castle' : 'hat', 'site-ico');
 }
 
 // The page's settings and hooks (filled in by Site.init)
 const Site = {
-  game: 'mafia', // or 'mono'
+  game: 'mafia', // or 'mono', 'spy', 'cit'
   socket: null,
   baseTitle: document.title,
   home: false,
@@ -58,7 +59,7 @@ const Site = {
   },
 };
 // the games: page, icon and name in one place
-const GAME_INFO = { mafia: { path: '/', icon: 'hat', name: 'site.mafia' }, mono: { path: '/monopoly/', icon: 'dice', name: 'site.monopoly' }, spy: { path: '/spyfall/', icon: 'spy', name: 'site.spyfall' } };
+const GAME_INFO = { mafia: { path: '/', icon: 'hat', name: 'site.mafia' }, mono: { path: '/monopoly/', icon: 'dice', name: 'site.monopoly' }, spy: { path: '/spyfall/', icon: 'spy', name: 'site.spyfall' }, cit: { path: '/citadels/', icon: 'castle', name: 'site.citadels' } };
 const gameInfoOf = game => GAME_INFO[game] || GAME_INFO.mafia;
 const gameTitle = game => t(gameInfoOf(game).name);
 const gameUrl = (game, code) => `${gameInfoOf(game).path}?room=${code}&join=1`;
@@ -352,7 +353,7 @@ addPasswordToggles();
 // ---------- rules reference ----------
 document.body.insertAdjacentHTML('beforeend', `<div id="rules" class="overlay hidden" role="dialog" aria-modal="true">
   <div class="sheet player-sheet"><div class="sheet-head"><h2 data-i18n="rules.title"></h2><button id="rulesClose" class="ghost small" data-i18n="ui.close"></button></div>
-  <div class="sheet-body"><div class="tabs" role="tablist"><button data-rules="mafia" data-i18n="site.mafia"></button><button data-rules="mono" data-i18n="site.monopoly"></button><button data-rules="spy" data-i18n="site.spyfall"></button></div>
+  <div class="sheet-body"><div class="tabs" role="tablist"><button data-rules="mafia" data-i18n="site.mafia"></button><button data-rules="mono" data-i18n="site.monopoly"></button><button data-rules="spy" data-i18n="site.spyfall"></button><button data-rules="cit" data-i18n="site.citadels"></button></div>
   <div id="rulesBody" class="rules-body"></div></div></div></div>`);
 let rulesTab = null;
 function openRules(game) {
@@ -576,11 +577,11 @@ function renderProfile() {
   if (!badgeRow) { $('#profileTop').insertAdjacentHTML('afterend', '<div id="profileBadges" class="badge-row"></div>'); badgeRow = $('#profileBadges'); }
   badgeRow.innerHTML = badges;
   badgeRow.classList.toggle('hidden', !badges);
-  const tabs = ['mafia', 'mono', 'spy', ...(self ? ['wardrobe', 'account'] : [])];
+  const tabs = ['mafia', 'mono', 'spy', 'cit', ...(self ? ['wardrobe', 'account'] : [])];
   if (!tabs.includes(profileTab)) profileTab = Site.game;
   $('#profileTabs').innerHTML = tabs.map(k => `<button class="${k === profileTab ? 'active' : ''}" data-ptab="${k}">${esc(t('profile.tab.' + k))}</button>`).join('');
   for (const b of $$('#profileTabs [data-ptab]')) b.onclick = () => { profileTab = b.dataset.ptab; renderProfile(); };
-  $('#profileBody').innerHTML = { mafia: mafiaStatsHtml, mono: monoStatsHtml, spy: spyStatsHtml, wardrobe: wardrobeHtml, account: accountHtml }[profileTab](u);
+  $('#profileBody').innerHTML = { mafia: mafiaStatsHtml, mono: monoStatsHtml, spy: spyStatsHtml, cit: citStatsHtml, wardrobe: wardrobeHtml, account: accountHtml }[profileTab](u);
   if (self) bindProfileControls();
 }
 
@@ -792,6 +793,47 @@ function spyStatsHtml(u) {
     </section>
     <section class="player-section"><h3>${esc(t('mono.player.recent'))}</h3>
       <div class="recent-games">${m.recent.map(r => `<span class="recent ${r.won ? 'won' : 'lost'}"><b>${r.won ? 'W' : 'L'}</b><span>${esc(t('spy.points', { n: r.points }))}</span></span>`).join('')}</div>
+    </section>`;
+}
+
+// Citadels playstyle: five axes from what happened in the games; each needs 3 games.
+function citStyle(c) {
+  const v = x => (c.games >= 3 ? Math.max(0, Math.min(1, x)) : null);
+  const per = x => x / Math.max(1, c.games);
+  return [
+    ['results', v(c.recent.length ? c.recent.reduce((s, r) => s + (r.players > 1 ? (r.players - r.place) / (r.players - 1) : 1), 0) / c.recent.length : 0)],
+    ['builder', v(per(c.built) / 9)],
+    ['finisher', v(per(c.firstComplete) * 1.5)],
+    ['schemer', v(per(c.stolen / 3 + c.kills + c.swaps + c.destroyed) / 3)],
+    ['score', v(per(c.scoreSum) / 35)],
+  ];
+}
+
+function citStatsHtml(u) {
+  const c = u.citStats || {};
+  if (!c.games) return `<p class="muted">${esc(t('player.noGames'))}</p>`;
+  const axes = citStyle(c);
+  const chars = Object.entries(c.chars).sort((a, b) => b[1] - a[1]);
+  const best = chars.filter(([, n]) => n >= 2).map(([k, n]) => [k, (c.charWins[k] || 0) / n]).sort((a, b) => b[1] - a[1])[0];
+  return `
+    <div class="stat-grid four">
+      ${statTile(c.games, t('player.games'))}${statTile(pctOf(c.wins, c.games) + '%', t('player.winRate'))}
+      ${statTile((c.placeSum / c.games).toFixed(1), t('cit.player.avgPlace'))}${statTile(c.bestScore, t('cit.player.bestScore'))}
+    </div>
+    <section class="player-section"><h3>${esc(t('cit.player.style'))}</h3>
+      <div class="radar-wrap">${radarSvg(axes, 'cit.axis.')}<ul class="radar-help">${axes.map(([k, v]) => `<li><b>${esc(t('cit.axis.' + k))}</b> — ${esc(t('cit.help.' + k))}${v === null ? ` <span class="need-more">${esc(t('player.needMore.games', { n: 3 - c.games }))}</span>` : ''}</li>`).join('')}</ul></div>
+    </section>
+    <section class="player-section"><h3>${esc(t('player.highlights'))}</h3>
+      <div class="stat-grid four">
+        ${statTile((c.scoreSum / c.games).toFixed(1), t('cit.player.avgScore'))}${statTile(c.built, t('cit.player.built'))}
+        ${statTile(c.firstComplete, t('cit.player.first'))}${statTile(c.stolen, t('cit.player.stolen'))}
+        ${statTile(c.destroyed, t('cit.player.destroyed'))}${statTile(c.swaps, t('cit.player.swaps'))}
+        ${statTile(c.bestStreak, t('player.bestStreak'))}${statTile(chars[0] ? esc(t('char.' + chars[0][0])) : '—', t('cit.player.favChar'))}
+      </div>
+      ${best ? `<div class="highlight-line"><span class="muted small-text">${esc(t('cit.player.bestChar'))}:</span> <span class="tag">${esc(t('char.' + best[0]))} · ${Math.round(best[1] * 100)}%</span></div>` : ''}
+    </section>
+    <section class="player-section"><h3>${esc(t('cit.player.recent'))}</h3>
+      <div class="recent-games">${c.recent.map(r => `<span class="recent ${r.won ? 'won' : 'lost'}"><b>${r.place}</b><span>${esc(t('cit.place', { n: r.place }))} / ${r.players}</span><span class="muted">${esc(t('cit.points', { n: r.score }))}</span></span>`).join('')}</div>
     </section>`;
 }
 
@@ -1336,6 +1378,12 @@ function gameHtml(g) {
       <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)}</span></div>
       <ol class="arch-standings">${ranked}</ol><ol class="arch-timeline">${rounds}</ol></div>`;
   }
+  if (g.game === 'cit') {
+    const ranked = g.players.map((p, i) => `<li><span class="board-rank">${['🥇', '🥈', '🥉'][i] || i + 1}</span><b>${esc(p.name)}</b><span class="spacer"></span><span>${esc(t('cit.points', { n: p.points }))}</span></li>`).join('');
+    return `<div class="arch-game"><div class="arch-head">${ico('castle')}<b>${esc(t('site.citadels'))}</b>${g.winner ? `<span class="tag town">${esc(t('archive.winner', { name: g.winner }))}</span>` : ''}
+      <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)} · ${esc(t('cit.rounds', { n: g.rounds }))}</span></div>
+      <ol class="arch-standings">${ranked}</ol></div>`;
+  }
   const rows = g.players.map(p => `<li><span class="board-rank">${['🥇', '🥈', '🥉'][p.place - 1] || p.place}</span><b>${esc(p.name)}</b><span class="spacer"></span>${p.bankrupt ? `<span class="tag mafia">${esc(t('mono.bankrupt'))}</span>` : `<span>${money(p.netWorth)}</span>`}</li>`).join('');
   return `<div class="arch-game"><div class="arch-head">${ico('dice')}<b>${esc(t('site.monopoly'))}</b>${g.winner ? `<span class="tag town">${esc(t('archive.winner', { name: g.winner }))}</span>` : ''}
     <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)} · ${esc(t('mono.sum.rounds', { n: g.rounds }))}</span></div>
@@ -1347,7 +1395,7 @@ function nightSummaryText(night) {
   for (const [ico_, label, value] of nightFacts(night)) lines.push(`${ico_} ${label}: ${value}`);
   for (const g of night.games) lines.push(g.game === 'mafia'
     ? `🎩 ${t('site.mafia')}: ${g.winner === 'mafia' ? t('archive.mafiaWon') : t('archive.townWon')}`
-    : `${g.game === 'spy' ? '🕵️' : '🎲'} ${gameTitle(g.game)}: ${t('archive.winner', { name: g.winner || '—' })}`);
+    : `${{ spy: '🕵️', cit: '🏰' }[g.game] || '🎲'} ${gameTitle(g.game)}: ${t('archive.winner', { name: g.winner || '—' })}`);
   return lines.join('\n');
 }
 

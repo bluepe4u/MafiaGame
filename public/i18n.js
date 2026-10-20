@@ -425,6 +425,25 @@ const DICT = {
     'auth.hint': 'Friends only, by invite: pick any username and password, no email needed. Your photo and decency status stay with your account.',
     'auth.invite': 'Invite code',
     'site.spyfall': 'Find the spy',
+    'site.citadels': 'Citadels',
+    'profile.tab.cit': 'Citadels',
+    'char.witch': 'Witch', 'char.assassin': 'Assassin', 'char.thief': 'Thief', 'char.magician': 'Magician', 'char.king': 'King',
+    'char.abbot': 'Abbot', 'char.bishop': 'Bishop', 'char.merchant': 'Merchant', 'char.architect': 'Architect',
+    'char.diplomat': 'Diplomat', 'char.warlord': 'Warlord', 'char.queen': 'Queen',
+    'cit.player.style': 'Playstyle',
+    'cit.axis.results': 'Results', 'cit.axis.builder': 'Builder', 'cit.axis.finisher': 'Finisher', 'cit.axis.schemer': 'Schemer', 'cit.axis.score': 'Points',
+    'cit.help.results': 'how high you finish (1st = 100%)',
+    'cit.help.builder': 'districts built per game',
+    'cit.help.finisher': 'how often you complete your city first',
+    'cit.help.schemer': 'gold stolen, kills, swaps and districts destroyed',
+    'cit.help.score': 'points per game (35 = 100%)',
+    'cit.player.avgPlace': 'Average place', 'cit.player.bestScore': 'Best score', 'cit.player.avgScore': 'Average score',
+    'cit.player.built': 'Districts built', 'cit.player.first': 'First complete city', 'cit.player.stolen': 'Gold stolen',
+    'cit.player.destroyed': 'Districts destroyed', 'cit.player.swaps': 'Districts swapped', 'cit.player.favChar': 'Favourite character',
+    'cit.player.bestChar': 'Best character', 'cit.player.recent': 'Recent games',
+    'cit.place': '{n} place',
+    'cit.points': p => `${p.n} pt${p.n === 1 ? '' : 's'}`,
+    'cit.rounds': p => `${p.n} round${p.n === 1 ? '' : 's'}`,
     'profile.tab.spy': 'Spy',
     'spy.eyebrow': 'Questions and suspicion',
     'spy.heroA': 'Everyone knows where they are.',
@@ -522,6 +541,36 @@ const DICT = {
     'err.spy.accusedAlready': 'You\'ve already accused someone this round',
     'err.spy.cantVoteOnYourself': 'You can\'t vote on your own accusation',
     'err.spy.notTheSpy': 'Only the spy can do that',
+    'rules.cit': `## In short
+Everyone builds a city of district cards. At the start of each round you secretly choose a new character: it helps you get gold or cards, or gets in the others’ way. The city with the most points wins. 3–8 players.
+
+## Setup
+Everyone gets 4 district cards and 2 gold. A random player gets the crown.
+
+## A round
+- The crown’s holder shuffles the characters: one goes face down, a few face up (5 players — 2, 6 — 1, 7–8 — 0; never the King).
+- The crown’s holder secretly takes one and passes the rest to the left, and so on. With 8 players the last one also sees the face-down card.
+- The characters are called by number, 1 to 9. Whoever has it reveals it and plays their turn; a character nobody has is skipped.
+
+## Your turn
+- First, gather resources: take 2 gold, or draw 2 district cards, keep one and put the other under the deck.
+- Then you may build one district: pay its cost and put it in your city. No two districts with the same name.
+- Use your character’s ability at the moment it says, or at any time in your turn. Gold for coloured districts: once a turn, before or after building.
+
+## Characters
+- 1 Witch: gather, then bewitch a character and stop. When it’s called, that player only gathers, and you play the rest of its turn with your own cards, gold and city.
+- 2 Thief: name a character (not 1, not the bewitched one); when it’s called, take all its gold.
+- 3 Magician: swap your whole hand with a player, or put any cards under the deck and draw as many.
+- 4 King: take the crown; 1 gold per yellow district. Even a bewitched King gets the crown.
+- 5 Abbot: a gold or a card per blue district; if you’re not the richest, the richest gives you 1 gold.
+- 6 Merchant: 1 extra gold, and 1 per green district.
+- 7 Architect: 2 extra cards; build up to 3 districts.
+- 8 Diplomat: 1 gold per red district; you may swap a district of yours for another player’s, paying the difference. Not with a completed city.
+- 9 Queen: 3 gold if you sit next to the King’s player. 5+ players only.
+- The lobby can swap in the classic Assassin (1), Bishop (5) and Warlord (8).
+
+## The end
+When a city reaches 7 districts, the round is finished. Score: the cost of all your districts, +3 for all five colours, +4 for the first completed city (+2 for the others), plus the purple districts’ bonuses. On a tie, the higher character in the last round wins.`,
     'rules.spy': `## The goal
 Everyone except the spy gets the same location and a role there. The town wants to unmask the spy; the spy wants to work out the location — or simply not be caught.
 
@@ -1513,6 +1562,25 @@ Space — roll / end turn / pay. B — buy. A — auction. P — pay bail. 1–3
     'auth.hint': 'Только для своих, по приглашениям: любое имя и пароль, без почты. Фото и статус порядочности сохраняются в аккаунте.',
     'auth.invite': 'Код приглашения',
     'site.spyfall': 'Шпион',
+    'site.citadels': 'Цитадели',
+    'profile.tab.cit': 'Цитадели',
+    'char.witch': 'Ведьма', 'char.assassin': 'Убийца', 'char.thief': 'Вор', 'char.magician': 'Чародей', 'char.king': 'Король',
+    'char.abbot': 'Аббат', 'char.bishop': 'Епископ', 'char.merchant': 'Купец', 'char.architect': 'Зодчий',
+    'char.diplomat': 'Дипломат', 'char.warlord': 'Кондотьер', 'char.queen': 'Королева',
+    'cit.player.style': 'Стиль игры',
+    'cit.axis.results': 'Результат', 'cit.axis.builder': 'Строитель', 'cit.axis.finisher': 'Финишёр', 'cit.axis.schemer': 'Интриган', 'cit.axis.score': 'Очки',
+    'cit.help.results': 'насколько высоко финишируете (1-е место = 100%)',
+    'cit.help.builder': 'кварталов построено за игру',
+    'cit.help.finisher': 'как часто первым достраиваете город',
+    'cit.help.schemer': 'украденное золото, убийства, обмены и снесённые кварталы',
+    'cit.help.score': 'очков за игру (35 = 100%)',
+    'cit.player.avgPlace': 'Среднее место', 'cit.player.bestScore': 'Лучший счёт', 'cit.player.avgScore': 'Средний счёт',
+    'cit.player.built': 'Построено кварталов', 'cit.player.first': 'Первым достроил город', 'cit.player.stolen': 'Украдено золота',
+    'cit.player.destroyed': 'Снесено кварталов', 'cit.player.swaps': 'Обменов кварталами', 'cit.player.favChar': 'Любимый герой',
+    'cit.player.bestChar': 'Лучший герой', 'cit.player.recent': 'Последние игры',
+    'cit.place': '{n}-е место',
+    'cit.points': p => `${p.n} ${ruPlural(p.n, 'очко', 'очка', 'очков')}`,
+    'cit.rounds': p => `${p.n} ${ruPlural(p.n, 'раунд', 'раунда', 'раундов')}`,
     'profile.tab.spy': 'Шпион',
     'spy.eyebrow': 'Вопросы и подозрения',
     'spy.heroA': 'Все знают, где они.',
@@ -1610,6 +1678,36 @@ Space — roll / end turn / pay. B — buy. A — auction. P — pay bail. 1–3
     'err.spy.accusedAlready': 'Вы уже обвиняли в этом раунде',
     'err.spy.cantVoteOnYourself': 'Нельзя голосовать по обвинению против себя',
     'err.spy.notTheSpy': 'Это может только шпион',
+    'rules.cit': `## В двух словах
+Каждый строит свой город из карт кварталов. В начале каждого раунда вы тайно выбираете нового героя. Он помогает добывать золото, карты или мешать соперникам. Побеждает город с наибольшим числом очков. 3–8 игроков.
+
+## Подготовка
+Каждому — 4 карты кварталов и 2 золотых. Корону получает случайный игрок.
+
+## Как проходит раунд
+- Игрок с короной перемешивает героев и откладывает одну карту рубашкой вверх. Ещё несколько откладываются открыто: при 5 игроках — 2, при 6 — 1, при 7–8 — 0. Короля нельзя отложить открыто.
+- Игрок с короной тайно берёт одного героя и передаёт остальных соседу слева. Так каждый выбирает по одному. При 8 игроках последний смотрит и последнюю переданную карту, и отложенную рубашкой вверх.
+- Героев вызывают по номерам: 1, 2, 3 … 9. Названный герой открывается и ходит. Если его никто не выбрал, переходят к следующему номеру.
+
+## Что делать в свой ход
+- Сначала обязательно получите ресурсы: либо возьмите 2 золотых, либо возьмите 2 карты кварталов, оставьте одну, а вторую положите под колоду.
+- Затем можно построить 1 квартал: положите карту с руки в свой город и заплатите её цену. Два квартала с одинаковым названием строить нельзя.
+- Свойство героя применяйте в указанный на карте момент, иначе — в любой момент своего хода. Золото за цветные кварталы — один раз за ход, до строительства или после.
+
+## Герои
+- 1 Ведьма: возьмите ресурсы и назовите героя, которого заколдовали; пока не стройте. Когда он откроется, он только возьмёт ресурсы, а вы продолжите ход с его свойствами, своими картами, золотом и городом.
+- 2 Вор: назовите героя (не № 1 и не заколдованного); когда он откроется, заберите всё его золото.
+- 3 Чародей: обменяйтесь всей рукой с любым игроком или сбросьте сколько угодно карт под колоду и возьмите столько же.
+- 4 Король: возьмите корону; по 1 золотому за каждый жёлтый квартал. Даже заколдованный Король получает корону.
+- 5 Аббат: за каждый синий квартал — карта или золото на выбор; если вы не самый богатый, один из самых богатых даёт вам 1 золотой.
+- 6 Купец: 1 дополнительное золотое и по 1 за каждый зелёный квартал.
+- 7 Зодчий: 2 дополнительные карты; можно построить до 3 кварталов.
+- 8 Дипломат: по 1 золотому за каждый красный квартал; можно обменять свой квартал на чужой, доплатив разницу владельцу. Из завершённого города забирать нельзя.
+- 9 Королева: 3 золотых, если вы сидите рядом с игроком, у которого Король. Только от 5 игроков.
+- В лобби можно заменить героев на классических: Убийца (1), Епископ (5), Кондотьер (8).
+
+## Как закончить и посчитать очки
+Как только у кого-то построено 7 кварталов, доигрывается текущий раунд. Каждый складывает стоимость всех своих кварталов, +3 за все пять цветов, +4 первому, кто завершил город (остальным завершившим +2), и бонусы фиолетовых карт. При равенстве побеждает тот, кто в последнем раунде открыл героя с более высоким номером.`,
     'rules.spy': `## Цель
 У всех, кроме шпиона, одна и та же локация и роль в ней. Мирные хотят разоблачить шпиона, шпион — догадаться, где все находятся, или просто не попасться.
 

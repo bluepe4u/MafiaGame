@@ -110,6 +110,32 @@ points over several rounds (spy 2/4, town 1, the successful accuser 2). Your car
 you hold it. Same accounts, tables, voice chat, stats (profile tab), archive and admin tools as the
 other games; `src/spyfall/` holds the locations, the engine (no I/O, tested) and its namespace.
 
+## Цитадели (Citadels)
+
+`/citadels/` — 3–8 players, the 2016 edition with the beginner set of nine characters from the
+house rules sheet: Witch, Thief, Magician, King, Abbot, Merchant, Architect, Diplomat, Queen.
+
+- The draft goes round from the crown, with face-up discards by player count (5 → 2, 6 → 1,
+  7–8 → 0, never the King); the last chooser also sees the face-down card. With 3 players everyone
+  plays two characters a round; the Queen needs 5+.
+- A turn: gather first (2 gold, or draw 2 and keep 1), then the ability, income once (before or
+  after building; added at the end of the turn if forgotten) and one build (Architect: three).
+  The bewitched character only gathers, then the Witch plays its turn with her own cards, gold and
+  city; a bewitched or killed King still gets the crown. The game ends after the round in which a
+  city reaches 7 districts; ties go to the higher character of the last round.
+- 54 ordinary districts and 29 unique (purple) ones with their 2016 abilities, 14 of them shuffled
+  into each game by default.
+- Lobby settings (remembered by a table like the other games' house rules): the classic Assassin,
+  Bishop and Warlord instead of the Witch, Abbot and Diplomat, no 9th character, districts to end,
+  starting gold and cards, gold and cards when gathering, the end-of-game bonuses, which unique
+  districts can come up and how many, the King among the face-up discards, turn and draft timers
+  (idle turns take gold and end), voice chat. A player who leaves keeps their city and the game
+  plays their turns.
+- Same accounts, tables, voice chat, stats (profile tab), leaderboard, archive and admin tools as
+  the other games; `src/citadels/` holds the cards, the engine (no I/O, tested in
+  `test/citadels.test.js`, including random games played to the end) and its namespace; rooms are
+  saved to `citadels-rooms.json`.
+
 ## Rules as implemented
 
 **Roles:** Citizen, Mafia, Cop, Doctor, Hooker (Cop/Doctor/Hooker are on the town side).
@@ -141,9 +167,9 @@ Default counts by player count (host can override in the lobby):
 
 - `src/game.js` — game rules and state (no I/O), unit-tested in `test/`
 - `server.js` — Express + Socket.IO; rooms are kept in memory
-- `public/` — static client (vanilla JS, no build step); `public/common.js` holds what both games
-  share: login, avatars and cosmetics, sounds and turn alerts, the profile window (stats for both
-  games, wardrobe, account), the admin panel (who's online, rooms, decency, gifts, renames,
+- `public/` — static client (vanilla JS, no build step); `public/common.js` holds what all the games
+  share: login, avatars and cosmetics, sounds and turn alerts, the profile window (stats for every
+  game, wardrobe, account), the admin panel (who's online, rooms, decency, gifts, renames,
   password resets), gifts and the "back to my game" banner
 - `public/i18n.js` — English and Russian translations. The server never sends display text: log entries and errors are `{ key, params }`, rendered in each player's chosen language (auto-detected from the browser, switchable in the top bar). To add a language, add a dictionary to `DICT` and an entry to `LANGS`.
 

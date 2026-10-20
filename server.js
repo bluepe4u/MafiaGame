@@ -11,6 +11,7 @@ const { UserStore } = require('./src/users');
 const { ITEMS } = require('./src/items');
 const { attachMonopoly } = require('./src/monopoly/server');
 const { attachSpyfall } = require('./src/spyfall/server');
+const { attachCitadels } = require('./src/citadels/server');
 const { limitSocket } = require('./src/ratelimit');
 const { TableStore } = require('./src/tables');
 const { Archive } = require('./src/archive');
@@ -131,10 +132,10 @@ app.post('/api/equip', api(req => {
   return { user: users.publicProfile(user) };
 }));
 app.post('/api/gifts/seen', api(req => { users.giftsSeen(currentUser(req)); return {}; }));
-// rooms this account is still in, in either game: the "back to my game" button
+// rooms this account is still in, in any game: the "back to my game" button
 app.get('/api/active', api(req => {
   const user = currentUser(req);
-  const mine = [...rooms.values()].filter(r => r.byUser(user.id)).map(roomSummary).concat(mono.userRooms(user.id), spy.userRooms(user.id));
+  const mine = [...rooms.values()].filter(r => r.byUser(user.id)).map(roomSummary).concat(mono.userRooms(user.id), spy.userRooms(user.id), cit.userRooms(user.id));
   return { rooms: mine.filter(r => r.phase !== 'ended') };
 }));
 
@@ -182,6 +183,7 @@ app.post('/api/admin/features', api(req => {
   }
   mono.applyFeatures(f);
   spy.applyFeatures(f);
+  cit.applyFeatures(f);
   return { features: f };
 }));
 
@@ -217,7 +219,7 @@ app.post('/api/admin/resetPassword', api(req => {
   for (const sock of allSockets()) if (sock.data.userId === u.id) sock.emit('loggedOut');
   return { password, user: users.adminView(u) };
 }));
-// who's online right now (in either game) and every room on the server
+// who's online right now (in any game) and every room on the server
 app.get('/api/admin/live', api(req => {
   adminUser(req);
   const online = {};
@@ -225,18 +227,20 @@ app.get('/api/admin/live', api(req => {
     const u = users.users[sock.data.userId];
     if (!u) continue;
     const o = (online[u.id] ||= { id: u.id, username: u.username, avatar: u.avatar ? `/avatars/${u.avatar}` : null, where: [] });
-    const where = sock.data.roomCode ? `${sock.nsp.name === '/monopoly' ? 'mono' : 'mafia'}:${sock.data.roomCode}` : (sock.nsp.name === '/monopoly' ? 'mono' : 'mafia');
+    const game = { '/monopoly': 'mono', '/spyfall': 'spy', '/citadels': 'cit' }[sock.nsp.name] || 'mafia';
+    const where = sock.data.roomCode ? `${game}:${sock.data.roomCode}` : game;
     if (!o.where.includes(where)) o.where.push(where);
   }
   return {
     online: Object.values(online).sort((a, b) => a.username.localeCompare(b.username)),
-    rooms: [...rooms.values()].map(roomSummary).concat(mono.list(), spy.list()).sort((a, b) => b.lastActivity - a.lastActivity),
+    rooms: [...rooms.values()].map(roomSummary).concat(mono.list(), spy.list(), cit.list()).sort((a, b) => b.lastActivity - a.lastActivity),
   };
 }));
 app.post('/api/admin/endRoom', api(req => {
   adminUser(req);
   const code = String(req.body.code || '');
-  if (req.body.game === 'mono' || req.body.game === 'spy') { if (!(req.body.game === 'mono' ? mono : spy).end(code)) throw new GameError('err.roomNotFound'); return {}; }
+  const other = { mono, spy, cit }[req.body.game];
+  if (other) { if (!other.end(code)) throw new GameError('err.roomNotFound'); return {}; }
   const room = rooms.get(code);
   if (!room) throw new GameError('err.roomNotFound');
   for (const s of io.sockets.adapter.rooms.get(code) || []) {
@@ -271,8 +275,9 @@ app.post('/api/avatar', api(req => {
 }));
 
 // ---------- tables: a permanent space for a group, with a game picker ----------
-const GAMES = ['mafia', 'mono', 'spy'];
-const gameInfo = (game, code) => (game === 'mono' ? mono.info(code) : game === 'spy' ? spy.info(code) : rooms.has(code) ? roomSummary(rooms.get(code)) : null);
+const GAMES = ['mafia', 'mono', 'spy', 'cit'];
+const otherGame = game => ({ mono, spy, cit })[game];
+const gameInfo = (game, code) => (otherGame(game) ? otherGame(game).info(code) : rooms.has(code) ? roomSummary(rooms.get(code)) : null);
 function tableView(table, user) {
   const online = new Set(allSockets().map(s => s.data.userId));
   const current = table.current && gameInfo(table.current.game, table.current.code);
@@ -315,8 +320,7 @@ app.post('/api/tables/start', api(req => {
   if (!tableView(table, user).canStart) throw new GameError('err.tableBusy');
   const saved = tables.settingsFor(table.id, game);
   let code;
-  if (game === 'mono') code = mono.create(table.id, saved);
-  else if (game === 'spy') code = spy.create(table.id, saved);
+  if (otherGame(game)) code = otherGame(game).create(table.id, saved);
   else {
     const room = createRoom();
     room.tableId = table.id;
@@ -435,7 +439,7 @@ app.post('/api/admin/badge', api(req => {
 app.get('/qr.svg', async (req, res) => {
   const code = String(req.query.room || '').toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) return res.status(400).end();
-  const page = req.query.game === 'mono' ? '/monopoly/' : req.query.game === 'spy' ? '/spyfall/' : '/';
+  const page = { mono: '/monopoly/', spy: '/spyfall/', cit: '/citadels/' }[req.query.game] || '/';
   const svg = await QRCode.toString(`${req.protocol}://${req.get('host')}${page}?room=${code}`, { type: 'svg', margin: 1 });
   res.type('image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(svg);
 });
@@ -446,20 +450,25 @@ const io = new Server(server);
 const rooms = new Map(); // code -> Room
 // Monopoly: its own namespace and rooms, same accounts; room codes are unique across both games
 const mono = attachMonopoly({
-  io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) || spy.has(code),
+  io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) || spy.has(code) || cit.has(code),
   onArchive: record => archive.add(record),
   onStart: room => room.tableId && tables.saveSettings(room.tableId, 'mono', room.settings),
 });
 
 const voiceHub = createVoiceHub(io.of('/'));
 const voiceAllowed = room => users.features.voice && room.settings.voice !== false;
-// Spyfall: its own namespace and rooms too; codes are unique across all three games
+// Spyfall and Citadels: their own namespaces and rooms too; codes are unique across all the games
 const spy = attachSpyfall({
-  io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) || mono.has(code),
+  io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) || mono.has(code) || cit.has(code),
   onArchive: record => archive.add(record),
   onStart: room => room.tableId && tables.saveSettings(room.tableId, 'spy', room.settings),
 });
-const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets(), ...spy.sockets()];
+const cit = attachCitadels({
+  io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) || mono.has(code) || spy.has(code),
+  onArchive: record => archive.add(record),
+  onStart: room => room.tableId && tables.saveSettings(room.tableId, 'cit', room.settings),
+});
+const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets(), ...spy.sockets(), ...cit.sockets()];
 const roomSummary = room => ({
   game: 'mafia', code: room.code, phase: room.phase, lastActivity: room.lastActivity,
   players: room.players.map(p => ({ name: p.name, connected: p.connected })), spectators: room.spectators.length,
@@ -470,7 +479,7 @@ function newCode() {
   let code;
   do {
     code = Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
-  } while (rooms.has(code) || mono.has(code) || spy.has(code));
+  } while (rooms.has(code) || mono.has(code) || spy.has(code) || cit.has(code));
   return code;
 }
 
@@ -479,6 +488,7 @@ function refreshUser(userId) {
   for (const room of rooms.values()) if (room.byUser(userId)) broadcast(room);
   mono.refreshUser(userId);
   spy.refreshUser(userId);
+  cit.refreshUser(userId);
 }
 
 const roomOptions = () => ({
@@ -702,6 +712,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     saveNow();
     mono.shutdown();
     spy.shutdown();
+    cit.shutdown();
     users.saveNow();
     tables.saveNow();
     archive.saveNow();

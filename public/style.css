@@ -965,7 +965,7 @@ button.brand:hover:not(:disabled) { background: var(--surface-2); border: 0; }
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, transparent), var(--surface-2)); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
   animation: msg-pop .35s ease both; }
 .active-game:hover { border-color: var(--accent); }
-.active-game.g-mono { --accent: #22c55e; } .active-game.g-mafia { --accent: #e5484d; }
+.active-game.g-mono { --accent: #22c55e; } .active-game.g-mafia { --accent: #e5484d; } .active-game.g-cit { --accent: #d4a24c; }
 .ag-ico { font-size: 1.5rem; }
 .ag-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .ag-text .small-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1024,7 +1024,7 @@ button.brand:hover:not(:disabled) { background: var(--surface-2); border: 0; }
 .invite-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .invite-form .field { flex: 1; min-width: 140px; }
 .invite-row.used { opacity: .55; }
-.tc-now.g-mono { --accent: #22c55e; } .tc-now.g-mafia { --accent: #e5484d; }
+.tc-now.g-mono { --accent: #22c55e; } .tc-now.g-mafia { --accent: #e5484d; } .tc-now.g-cit { --accent: #d4a24c; }
 .back-home { align-self: flex-start; margin-bottom: 12px; }
 #lobby { display: flex; flex-direction: column; } #lobby.hidden { display: none; }
 
