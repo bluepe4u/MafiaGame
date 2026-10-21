@@ -57,12 +57,18 @@ async function createKv(url = process.env.REDIS_URL) {
   if (!url) return new MemoryKv();
   const { createClient } = require('redis');
   const client = createClient({ url, socket: { reconnectStrategy: n => Math.min(n * 200, 5000) } });
-  client.on('error', e => console.error('Redis:', e.message));
+  let errors = 0;
+  client.on('error', e => { if (errors++ < 3 || errors % 100 === 0) console.error('Redis:', e.message); });
+  // a Redis that's down at start must not keep the site from starting: wait a few seconds at most
+  let timer;
   try {
-    await client.connect();
+    await Promise.race([client.connect(), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timed out')), 3000); })]);
+    clearTimeout(timer);
     console.log('Redis connected');
     return new RedisKv(client);
   } catch (e) {
+    clearTimeout(timer);
+    client.disconnect().catch(() => {});
     console.error(`Redis at ${url} is not reachable (${e.message}): using memory`);
     return new MemoryKv();
   }

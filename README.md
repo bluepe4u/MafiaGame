@@ -52,6 +52,16 @@ daily-salted hash and IPs are never stored.
 
 Old game addresses (`/monopoly/`, `/citadels/`, `/spyfall/`) redirect to the new ones.
 
+**Blog and search:** articles live at `/blog/` (admin panel → Blog: Markdown, a language, a translation
+key that links the English and Russian versions, the game the article leads to, pictures). Pages are
+plain server-rendered HTML with canonical and hreflang links, Open Graph and BlogPosting data, and an
+RSS feed at `/blog/rss.xml`. `/sitemap.xml` and `/llms.txt` (a summary for AI assistants) are built from
+the pages and the published articles. Articles in `content/blog/*.md` (front matter + Markdown) are
+added once on start and then edited in the admin panel like any other. Set `INDEXNOW_KEY` (any 8–128
+letters/digits) in `/etc/mafia.env` to have Bing, Yandex and others notified the moment an article is
+published. To see search traffic, verify the domain in Google Search Console and Yandex Webmaster
+(a DNS TXT record) and submit `https://bluepeau.club/sitemap.xml` there.
+
 **Fonts** are served from the site itself (`public/fonts`, SIL Open Font License), each with Latin
 and Cyrillic: Geist and Geist Mono for text, Oranienbaum for headings (Cormorant for their italics),
 Rubik Wet Paint for the Halloween theme. Nothing loads from Google.

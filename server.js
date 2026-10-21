@@ -25,6 +25,7 @@ const { Stats } = require('./src/stats');
 const { roomStore } = require('./src/db');
 const { createKv, MemoryKv, limit } = require('./src/kv');
 const { createMailer } = require('./src/mail');
+const blogLib = require('./src/blog');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -39,6 +40,8 @@ const archive = new Archive(DATA_DIR);
 archive.prune(Object.keys(users.users));
 const pledges = new Pledges(DATA_DIR);
 const stats = new Stats(DATA_DIR);
+const blog = new blogLib.BlogStore(DATA_DIR);
+blog.seedFrom(path.join(__dirname, 'content', 'blog'));
 // rate limits and one-time email links: Redis when REDIS_URL is set (connected at start), else memory
 let kv = new MemoryKv();
 const mailer = createMailer();
@@ -82,7 +85,7 @@ app.use((req, res, next) => {
 // visit counts for the pages people open (see src/stats.js: no cookies, no tracking script)
 const PAGES = new Set(['/', '/poker/', '/tycoon/', '/spy/', '/kingdoms/', '/terms/', '/privacy/', '/poker/fair.html']);
 app.use((req, res, next) => {
-  if (req.method === 'GET' && PAGES.has(req.path)) {
+  if (req.method === 'GET' && (PAGES.has(req.path) || /^\/blog\/([\w-]+\/)?$/.test(req.path))) {
     stats.view({ page: req.path, ip: req.ip, ua: req.get('user-agent'), referrer: req.get('referer'), host: req.hostname });
   }
   next();
@@ -133,6 +136,13 @@ const currentUser = req => {
   return user;
 };
 
+// a picture for a blog article (bigger than the usual request limit)
+app.post('/api/admin/blog/image', express.json({ limit: '6mb' }), api(req => {
+  adminUser(req);
+  const m = /^data:image\/[a-z]+;base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body.image || ''));
+  if (!m) throw new GameError('err.avatarType');
+  return { url: blog.addImage(Buffer.from(m[1], 'base64')) };
+}));
 app.use('/api', express.json({ limit: '2mb' }));
 // script errors from the pages (common.js reports them), a few per minute per address
 const errorBudget = new Map(); // ip -> { n, until }
@@ -591,6 +601,77 @@ app.post('/api/admin/badge', api(req => {
 }));
 
 // QR code of the invite link, for players in the same room to scan
+// ---------- the blog, the sitemap and what AI assistants read ----------
+const html = (res, body, status = 200) => res.status(status).type('html').set('Cache-Control', 'public, max-age=300').send(body);
+const uiLang = req => (/^ru\b/i.test(req.get('accept-language') || '') ? 'ru' : 'en');
+// exact paths (Express would treat /blog and /blog/ as the same route)
+app.get(/^\/blog$/, (_req, res) => res.redirect(301, '/blog/'));
+app.get(/^\/blog\/$/, (req, res) => html(res, blogLib.renderIndex(blog, siteUrl(req), uiLang(req))));
+app.get('/blog/rss.xml', (req, res) => res.type('application/rss+xml').set('Cache-Control', 'public, max-age=600').send(blogLib.rss(blog, siteUrl(req))));
+app.use('/blog/img', express.static(blog.imageDir, { maxAge: '30d', immutable: true, index: false }));
+app.get(/^\/blog\/([\w-]+)$/, (req, res) => res.redirect(301, `/blog/${req.params[0]}/`));
+app.get(/^\/blog\/([\w-]+)\/$/, (req, res) => {
+  const post = blog.bySlug(req.params[0]);
+  if (!post || post.status !== 'published') return html(res, blogLib.renderIndex(blog, siteUrl(req), uiLang(req)).replace('<h1>', '<p class="neg">404</p><h1>'), 404);
+  html(res, blogLib.renderPost(blog, post, siteUrl(req)));
+});
+const SITEMAP_PAGES = [['/', 1.0, 'weekly'], ['/poker/', 0.9, 'weekly'], ['/spy/', 0.8, 'monthly'], ['/tycoon/', 0.8, 'monthly'], ['/kingdoms/', 0.8, 'monthly'],
+  ['/blog/', 0.8, 'daily'], ['/poker/fair.html', 0.4, 'yearly'], ['/terms/', 0.2, 'yearly'], ['/privacy/', 0.2, 'yearly']];
+app.get('/sitemap.xml', (req, res) => {
+  const base = siteUrl(req);
+  const urls = [
+    ...SITEMAP_PAGES.map(([p, prio, freq]) => `  <url><loc>${base}${p}</loc><changefreq>${freq}</changefreq><priority>${prio}</priority></url>`),
+    ...blog.published().map(p => `  <url><loc>${base}/blog/${p.slug}/</loc><lastmod>${new Date(p.updatedAt).toISOString().slice(0, 10)}</lastmod><priority>0.7</priority></url>`),
+  ];
+  res.type('application/xml').set('Cache-Control', 'public, max-age=600')
+    .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`);
+});
+// llms.txt: a plain summary of the site for AI assistants (https://llmstxt.org)
+app.get('/llms.txt', (req, res) => {
+  const base = siteUrl(req);
+  const posts = blog.published().map(p => `- [${p.title}](${base}/blog/${p.slug}/): ${p.description}`).join('\n');
+  res.type('text/plain; charset=utf-8').set('Cache-Control', 'public, max-age=600').send(`# bluepeau.club
+
+> Free browser games to play with friends: Mafia (Werewolf), Texas hold'em poker, Tycoon (a property trading game), Find the spy and Kingdoms (a city-building card game with secret roles). No downloads, one link to invite everyone, voice chat built in, English and Russian.
+
+## Games
+
+- [Mafia](${base}/): 4–12 players, the site is the narrator: secret roles, nights and votes.
+- [Poker](${base}/poker/): private no-limit Texas hold'em for 2–9 players, free site chips, provably fair decks.
+- [Tycoon](${base}/tycoon/): roll, buy streets, build and trade, 2–8 players.
+- [Find the spy](${base}/spy/): everyone knows the location except the spy, 3–12 players.
+- [Kingdoms](${base}/kingdoms/): secret characters and city building, 3–8 players.
+
+## Details
+
+- [Fair deal check](${base}/poker/fair.html): how every poker deck can be verified after a session.
+- [Terms](${base}/terms/) · [Privacy](${base}/privacy/)
+- Source code: https://github.com/bluepe4u/MafiaGame
+${posts ? `\n## Articles\n\n${posts}\n` : ''}`);
+});
+// IndexNow (Bing, Yandex and others learn about a new article at once): on when INDEXNOW_KEY is set
+const INDEXNOW_KEY = /^[\w-]{8,128}$/.test(process.env.INDEXNOW_KEY || '') ? process.env.INDEXNOW_KEY : null;
+if (INDEXNOW_KEY) app.get(`/${INDEXNOW_KEY}.txt`, (_req, res) => res.type('text/plain').send(INDEXNOW_KEY));
+function pingIndexNow(paths) {
+  const base = process.env.PUBLIC_URL;
+  if (!INDEXNOW_KEY || !base) return;
+  fetch('https://api.indexnow.org/indexnow', {
+    method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ host: new URL(base).host, key: INDEXNOW_KEY, keyLocation: `${base}/${INDEXNOW_KEY}.txt`, urlList: paths.map(p => base + p) }),
+  }).then(r => console.log(`IndexNow: ${r.status} for ${paths.join(', ')}`)).catch(e => console.error('IndexNow failed:', e.message));
+}
+// the admin writes the articles
+app.get('/api/admin/blog', api(req => { adminUser(req); return { posts: blog.all(), games: Object.keys(blogLib.GAMES) }; }));
+app.post('/api/admin/blog', api(req => {
+  const user = adminUser(req);
+  const was = req.body.id ? blog.posts[req.body.id]?.status : null;
+  const post = blog.upsert(req.body, user.id);
+  if (post.status === 'published') pingIndexNow([`/blog/${post.slug}/`, ...(was !== 'published' ? ['/blog/'] : [])]);
+  return { post };
+}));
+app.post('/api/admin/blog/delete', api(req => { adminUser(req); blog.remove(req.body.id); return {}; }));
+app.post('/api/admin/blog/preview', api(req => { adminUser(req); return { html: blogLib.md.parse(String(req.body.body || '').slice(0, 100000)) }; }));
+
 app.get('/qr.svg', async (req, res) => {
   const code = String(req.query.room || '').toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) return res.status(400).end();
@@ -905,6 +986,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     archive.saveNow();
     pledges.saveNow();
     stats.saveNow();
+    blog.saveNow();
     kv.close();
     shuttingDown = true;
     io.close();

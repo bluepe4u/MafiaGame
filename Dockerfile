@@ -6,6 +6,7 @@ RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY server.js ./
 COPY src ./src
 COPY public ./public
+COPY content ./content
 RUN mkdir /data && chown node:node /data
 VOLUME /data
 USER node

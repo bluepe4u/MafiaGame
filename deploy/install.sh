@@ -54,8 +54,8 @@ id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --home-dir "$APP_DIR" --sh
 install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR"
 if [[ "$SRC_DIR" != "$APP_DIR" ]]; then
   # copy only what the app needs at runtime
-  rm -rf "$APP_DIR/public" "$APP_DIR/src" "$APP_DIR/deploy"
-  cp -r "$SRC_DIR/public" "$SRC_DIR/src" "$SRC_DIR/deploy" "$APP_DIR/"
+  rm -rf "$APP_DIR/public" "$APP_DIR/src" "$APP_DIR/deploy" "$APP_DIR/content"
+  cp -r "$SRC_DIR/public" "$SRC_DIR/src" "$SRC_DIR/deploy" "$SRC_DIR/content" "$APP_DIR/"
   cp "$SRC_DIR/server.js" "$SRC_DIR/package.json" "$SRC_DIR/package-lock.json" "$APP_DIR/"
 fi
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"

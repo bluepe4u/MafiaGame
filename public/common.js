@@ -246,6 +246,7 @@ document.body.insertAdjacentHTML('beforeend', `
           <button data-admin-tab="invites" data-i18n="admin.tab.invites"></button>
           <button data-admin-tab="features" data-i18n="admin.tab.features"></button>
           <button data-admin-tab="stats" data-i18n="admin.tab.stats"></button>
+          <button data-admin-tab="blog" data-i18n="admin.tab.blog"></button>
         </div>
         <div id="adminBody" class="admin-body"></div>
       </div>
@@ -424,6 +425,7 @@ let authMode = 'login';
 
 function setAccount(user, token) {
   if (token !== undefined) store.set(AUTH_KEY, token);
+  if (user) store.set(HAD_ACCOUNT_KEY, '1');
   account = user;
   // reconnect so the server knows who this socket belongs to
   Site.socket.disconnect().connect();
@@ -433,6 +435,9 @@ function setAccount(user, token) {
 // login | register | forgot (a reset link by email) | recover (the old recovery code) | reset (from the link)
 const resetToken = new URLSearchParams(location.search).get('reset') || '';
 if (/^[0-9a-f]{48}$/.test(resetToken)) authMode = 'reset';
+// someone new to the site lands on sign-up; anyone who has logged in here before, on log-in
+const HAD_ACCOUNT_KEY = 'site.hadAccount';
+if (authMode === 'login' && !store.get(AUTH_KEY) && !store.get(HAD_ACCOUNT_KEY)) authMode = 'register';
 function renderAuthMode() {
   const m = authMode;
   for (const b of $$('[data-auth-mode]')) b.classList.toggle('active', b.dataset.authMode === m);
@@ -1079,7 +1084,86 @@ const gameName = gameTitle;
 
 async function renderAdmin() {
   for (const b of $$('[data-admin-tab]')) b.classList.toggle('active', b.dataset.adminTab === adminTab);
-  return adminTab === 'live' ? renderAdminLive() : adminTab === 'invites' ? renderAdminInvites() : adminTab === 'features' ? renderAdminFeatures() : adminTab === 'stats' ? renderAdminStats() : renderAdminUsers();
+  return adminTab === 'live' ? renderAdminLive() : adminTab === 'invites' ? renderAdminInvites() : adminTab === 'features' ? renderAdminFeatures() : adminTab === 'stats' ? renderAdminStats() : adminTab === 'blog' ? renderAdminBlog() : renderAdminUsers();
+}
+
+// the blog: a list of articles and a Markdown editor (pages are served at /blog/)
+let blogEdit = null; // the article being edited ({} for a new one)
+async function renderAdminBlog() {
+  const res = await api('admin/blog');
+  if (!res.ok || adminTab !== 'blog') return;
+  const body = $('#adminBody');
+  if (!blogEdit) {
+    body.innerHTML = `<div class="row"><button id="blogNew" class="primary small">＋ ${esc(t('admin.blog.new'))}</button><a class="small-text" href="/blog/" target="_blank">/blog/ ↗</a></div>
+      ${res.posts.length ? `<ul class="admin-blog-list">${res.posts.map(p => `<li><span><b>${esc(p.title)}</b>
+        <span class="muted small-text">${p.lang.toUpperCase()} · ${esc(t(p.status === 'published' ? 'admin.blog.published' : 'admin.blog.draft'))} · /blog/${esc(p.slug)}/</span></span>
+        <span class="row">${p.status === 'published' ? `<a class="small-text" href="/blog/${esc(p.slug)}/" target="_blank">↗</a>` : ''}<button class="small" data-bedit="${p.id}">${esc(t('admin.blog.edit'))}</button></span></li>`).join('')}</ul>`
+        : `<p class="muted small-text">${esc(t('admin.blog.none'))}</p>`}`;
+    $('#blogNew').onclick = () => { blogEdit = { lang, status: 'draft' }; renderAdminBlog(); };
+    for (const b of body.querySelectorAll('[data-bedit]')) b.onclick = () => { blogEdit = res.posts.find(p => p.id === b.dataset.bedit); renderAdminBlog(); };
+    return;
+  }
+  const p = blogEdit;
+  const opt = (v, cur, label) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(label)}</option>`;
+  body.innerHTML = `<form id="blogForm" class="blog-editor">
+    <label class="field"><span>${esc(t('admin.blog.title'))}</span><input name="title" maxlength="140" required value="${esc(p.title || '')}"></label>
+    <div class="row">
+      <label class="field"><span>${esc(t('admin.blog.lang'))}</span><select name="lang">${opt('en', p.lang, 'English')}${opt('ru', p.lang, 'Русский')}</select></label>
+      <label class="field"><span>${esc(t('admin.blog.game'))}</span><select name="game">${opt('', p.game || '', '—')}${res.games.map(g => opt(g, p.game, g)).join('')}</select></label>
+      <label class="field"><span>${esc(t('admin.blog.status'))}</span><select name="status">${opt('draft', p.status, t('admin.blog.draft'))}${opt('published', p.status, t('admin.blog.published'))}</select></label>
+    </div>
+    <label class="field"><span>${esc(t('admin.blog.slug'))}</span><input name="slug" maxlength="80" value="${esc(p.slug || '')}" placeholder="${esc(t('admin.blog.slugHint'))}"></label>
+    <label class="field"><span>${esc(t('admin.blog.description'))}</span><textarea name="description" rows="2" maxlength="300">${esc(p.description || '')}</textarea></label>
+    <div class="row">
+      <label class="field"><span>${esc(t('admin.blog.group'))}</span><input name="group" maxlength="80" value="${esc(p.group || '')}" placeholder="mafia-rules"></label>
+      <label class="field"><span>${esc(t('admin.blog.tags'))}</span><input name="tags" value="${esc((p.tags || []).join(', '))}"></label>
+    </div>
+    <label class="field"><span>${esc(t('admin.blog.body'))}</span><textarea name="body" rows="18" class="blog-md">${esc(p.body || '')}</textarea></label>
+    <div class="row">
+      <label class="small ghost-file">${esc(t('admin.blog.image'))}<input type="file" id="blogImage" accept="image/jpeg,image/png,image/webp" hidden></label>
+      <label class="check"><input type="checkbox" id="blogCover"> <span class="small-text">${esc(t('admin.blog.asCover'))}</span></label>
+      <input type="hidden" name="cover" value="${esc(p.cover || '')}">
+      ${p.cover ? `<span class="muted small-text">${esc(t('admin.blog.cover'))}: ${esc(p.cover)}</span>` : ''}
+    </div>
+    <div class="row">
+      <button type="submit" class="primary">${esc(t('profile.save'))}</button>
+      <button type="button" id="blogPreview">${esc(t('admin.blog.preview'))}</button>
+      <button type="button" id="blogBack" class="ghost">${esc(t('admin.blog.back'))}</button>
+      ${p.id ? `<button type="button" id="blogDelete" class="danger small">${esc(t('admin.blog.delete'))}</button>` : ''}
+    </div>
+    <p class="muted small-text">${esc(t('admin.blog.hint'))}</p>
+    <div id="blogPreviewBox" class="blog-body blog-preview hidden"></div>
+  </form>`;
+  const form = $('#blogForm');
+  const values = () => Object.fromEntries(new FormData(form).entries());
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const r = await api('admin/blog', { ...values(), id: p.id });
+    if (!r.ok) return;
+    blogEdit = r.post;
+    toast(t(r.post.status === 'published' ? 'admin.blog.savedLive' : 'admin.blog.saved', { url: `/blog/${r.post.slug}/` }), 'info');
+    renderAdminBlog();
+  });
+  $('#blogBack').onclick = () => { blogEdit = null; renderAdminBlog(); };
+  $('#blogPreview').onclick = async () => {
+    const r = await api('admin/blog/preview', { body: form.body.value });
+    if (r.ok) { $('#blogPreviewBox').innerHTML = r.html; $('#blogPreviewBox').classList.remove('hidden'); }
+  };
+  if ($('#blogDelete')) $('#blogDelete').onclick = async () => {
+    if (!(await askConfirm({ title: t('admin.blog.delete'), text: p.title, danger: true }))) return;
+    const r = await api('admin/blog/delete', { id: p.id });
+    if (r.ok) { blogEdit = null; renderAdminBlog(); }
+  };
+  $('#blogImage').onchange = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const image = await new Promise(resolve => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.readAsDataURL(file); });
+    const r = await api('admin/blog/image', { image });
+    if (!r.ok) return;
+    if ($('#blogCover').checked) form.cover.value = r.url;
+    else { const ta = form.body; ta.setRangeText(`\n![](${r.url})\n`, ta.selectionStart, ta.selectionEnd, 'end'); }
+    toast(t('admin.blog.uploaded'), 'info');
+  };
 }
 
 // visits per day (no cookies: see src/stats.js), where people come from, games started, script errors
@@ -1683,7 +1767,7 @@ function renderFooter() {
   if (!home) return;
   let el = document.getElementById('siteFooter');
   if (!el) { el = document.createElement('footer'); el.id = 'siteFooter'; el.className = 'site-footer'; home.append(el); }
-  el.innerHTML = [['/terms/', 'footer.terms'], ['/privacy/', 'footer.privacy'], ['/poker/fair.html', 'footer.fair'], [REPO_URL, 'footer.source']]
+  el.innerHTML = [['/blog/', 'footer.blog'], ['/terms/', 'footer.terms'], ['/privacy/', 'footer.privacy'], ['/poker/fair.html', 'footer.fair'], [REPO_URL, 'footer.source']]
     .map(([href, key]) => `<a href="${href}"${href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>${esc(t(key))}</a>`).join(' · ');
   const hint = document.querySelector('#authCard .auth-hint');
   if (hint) {

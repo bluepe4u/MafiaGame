@@ -20,6 +20,7 @@
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
     "express": "^5.2.1",
+    "marked": "^14.1.4",
     "nodemailer": "^6.10.1",
     "qrcode": "^1.5.4",
     "redis": "^4.7.1",
