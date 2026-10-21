@@ -1,11 +1,11 @@
-/* "Find the spy": violet, a dossier feel. Shares style.css with the other games. */
+/* "Find the spy": rose (its colour in the design system), a dossier feel. Shares style.css with the other games. */
 body.spyfall {
-  --accent: #8b5cf6;
-  --accent-soft: rgba(139, 92, 246, .15);
-  --glow-a: #8b5cf6;
+  --accent: #fb7185;
+  --accent-soft: rgba(251, 113, 133, .15);
+  --glow-a: #fb7185;
   --glow-b: #0ea5e9;
 }
-body.spyfall .spy-mark rect:first-child { fill: #8b5cf6; }
+body.spyfall .spy-mark rect:first-child { fill: #fb7185; }
 body.spyfall .spy-mark circle, body.spyfall .spy-mark path { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linejoin: round; }
 body.spyfall main { max-width: 1240px; }
 

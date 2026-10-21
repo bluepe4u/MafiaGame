@@ -12,8 +12,15 @@
   <link rel="stylesheet" href="/poker/poker.css">
 </head>
 <body class="poker legal-page">
+  <div class="backdrop" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="grain"></div></div>
+  <header class="topbar blog-top">
+    <a class="brand site-brand" href="/"><svg class="brand-mark at-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><g transform="rotate(-8 16 16)"><rect x="9" y="5" width="14.5" height="22" rx="2.6" fill="#fff"/><path d="M16.25 10.5L12.6 20.5M16.25 10.5l3.65 10M13.9 17.2h4.7" fill="none" stroke="#d93b40" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></g></svg><span>Anytable</span></a>
+    <nav class="blog-games" aria-label="Games"><a href="/mafia/">Mafia</a><a href="/poker/">Poker</a><a href="/spy/">Find the spy</a><a href="/tycoon/">Tycoon</a><a href="/kingdoms/">Kingdoms</a><a href="/blog/">Blog</a></nav>
+    <span class="spacer"></span>
+    <nav class="blog-lang" aria-label="Language"><a href="#" data-set-lang="en">EN</a><a href="#" data-set-lang="ru">RU</a></nav>
+    <a class="blog-play" href="/">Play</a>
+  </header>
   <main class="legal">
-    <p><a href="/poker/">← <span data-i18n="site.poker"></span></a></p>
     <h1 data-i18n="pk.fair.page.title"></h1>
     <p class="muted" data-i18n="pk.fair.how"></p>
     <label for="fairLog" data-i18n="pk.fair.page.paste"></label>
@@ -26,5 +33,6 @@
   <script src="/poker/poker-i18n.js"></script>
   <script src="/poker/fair.js"></script>
   <script src="/poker/fair-page.js"></script>
+  <script src="/legal.js"></script>
 </body>
 </html>

@@ -1,8 +1,8 @@
-/* Monopoly: the same dark design as Mafia, with a money green-and-gold accent */
+/* Tycoon: the same dark design as the other games; gold is its colour, the board stays light */
 body.mono {
   --bg: #050c08;
-  --accent: #22c55e;
-  --accent-soft: rgba(34, 197, 94, .15);
+  --accent: #fbbf24;
+  --accent-soft: rgba(251, 191, 36, .15);
   --gold: #f5c542;
   --glow-a: #22c55e;
   --glow-b: #f5c542;
@@ -284,7 +284,7 @@ body.mono[data-phase="playing"] main, body.mono[data-phase="ended"] main { max-w
 .deed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
 .deed-tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 0 8px; border-radius: 9px; overflow: hidden; background: #f6f1e3; color: #17211b; border: 2px solid transparent; font-size: .76rem; }
 .deed-tile:hover:not(:disabled) { background: #fffaf0; border-color: rgba(0, 0, 0, .25); }
-.deed-tile.on { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34, 197, 94, .35); background: #fff; }
+.deed-tile.on { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(251, 191, 36, .45); background: #fff; }
 .deed-tile.mort { opacity: .55; }
 .dt-strip { align-self: stretch; height: 14px; background: var(--gc); }
 .dt-name { font-weight: 700; text-transform: uppercase; padding: 0 4px; line-height: 1.15; }

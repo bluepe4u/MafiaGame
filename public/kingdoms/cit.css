@@ -1,14 +1,14 @@
-/* Citadels: the same dark design as the other games, in night blue and old gold */
+/* Kingdoms: the same dark design as the other games; sky blue is its colour, old gold stays for the coins */
 body.cit {
   --bg: #070a12;
-  --accent: #d4a24c;
-  --accent-soft: rgba(212, 162, 76, .15);
+  --accent: #38bdf8;
+  --accent-soft: rgba(56, 189, 248, .15);
   --gold: #e9bf5f;
   --glow-a: #d4a24c;
   --glow-b: #3456c9;
   --felt-a: #121a2e;
   --felt-b: #0a0f1c;
-  --rim: rgba(212, 162, 76, .25);
+  --rim: rgba(56, 189, 248, .22);
   --me: #e9bf5f;
   /* district types */
   --c-noble: #e8b931;
