@@ -1197,12 +1197,7 @@ body.streamer .room-pill .code { letter-spacing: .2em; }
 .mini-card.s-h { color: #dc2626; } .mini-card.s-d { color: #2563eb; } .mini-card.s-c { color: #15803d; }
 
 /* unpaid USDT debts */
-.tag.debtor-tag { background: rgba(220, 38, 38, .18); color: #fca5a5; border: 1px solid rgba(220, 38, 38, .5); font-weight: 700; }
-.debt-banner { display: block; position: relative; z-index: 5; padding: 9px 18px; text-align: center; font-size: .88rem; font-weight: 600; text-decoration: none;
   background: rgba(234, 179, 8, .14); color: #fde68a; border-bottom: 1px solid rgba(234, 179, 8, .35); }
-.debt-banner.lvl1 { background: rgba(249, 115, 22, .16); color: #fed7aa; border-color: rgba(249, 115, 22, .45); }
-.debt-banner.lvl2 { background: rgba(220, 38, 38, .2); color: #fecaca; border-color: rgba(220, 38, 38, .55); }
-.debt-banner:hover { filter: brightness(1.15); }
 
 /* the legal pages and the poker fair check page */
 .legal-page { overflow-y: auto; }
@@ -1260,22 +1255,70 @@ body[data-lang="ru"] .legal section[lang="en"], body[data-lang="en"] .legal sect
 .seo-more a { color: inherit; }
 body.signed-in .seo-about { display: none; }
 
-/* the blog */
-.blog h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2rem, 6vw, 2.8rem); line-height: 1.08; margin: 8px 0 14px; }
-.blog-body { font-size: 1.04rem; }
-.blog-body h2 { font-size: 1.35rem; margin: 26px 0 8px; }
-.blog-body h3 { font-size: 1.1rem; margin: 20px 0 6px; text-transform: none; letter-spacing: 0; color: var(--text); }
-.blog-body img, .blog-cover { max-width: 100%; height: auto; border-radius: 12px; margin: 10px 0; }
-.blog-body table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: .92rem; }
-.blog-body th, .blog-body td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
-.blog-body blockquote { border-left: 3px solid var(--border-strong, #444); margin: 12px 0; padding: 2px 14px; color: var(--muted); }
-.blog-body code { font-family: var(--mono); font-size: .9em; }
-.blog-cta { display: block; margin: 28px 0 18px; padding: 16px 20px; border-radius: 14px; background: linear-gradient(180deg, #f4686c, #dc444a); color: #fff !important; font-weight: 700; text-decoration: none; text-align: center; }
-.blog-list { list-style: none; padding: 0; }
-.blog-card { padding: 14px 0; border-bottom: 1px solid var(--border); }
-.blog-card a b { font-size: 1.15rem; }
-.blog-card p { margin: 4px 0 0; opacity: .85; }
-.blog-card span { display: block; }
+/* the blog (server-rendered pages: src/blog.js) */
+.blog-top { gap: 18px; }
+.blog-top .brand { color: var(--text); text-decoration: none; }
+.blog-top-link { font-family: var(--serif); font-size: 1.25rem; color: var(--muted); text-decoration: none; padding-left: 14px; border-left: 1px solid var(--border-strong); line-height: 1; }
+.blog-top-link:hover { color: var(--text); }
+.blog-games { display: flex; gap: 4px; }
+.blog-games a, .blog-lang a { color: var(--muted); text-decoration: none; font-size: .85rem; padding: 6px 10px; border-radius: 99px; }
+.blog-games a:hover, .blog-lang a:hover { color: var(--text); background: var(--surface-2); }
+.blog-lang { display: flex; gap: 2px; padding: 3px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--border); }
+.blog-lang a { font-size: .75rem; font-weight: 600; letter-spacing: .04em; padding: 4px 10px; }
+.blog-lang a.on { background: var(--surface-3); color: var(--text); }
+.blog-play { background: linear-gradient(180deg, #f4686c, #dc444a); color: #fff; text-decoration: none; font-weight: 600; font-size: .85rem; padding: 7px 16px; border-radius: 10px; }
+.blog { max-width: 1080px; padding-top: 40px; padding-bottom: 48px; }
+.blog-hero { margin-bottom: 38px; }
+.blog-hero h1 { font-size: clamp(2.6rem, 7vw, 4.6rem); }
+.blog-hero-other { margin-top: 14px; font-size: .9rem; }
+.blog-hero-other a, .blog-other, .blog-crumbs a { color: #b9afff; text-decoration: none; }
+.blog-hero-other a:hover, .blog-other:hover, .blog-crumbs a:hover { text-decoration: underline; }
+.blog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.blog-card { --g: var(--accent); display: flex; flex-direction: column; gap: 10px; color: var(--text); text-decoration: none; position: relative; overflow: hidden; transition: border-color .2s, transform .2s; }
+.blog-card::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: var(--g); opacity: .85; }
+.blog-card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+.blog-card-cover { width: calc(100% + 40px); margin: -20px -20px 4px; aspect-ratio: 1.9; object-fit: cover; }
+.blog-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: .78rem; color: var(--muted); }
+.blog-card-meta .tag { margin-left: 0; }
+.blog-card-title { font-family: var(--serif); font-weight: 400; font-size: 1.55rem; line-height: 1.12; }
+.blog-card-text { color: var(--muted); font-size: .9rem; line-height: 1.5; }
+.tag.blog-game { background: color-mix(in srgb, var(--g) 18%, transparent); color: color-mix(in srgb, var(--g) 70%, white); }
+.g-mafia { --g: #e5484d; } .g-poker { --g: #10b981; } .g-tycoon { --g: #22c55e; } .g-spy { --g: #8b5cf6; } .g-kingdoms { --g: #d4a24c; }
+.blog-post { --g: var(--accent); max-width: 780px; margin: 0 auto; padding: 34px clamp(20px, 5vw, 48px) 40px; position: relative; overflow: hidden; }
+.blog-post::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: var(--g); }
+.blog-crumbs { font-size: .85rem; margin-bottom: 18px; }
+.blog-other { margin-left: auto; font-size: .8rem; }
+.blog-post h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2.1rem, 5.5vw, 3.1rem); line-height: 1.06; letter-spacing: -.02em; margin: 14px 0 22px; }
+.blog-body { font-size: 1.05rem; line-height: 1.7; }
+.blog-body > * + * { margin-top: 14px; }
+.blog-body h2 { font-size: 1.4rem; margin-top: 34px; }
+.blog-body h3 { font-size: 1.12rem; margin-top: 24px; text-transform: none; letter-spacing: -.01em; color: var(--text); }
+.blog-body a { color: #b9afff; }
+.blog-body ul, .blog-body ol { padding-left: 22px; }
+.blog-body li + li { margin-top: 6px; }
+.blog-body strong { color: #fff; }
+.blog-body img, .blog-cover { max-width: 100%; height: auto; border-radius: var(--radius-sm); display: block; }
+.blog-cover { margin: 0 0 22px; }
+.blog-body table { width: 100%; border-collapse: collapse; font-size: .92rem; display: block; overflow-x: auto; }
+.blog-body th, .blog-body td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+.blog-body th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+.blog-body blockquote { margin: 18px 0; padding: 4px 18px; border-left: 3px solid var(--g, var(--accent)); color: var(--muted); }
+.blog-body code { font-family: var(--mono); font-size: .88em; background: var(--surface-3); padding: 1px 5px; border-radius: 5px; }
+.blog-cta { --g: var(--accent); display: flex; flex-direction: column; gap: 4px; margin-top: 34px; padding: 18px 22px; border-radius: var(--radius-sm); text-decoration: none; color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--g) 85%, black), color-mix(in srgb, var(--g) 45%, black)); box-shadow: 0 18px 40px -20px var(--g); }
+.blog-cta b { font-size: 1.1rem; }
+.blog-cta span { font-size: .88rem; opacity: .85; }
+.blog-related { max-width: 780px; margin: 40px auto 0; }
+.blog-related h3 { margin-bottom: 14px; }
+.blog-404 { text-align: center; font-family: var(--serif); font-size: 2rem; margin-bottom: 20px; }
+.blog-empty { text-align: center; }
+@media (max-width: 760px) {
+  .blog-games, .blog-top-link { display: none; }
+  .blog-top { padding: 10px 16px; gap: 10px; }
+  .blog { padding: 24px 16px 36px; }
+  .blog-grid { grid-template-columns: 1fr; }
+  .blog-post { padding: 26px 18px 30px; }
+}
 .admin-blog-list { list-style: none; padding: 0; margin: 12px 0 0; }
 .admin-blog-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .admin-blog-list li > span:first-child { display: flex; flex-direction: column; min-width: 0; }

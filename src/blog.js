@@ -16,6 +16,7 @@ const SITE = 'bluepeau.club';
 const LANGS = ['en', 'ru'];
 const GAMES = { mafia: '/', poker: '/poker/', tycoon: '/tycoon/', spy: '/spy/', kingdoms: '/kingdoms/' };
 const MAX_BODY = 100000;
+const RESERVED = ['ru', 'en', 'rss', 'img']; // paths of the blog itself
 const MAX_IMAGE = 3 * 1024 * 1024;
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -89,7 +90,7 @@ class BlogStore {
     if (!title) throw new GameError('err.blog.title');
     const lang = LANGS.includes(input.lang) ? input.lang : 'en';
     const slug = slugify(input.slug || title);
-    if (!slug) throw new GameError('err.blog.slug');
+    if (!slug || RESERVED.includes(slug)) throw new GameError('err.blog.slug');
     const other = this.bySlug(slug);
     if (other && other !== post) throw new GameError('err.blog.slugTaken');
     const body = String(input.body || '').slice(0, MAX_BODY);
@@ -152,24 +153,47 @@ class BlogStore {
 }
 
 // ---------- pages ----------
+// Plain HTML in the site's own look (the top bar, the glow, cards), no scripts. Each language has
+// its own index: /blog/ in English, /blog/ru/ in Russian; an article links its translation.
 const T = {
-  en: { blog: 'Blog', all: 'All articles', play: 'Play now', min: 'min read', also: 'Also in', home: 'Games', read: 'Read', empty: 'No articles yet.', lang: 'English', tagline: 'Rules, strategy and ideas for game night with friends.', cta: { mafia: 'Play Mafia with friends — free, in the browser', poker: "Play Texas hold'em with friends — free", tycoon: 'Play Tycoon with friends — free', spy: 'Play Find the spy — free', kingdoms: 'Play Kingdoms — free' } },
-  ru: { blog: 'Блог', all: 'Все статьи', play: 'Играть', min: 'мин чтения', also: 'Читать на', home: 'Игры', read: 'Читать', empty: 'Статей пока нет.', lang: 'Русский', tagline: 'Правила, стратегия и идеи для игровых вечеров с друзьями.', cta: { mafia: 'Сыграть в Мафию с друзьями — бесплатно, в браузере', poker: 'Сыграть в холдем с друзьями — бесплатно', tycoon: 'Сыграть в Магната — бесплатно', spy: 'Сыграть в Шпиона — бесплатно', kingdoms: 'Сыграть в Королевства — бесплатно' } },
+  en: {
+    blog: 'Blog', index: '/blog/', eyebrow: 'The bluepeau.club blog', h1a: 'Game night,', h1b: 'explained.',
+    tagline: 'Rules, strategy and ideas for playing Mafia, poker and party games with friends.',
+    min: 'min read', all: 'All articles', more: 'More articles', empty: 'No articles yet: check back soon.',
+    play: 'Play', otherLang: 'Читать по-русски', hasOther: 'Есть статьи на русском', rss: 'RSS',
+    games: { mafia: 'Mafia', poker: 'Poker', tycoon: 'Tycoon', spy: 'Find the spy', kingdoms: 'Kingdoms' },
+    cta: { mafia: 'Play Mafia with friends', poker: "Play Texas hold'em with friends", tycoon: 'Play Tycoon with friends', spy: 'Play Find the spy', kingdoms: 'Play Kingdoms' },
+    ctaSub: 'Free, in the browser, one link for everyone.',
+  },
+  ru: {
+    blog: 'Блог', index: '/blog/ru/', eyebrow: 'Блог bluepeau.club', h1a: 'Игровой вечер —', h1b: 'по правилам.',
+    tagline: 'Правила, стратегия и идеи для Мафии, покера и игр с друзьями.',
+    min: 'мин чтения', all: 'Все статьи', more: 'Ещё статьи', empty: 'Статей пока нет — загляните позже.',
+    play: 'Играть', otherLang: 'Read in English', hasOther: 'Articles in English', rss: 'RSS',
+    games: { mafia: 'Мафия', poker: 'Покер', tycoon: 'Магнат', spy: 'Шпион', kingdoms: 'Королевства' },
+    cta: { mafia: 'Сыграть в Мафию с друзьями', poker: 'Сыграть в холдем с друзьями', tycoon: 'Сыграть в Магната с друзьями', spy: 'Сыграть в Шпиона', kingdoms: 'Сыграть в Королевства' },
+    ctaSub: 'Бесплатно, в браузере, одна ссылка для всех.',
+  },
 };
+const otherOf = lang => (lang === 'ru' ? 'en' : 'ru');
 const dateOf = (ts, lang) => new Date(ts).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const MARK = '<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><path d="M7 19h18l-2.2-7.5c-.3-1-1.4-1.5-2.3-1l-2.2 1.1a3 3 0 0 1-2.6 0l-2.2-1.1c-.9-.5-2 0-2.3 1z"/><rect x="4" y="19" width="24" height="2.6" rx="1.3"/></svg>';
 
-function page({ base, lang, title, description, canonical, ogImage, alternates = [], jsonLd = [], body, type = 'website', extraHead = '' }) {
+function page({ base, lang, title, description, canonical, ogImage, alternates = [], jsonLd = [], body, type = 'website', robots = '', switchTo }) {
+  const tr = T[lang];
   const alt = alternates.map(a => `<link rel="alternate" hreflang="${a.lang}" href="${base}${a.path}">`).join('\n  ');
+  const games = Object.entries(GAMES).map(([g, href]) => `<a href="${href}">${esc(tr.games[g])}</a>`).join('');
   return `<!doctype html>
 <html lang="${lang}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0a0a0f">
+  <meta name="theme-color" content="#08080c">
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(description)}">
   <link rel="canonical" href="${base}${canonical}">
   ${alt}
+  ${robots}
   <meta property="og:type" content="${type}">
   <meta property="og:site_name" content="${SITE}">
   <meta property="og:title" content="${esc(title)}">
@@ -178,24 +202,43 @@ function page({ base, lang, title, description, canonical, ogImage, alternates =
   <meta property="og:image" content="${base}${ogImage || '/og/site.png'}">
   <meta property="og:locale" content="${lang === 'ru' ? 'ru_RU' : 'en_US'}">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="alternate" type="application/rss+xml" title="${SITE} blog" href="${base}/blog/rss.xml">
+  <link rel="alternate" type="application/rss+xml" title="${SITE} — ${esc(tr.blog)}" href="${base}${tr.index}rss.xml">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/geist-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/style.css">
-  ${extraHead}
   ${jsonLd.map(j => `<script type="application/ld+json">${JSON.stringify(j).replace(/</g, '\\u003c')}</script>`).join('\n  ')}
 </head>
-<body class="legal-page blog-page">
-  <main class="legal blog">
-    <nav class="legal-nav blog-nav"><a href="/">${SITE}</a> · <a href="/blog/">${esc(T[lang].blog)}</a> · <a href="/poker/">Poker</a> · <a href="/">Mafia</a> · <a href="/spy/">${lang === 'ru' ? 'Шпион' : 'Find the spy'}</a></nav>
+<body class="blog-page" data-phase="home">
+  <div class="backdrop" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="grain"></div></div>
+  <header class="topbar blog-top">
+    <a class="brand" href="/">${MARK}<span>bluepeau</span></a>
+    <a class="blog-top-link" href="${tr.index}">${esc(tr.blog)}</a>
+    <nav class="blog-games" aria-label="Games">${games}</nav>
+    <span class="spacer"></span>
+    <nav class="blog-lang" aria-label="Language">${['en', 'ru'].map(l => `<a href="${l === lang ? canonical : switchTo}" hreflang="${l}" class="${l === lang ? 'on' : ''}"${l === lang ? ' aria-current="true"' : ''}>${l.toUpperCase()}</a>`).join('')}</nav>
+    <a class="blog-play" href="/">${esc(tr.play)}</a>
+  </header>
+  <main class="blog">
     ${body}
-    <footer class="site-footer"><a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a> · <a href="/blog/rss.xml">RSS</a> · <a href="https://github.com/bluepe4u/MafiaGame" rel="noopener" target="_blank">Open source</a></footer>
   </main>
+  <footer class="site-footer"><a href="/">${SITE}</a> · <a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a> · <a href="${tr.index}rss.xml">${tr.rss}</a> · <a href="https://github.com/bluepe4u/MafiaGame" rel="noopener" target="_blank">Open source</a></footer>
 </body>
 </html>`;
+}
+
+// an article in the list: the game it's about, the title, the summary, the date
+function card(p) {
+  const tr = T[p.lang];
+  return `<a class="card blog-card${p.game ? ` g-${p.game}` : ''}" href="/blog/${p.slug}/">
+      ${p.cover ? `<img class="blog-card-cover" src="${esc(p.cover)}" alt="" loading="lazy">` : ''}
+      <span class="blog-card-meta">${p.game ? `<span class="tag blog-game">${esc(tr.games[p.game])}</span>` : ''}<span>${dateOf(p.publishedAt, p.lang)} · ${minutesToRead(p.body)} ${esc(tr.min)}</span></span>
+      <b class="blog-card-title">${esc(p.title)}</b>
+      <span class="blog-card-text">${esc(p.description)}</span>
+    </a>`;
 }
 
 function renderPost(blog, post, base) {
@@ -204,43 +247,57 @@ function renderPost(blog, post, base) {
   const url = `/blog/${post.slug}/`;
   const alternates = [{ lang: post.lang, path: url }, ...others.map(o => ({ lang: o.lang, path: `/blog/${o.slug}/` }))];
   if (others.length) alternates.push({ lang: 'x-default', path: `/blog/${(others.find(o => o.lang === 'en') || post).slug}/` });
-  const cta = post.game ? `<a class="blog-cta" href="${GAMES[post.game]}">${esc(tr.cta[post.game])} →</a>` : '';
+  const other = others.find(o => o.lang === otherOf(post.lang));
+  const related = blog.published(post.lang).filter(p => p.id !== post.id)
+    .sort((a, b) => (b.game === post.game) - (a.game === post.game) || b.publishedAt - a.publishedAt).slice(0, 3);
   const ld = {
     '@context': 'https://schema.org', '@type': 'BlogPosting', headline: post.title, description: post.description, inLanguage: post.lang,
     datePublished: new Date(post.publishedAt || post.createdAt).toISOString(), dateModified: new Date(post.updatedAt).toISOString(),
-    mainEntityOfPage: base + url, image: base + (post.cover || '/og/site.png'), author: { '@type': 'Organization', name: SITE }, publisher: { '@type': 'Organization', name: SITE, logo: { '@type': 'ImageObject', url: `${base}/icon-512.png` } },
+    mainEntityOfPage: base + url, image: base + (post.cover || '/og/site.png'), author: { '@type': 'Organization', name: SITE },
+    publisher: { '@type': 'Organization', name: SITE, logo: { '@type': 'ImageObject', url: `${base}/icon-512.png` } },
     keywords: post.tags.join(', ') || undefined,
   };
-  const crumbs = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: tr.blog, item: `${base}/blog/` }, { '@type': 'ListItem', position: 2, name: post.title, item: base + url }] };
+  const crumbs = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: tr.blog, item: base + tr.index }, { '@type': 'ListItem', position: 2, name: post.title, item: base + url }] };
+  const cta = post.game ? `<a class="blog-cta g-${post.game}" href="${GAMES[post.game]}"><b>${esc(tr.cta[post.game])} →</b><span>${esc(tr.ctaSub)}</span></a>` : '';
   return page({
     base, lang: post.lang, title: `${post.title} · ${SITE}`, description: post.description, canonical: url, ogImage: post.cover, alternates, type: 'article', jsonLd: [ld, crumbs],
-    extraHead: post.status !== 'published' ? '<meta name="robots" content="noindex">' : '',
-    body: `<article class="blog-post">
-      <p class="muted small-text">${dateOf(post.publishedAt || post.createdAt, post.lang)} · ${minutesToRead(post.body)} ${esc(tr.min)}${others.map(o => ` · <a href="/blog/${o.slug}/" hreflang="${o.lang}">${esc(T[o.lang].lang)}</a>`).join('')}</p>
+    robots: post.status !== 'published' ? '<meta name="robots" content="noindex">' : '',
+    switchTo: other ? `/blog/${other.slug}/` : T[otherOf(post.lang)].index,
+    body: `<article class="card blog-post${post.game ? ` g-${post.game}` : ''}">
+      <p class="blog-crumbs"><a href="${tr.index}">← ${esc(tr.all)}</a></p>
+      <p class="blog-card-meta">${post.game ? `<span class="tag blog-game">${esc(tr.games[post.game])}</span>` : ''}<span>${dateOf(post.publishedAt || post.createdAt, post.lang)} · ${minutesToRead(post.body)} ${esc(tr.min)}</span>${other ? `<a class="blog-other" href="/blog/${other.slug}/" hreflang="${other.lang}">${esc(tr.otherLang)}</a>` : ''}</p>
       <h1>${esc(post.title)}</h1>
       ${post.cover ? `<img class="blog-cover" src="${esc(post.cover)}" alt="">` : ''}
       <div class="blog-body">${md.parse(post.body)}</div>
       ${cta}
-      <p><a href="/blog/">← ${esc(tr.all)}</a></p>
-    </article>`,
+    </article>
+    ${related.length ? `<section class="blog-related"><h3>${esc(tr.more)}</h3><div class="blog-grid">${related.map(card).join('')}</div></section>` : ''}`,
   });
 }
 
-function renderIndex(blog, base, lang = 'en') {
-  const posts = blog.published();
+function renderIndex(blog, base, lang = 'en', { notFound = false } = {}) {
   const tr = T[lang];
-  const ld = { '@context': 'https://schema.org', '@type': 'Blog', name: `${SITE} — ${tr.blog}`, url: `${base}/blog/`, blogPost: posts.slice(0, 20).map(p => ({ '@type': 'BlogPosting', headline: p.title, url: `${base}/blog/${p.slug}/`, inLanguage: p.lang, datePublished: new Date(p.publishedAt).toISOString() })) };
-  const card = p => `<li class="blog-card" lang="${p.lang}"><a href="/blog/${p.slug}/"><b>${esc(p.title)}</b></a>
-    <span class="muted small-text">${dateOf(p.publishedAt, p.lang)} · ${esc(T[p.lang].lang)}</span><p>${esc(p.description)}</p></li>`;
+  const posts = blog.published(lang);
+  const otherCount = blog.published(otherOf(lang)).length;
+  const ld = { '@context': 'https://schema.org', '@type': 'Blog', name: `${SITE} — ${tr.blog}`, url: base + tr.index, inLanguage: lang, blogPost: posts.slice(0, 20).map(p => ({ '@type': 'BlogPosting', headline: p.title, url: `${base}/blog/${p.slug}/`, datePublished: new Date(p.publishedAt).toISOString() })) };
   return page({
-    base, lang, title: `${tr.blog} · ${SITE}`, description: `${tr.tagline} ${T.ru.tagline}`, canonical: '/blog/', jsonLd: [ld],
-    body: `<h1>${esc(tr.blog)}</h1><p class="muted">${esc(T.en.tagline)} ${esc(T.ru.tagline)}</p>
-      ${posts.length ? `<ul class="blog-list">${posts.map(card).join('')}</ul>` : `<p>${esc(tr.empty)}</p>`}`,
+    base, lang, title: `${tr.blog} · ${SITE}`, description: tr.tagline, canonical: tr.index, jsonLd: [ld],
+    alternates: [{ lang: 'en', path: T.en.index }, { lang: 'ru', path: T.ru.index }, { lang: 'x-default', path: T.en.index }],
+    robots: notFound ? '<meta name="robots" content="noindex">' : '', switchTo: T[otherOf(lang)].index,
+    body: `<section class="hero blog-hero">
+      <p class="eyebrow">${esc(tr.eyebrow)}</p>
+      <h1>${esc(tr.h1a)} <em>${esc(tr.h1b)}</em></h1>
+      <p class="muted hero-sub">${esc(tr.tagline)}</p>
+      ${otherCount ? `<p class="blog-hero-other"><a href="${T[otherOf(lang)].index}" hreflang="${otherOf(lang)}">${esc(tr.hasOther)} (${otherCount}) →</a></p>` : ''}
+    </section>
+    ${notFound ? '<p class="card blog-404">404</p>' : ''}
+    ${posts.length ? `<div class="blog-grid">${posts.map(card).join('')}</div>` : `<p class="muted blog-empty">${esc(tr.empty)}</p>`}`,
   });
 }
 
-function rss(blog, base) {
-  const items = blog.published().slice(0, 50).map(p => `  <item>
+function rss(blog, base, lang = 'en') {
+  const tr = T[lang];
+  const items = blog.published(lang).slice(0, 50).map(p => `  <item>
     <title>${esc(p.title)}</title>
     <link>${base}/blog/${p.slug}/</link>
     <guid isPermaLink="true">${base}/blog/${p.slug}/</guid>
@@ -250,9 +307,10 @@ function rss(blog, base) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
 <channel>
-  <title>${SITE} blog</title>
-  <link>${base}/blog/</link>
-  <description>${esc(T.en.tagline)}</description>
+  <title>${SITE} — ${esc(tr.blog)}</title>
+  <link>${base}${tr.index}</link>
+  <language>${lang}</language>
+  <description>${esc(tr.tagline)}</description>
 ${items}
 </channel>
 </rss>

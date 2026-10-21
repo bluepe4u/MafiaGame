@@ -30,8 +30,18 @@ test('blog: slugs, drafts, publishing, translations', () => {
   assert.match(html, /hreflang="x-default" href="https:\/\/bluepeau.club\/blog\/poker-hand-rankings\/"/);
   assert.match(html, /"@type":"BlogPosting"/);
   assert.match(html, /href="\/poker\/"/); // the call to play
-  assert.match(renderIndex(blog, BASE), /Комбинации в покере/);
-  assert.match(rss(blog, BASE), /<link>https:\/\/bluepeau.club\/blog\/poker-hand-rankings\/<\/link>/);
+  // each language has its own index and feed, linked to each other
+  const enIndex = renderIndex(blog, BASE, 'en'), ruIndex = renderIndex(blog, BASE, 'ru');
+  assert.match(enIndex, /Poker hand rankings/);
+  assert.doesNotMatch(enIndex, /Комбинации в покере<\/b>/);
+  assert.match(ruIndex, /Комбинации в покере/);
+  assert.match(enIndex, /hreflang="ru" href="https:\/\/bluepeau.club\/blog\/ru\/"/);
+  assert.match(rss(blog, BASE, 'en'), /<link>https:\/\/bluepeau.club\/blog\/poker-hand-rankings\/<\/link>/);
+  assert.doesNotMatch(rss(blog, BASE, 'en'), /kombinatsii/);
+  assert.match(rss(blog, BASE, 'ru'), /kombinatsii-v-pokere/);
+  // the language switch on an article goes to its translation
+  assert.match(html, /<a href="\/blog\/kombinatsii-v-pokere\/" hreflang="ru" class="">RU<\/a>/);
+  assert.throws(() => blog.upsert({ title: 'x', slug: 'ru' }), /err\.blog\.slug/);
 });
 
 test('blog: an article can\'t carry scripts', () => {

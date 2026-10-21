@@ -606,17 +606,21 @@ const html = (res, body, status = 200) => res.status(status).type('html').set('C
 const uiLang = req => (/^ru\b/i.test(req.get('accept-language') || '') ? 'ru' : 'en');
 // exact paths (Express would treat /blog and /blog/ as the same route)
 app.get(/^\/blog$/, (_req, res) => res.redirect(301, '/blog/'));
-app.get(/^\/blog\/$/, (req, res) => html(res, blogLib.renderIndex(blog, siteUrl(req), uiLang(req))));
-app.get('/blog/rss.xml', (req, res) => res.type('application/rss+xml').set('Cache-Control', 'public, max-age=600').send(blogLib.rss(blog, siteUrl(req))));
+app.get(/^\/blog\/$/, (req, res) => html(res, blogLib.renderIndex(blog, siteUrl(req), 'en')));
+app.get(/^\/blog\/ru\/$/, (req, res) => html(res, blogLib.renderIndex(blog, siteUrl(req), 'ru')));
+app.get(/^\/blog\/(ru|en)$/, (req, res) => res.redirect(301, req.params[0] === 'ru' ? '/blog/ru/' : '/blog/'));
+app.get(/^\/blog\/en\/$/, (_req, res) => res.redirect(301, '/blog/'));
+app.get('/blog/rss.xml', (req, res) => res.type('application/rss+xml').set('Cache-Control', 'public, max-age=600').send(blogLib.rss(blog, siteUrl(req), 'en')));
+app.get('/blog/ru/rss.xml', (req, res) => res.type('application/rss+xml').set('Cache-Control', 'public, max-age=600').send(blogLib.rss(blog, siteUrl(req), 'ru')));
 app.use('/blog/img', express.static(blog.imageDir, { maxAge: '30d', immutable: true, index: false }));
 app.get(/^\/blog\/([\w-]+)$/, (req, res) => res.redirect(301, `/blog/${req.params[0]}/`));
 app.get(/^\/blog\/([\w-]+)\/$/, (req, res) => {
   const post = blog.bySlug(req.params[0]);
-  if (!post || post.status !== 'published') return html(res, blogLib.renderIndex(blog, siteUrl(req), uiLang(req)).replace('<h1>', '<p class="neg">404</p><h1>'), 404);
+  if (!post || post.status !== 'published') return html(res, blogLib.renderIndex(blog, siteUrl(req), uiLang(req), { notFound: true }), 404);
   html(res, blogLib.renderPost(blog, post, siteUrl(req)));
 });
 const SITEMAP_PAGES = [['/', 1.0, 'weekly'], ['/poker/', 0.9, 'weekly'], ['/spy/', 0.8, 'monthly'], ['/tycoon/', 0.8, 'monthly'], ['/kingdoms/', 0.8, 'monthly'],
-  ['/blog/', 0.8, 'daily'], ['/poker/fair.html', 0.4, 'yearly'], ['/terms/', 0.2, 'yearly'], ['/privacy/', 0.2, 'yearly']];
+  ['/blog/', 0.8, 'daily'], ['/blog/ru/', 0.8, 'daily'], ['/poker/fair.html', 0.4, 'yearly'], ['/terms/', 0.2, 'yearly'], ['/privacy/', 0.2, 'yearly']];
 app.get('/sitemap.xml', (req, res) => {
   const base = siteUrl(req);
   const urls = [
@@ -644,6 +648,7 @@ app.get('/llms.txt', (req, res) => {
 
 ## Details
 
+- [Blog in English](${base}/blog/) · [Блог на русском](${base}/blog/ru/): rules, strategy and ideas for game night.
 - [Fair deal check](${base}/poker/fair.html): how every poker deck can be verified after a session.
 - [Terms](${base}/terms/) · [Privacy](${base}/privacy/)
 - Source code: https://github.com/bluepe4u/MafiaGame
@@ -666,7 +671,7 @@ app.post('/api/admin/blog', api(req => {
   const user = adminUser(req);
   const was = req.body.id ? blog.posts[req.body.id]?.status : null;
   const post = blog.upsert(req.body, user.id);
-  if (post.status === 'published') pingIndexNow([`/blog/${post.slug}/`, ...(was !== 'published' ? ['/blog/'] : [])]);
+  if (post.status === 'published') pingIndexNow([`/blog/${post.slug}/`, ...(was !== 'published' ? [post.lang === 'ru' ? '/blog/ru/' : '/blog/'] : [])]);
   return { post };
 }));
 app.post('/api/admin/blog/delete', api(req => { adminUser(req); blog.remove(req.body.id); return {}; }));
