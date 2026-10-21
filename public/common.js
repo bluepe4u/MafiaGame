@@ -1831,7 +1831,8 @@ Site.init = function init({ game, socket, urlRoom, hooks }) {
     if (!account && qs.get('table')) toast(t('table.loginFirst'), 'info');
     Site.ready = true;
     renderAccount();
-    if (!account) { $('#authUser').focus(); return; }
+    // the name field gets the focus on a game page (it's in the first screen), not on the home page
+    if (!account) { if (Site.game !== 'hub') $('#authUser').focus({ preventScroll: true }); return; }
     // a table link (?table=…), possibly kept from before logging in
     const table = await joinPendingTable();
     // following a table into its new room (?room=…&join=1)
