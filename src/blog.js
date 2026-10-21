@@ -189,7 +189,7 @@ const T = {
 };
 const otherOf = lang => (lang === 'ru' ? 'en' : 'ru');
 const dateOf = (ts, lang) => new Date(ts).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-const MARK = '<svg class="brand-mark at-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><circle cx="16" cy="16" r="6" fill="none" stroke="#fff" stroke-width="2.6"/><circle cx="16" cy="5.6" r="2.3" fill="#fff"/><circle cx="26.4" cy="16" r="2.3" fill="#fff"/><circle cx="16" cy="26.4" r="2.3" fill="#fff"/><circle cx="5.6" cy="16" r="2.3" fill="#fff"/></svg>';
+const MARK = '<svg class="brand-mark at-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><g transform="rotate(-8 16 16)"><rect x="9" y="5" width="14.5" height="22" rx="2.6" fill="#fff"/><path d="M16.25 10.5L12.6 20.5M16.25 10.5l3.65 10M13.9 17.2h4.7" fill="none" stroke="#d93b40" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></g></svg>';
 
 function page({ base, lang, title, description, canonical, ogImage, alternates = [], jsonLd = [], body, type = 'website', robots = '', switchTo }) {
   const tr = T[lang];
