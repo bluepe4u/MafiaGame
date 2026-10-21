@@ -148,6 +148,7 @@ socket.on('connect', () => {
 socket.on('disconnect', () => { if (everConnected) $('#offline').classList.remove('hidden'); });
 socket.on('session', s => { saveSession(s); homeView = false; });
 socket.on('state', s => {
+  if (s.phase === 'ended') Site.gameOver(`${s.code}:${s.gameId || ''}`); // a guest is offered to keep their stats
   clockOffset = s.serverNow - Date.now();
   state = s;
   render();

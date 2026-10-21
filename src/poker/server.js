@@ -196,6 +196,7 @@ function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onA
   const summary = room => ({
     game: 'poker', code: room.code, phase: room.phase, lastActivity: room.lastActivity,
     players: room.players.map(p => ({ name: p.name, connected: p.connected })), spectators: room.spectators.length,
+    private: room.settings.bank === 'usdt',
   });
 
   return {

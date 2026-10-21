@@ -168,6 +168,22 @@ app.post('/api/register', api(async req => {
   await sendVerify(req, user);
   return { token, user: users.selfProfile(user), recoveryCode };
 }));
+// playing without an account: a name is enough; the guest can save the account after a game
+app.post('/api/guest', api(async req => {
+  if (req.body.website) throw new GameError('err.slowDown');
+  await throttle(`guest:${req.ip}`, 20, 3600);
+  const { user, token } = users.createGuest(req.body.name);
+  return { token, user: users.selfProfile(user) };
+}));
+app.post('/api/guest/save', api(async req => {
+  const user = currentUser(req);
+  await throttle(`register:${req.ip}`, 5, 3600);
+  const { recoveryCode } = users.saveGuest(user, { username: req.body.username, email: req.body.email, password: req.body.password });
+  users.saveNow();
+  refreshUser(user.id);
+  await sendVerify(req, user);
+  return { user: users.selfProfile(user), recoveryCode };
+}));
 // the link from the confirmation email
 app.get('/verify', async (req, res) => {
   const raw = /^[0-9a-f]{48}$/.test(String(req.query.token || '')) ? await kv.take(`verify:${req.query.token}`) : null;
@@ -232,6 +248,7 @@ app.get('/api/me', api(req => {
   const user = currentUser(req);
   // coming to the site: the daily bonus in site chips (and the welcome gift on the first visit)
   const daily = users.claimDaily(user);
+  users.seen(user);
   return { user: users.selfProfile(user), daily, mail: mailer.enabled };
 }));
 app.post('/api/password', api(req => {
@@ -242,7 +259,7 @@ app.get('/api/items', (_req, res) => res.json({ ok: true, items: ITEMS }));
 // leaderboard and player pages: for logged-in players only
 app.get('/api/leaderboard', api(req => {
   currentUser(req);
-  return { users: Object.values(users.users).map(u => users.publicProfile(u)) };
+  return { users: Object.values(users.users).filter(u => !u.guest).map(u => users.publicProfile(u)) };
 }));
 app.get('/api/player/:id', api(req => {
   currentUser(req);
@@ -444,7 +461,7 @@ app.get('/api/tables', api(req => {
   const user = currentUser(req);
   return { tables: tables.mine(user.id).map(tb => tableView(tb, user)) };
 }));
-app.post('/api/tables/create', tableAction((user, b) => tables.create(user, b.name)));
+app.post('/api/tables/create', tableAction((user, b) => { if (user.guest) throw new GameError('err.guestAccount'); return tables.create(user, b.name); }));
 app.post('/api/tables/join', tableAction((user, b) => tables.join(b.id, user)));
 app.post('/api/tables/leave', tableAction((user, b) => { tables.leave(b.id, user); }));
 app.post('/api/tables/rename', tableAction((user, b) => tables.rename(b.id, user, b.name)));
@@ -462,6 +479,13 @@ app.get('/api/tables/public', api(req => {
   list.sort((a, b) => (!!b.live - !!a.live) || b.online - a.online || b.members - a.members);
   return { tables: list.slice(0, 30) };
 }));
+// what an invite link shows before joining: the game, who's there (no account needed)
+app.get('/api/invite', (req, res) => {
+  const code = String(req.query.code || '').toUpperCase();
+  const info = /^[A-Z]{4}$/.test(code) && GAMES.includes(req.query.game) ? gameInfo(req.query.game, code) : null;
+  if (!info || info.private || info.phase === 'ended') return res.json({ ok: true, room: null });
+  res.json({ ok: true, room: { phase: info.phase, players: info.players.map(p => p.name).slice(0, 12) } });
+});
 // the next game: a fresh room, and everyone at the table is called into it
 app.post('/api/tables/start', api(req => {
   const user = currentUser(req);
@@ -941,7 +965,12 @@ io.on('connection', socket => {
   on('cancelCountdown', () => { const { room, pid } = ctx(); room.cancelCountdown(pid); });
   on('react', ({ emoji }) => { const { room, pid } = ctx(); io.to(room.code).emit('reaction', room.react(pid, emoji)); });
   on('revealRole', () => { const { room, pid } = ctx(); room.revealRole(pid); });
-  on('rate', ({ targetId, value }) => { const { room, pid } = ctx(); room.rate(pid, targetId, Number(value)); });
+  on('rate', ({ targetId, value }) => {
+    const { room, pid } = ctx();
+    // ratings are between registered players only
+    if ([pid, targetId].some(id => users.users[room.player(id)?.userId]?.guest)) throw new GameError('err.rateAccounts');
+    room.rate(pid, targetId, Number(value));
+  });
   on('skipToVote', () => { const { room, pid } = ctx(); room.skipToVote(pid); });
   on('vote', ({ targetId }) => { const { room, pid } = ctx(); room.vote(pid, targetId); });
   on('forceEndVote', () => { const { room, pid } = ctx(); room.forceEndVote(pid); });
@@ -970,6 +999,15 @@ setInterval(() => {
 }, 5 * 60 * 1000).unref();
 
 loadRooms();
+// guests nobody saved are removed after a month of quiet (unless they're still at a table or in a room)
+function pruneGuests() {
+  const keep = new Set();
+  for (const sock of allSockets()) if (sock.data.userId) keep.add(sock.data.userId);
+  for (const tb of Object.values(tables.tables)) for (const m of tb.members) keep.add(m);
+  const gone = users.pruneGuests(keep);
+  if (gone.length) console.log(`Removed ${gone.length} unsaved guest account(s)`);
+}
+setInterval(pruneGuests, 6 * 60 * 60 * 1000).unref();
 // Redis first (when configured): rate limits and email links, and the Socket.IO adapter, so events
 // could be shared with more processes later. The rooms themselves still live in this one process.
 (async () => {

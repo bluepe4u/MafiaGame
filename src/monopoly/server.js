@@ -189,7 +189,7 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
   // stats pages
   app.get('/api/mono/leaderboard', api(req => {
     currentUser(req);
-    return { users: Object.values(users.users).map(u => users.publicProfile(u)) };
+    return { users: Object.values(users.users).filter(u => !u.guest).map(u => users.publicProfile(u)) };
   }));
 
   setInterval(() => {

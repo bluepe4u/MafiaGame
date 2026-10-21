@@ -314,3 +314,35 @@ test('database: the old users.json is imported once, as it was', () => {
   store.saveNow();
   assert.strictEqual(new UserStore(dir).users.u1.likes, 4);
 });
+
+test('guests: a name is enough; saved later with everything kept; unsaved ones removed after a month', () => {
+  const dir = tmp();
+  const store = new UserStore(dir);
+  const { user: ann } = store.register('Аня', 'pass', null, { email: mail() });
+  const g = store.createGuest('  Аня ');
+  assert.strictEqual(g.user.username, 'Аня 2'); // the name is taken: a number is added
+  assert.ok(store.byToken(g.token));
+  assert.throws(() => store.createGuest('x'), /usernameInvalid/);
+  // no password: can't log in, isn't rated
+  assert.throws(() => store.login('Аня 2', ''), /badLogin/);
+  assert.strictEqual(store.publicProfile(g.user).score, null);
+  assert.strictEqual(store.selfProfile(g.user).guest, true);
+  // plays a game, then saves the account: the stats and chips stay
+  store.claimDaily(g.user);
+  const chips = store.wallet(g.user).chips;
+  g.user.stats = { games: 3, wins: 1 };
+  assert.throws(() => store.saveGuest(g.user, { username: 'Аня', email: mail(), password: 'pass' }), /usernameTaken/);
+  const { user, recoveryCode } = store.saveGuest(g.user, { username: 'Аня Ч', email: 'anya2@example.com', password: 'secret' });
+  assert.ok(recoveryCode);
+  assert.ok(!user.guest);
+  assert.strictEqual(user.stats.games, 3);
+  assert.strictEqual(store.wallet(user).chips, chips);
+  assert.ok(store.login('anya2@example.com', 'secret').token);
+  assert.notStrictEqual(store.publicProfile(user).score, null);
+  // a guest nobody saved, quiet for a month, is removed (unless still in a room or at a table)
+  const old = store.createGuest('Гость').user;
+  const keep = store.createGuest('Гость').user;
+  const later = Date.now() + 31 * 24 * 60 * 60 * 1000;
+  assert.deepStrictEqual(store.pruneGuests(new Set([keep.id]), later), [old.id]);
+  assert.ok(store.users[keep.id] && store.users[ann.id] && store.users[user.id]);
+});

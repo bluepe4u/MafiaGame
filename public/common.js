@@ -432,33 +432,40 @@ function setAccount(user, token) {
   renderAccount();
 }
 
-// login | register | forgot (a reset link by email) | recover (the old recovery code) | reset (from the link)
+// guest (just a name) | login | register | forgot (a reset link by email) | recover (the old recovery code) | reset (from the link)
 const resetToken = new URLSearchParams(location.search).get('reset') || '';
 if (/^[0-9a-f]{48}$/.test(resetToken)) authMode = 'reset';
-// someone new to the site lands on sign-up; anyone who has logged in here before, on log-in
+// someone new to the site plays with just a name; anyone who has logged in here before sees log-in
 const HAD_ACCOUNT_KEY = 'site.hadAccount';
-if (authMode === 'login' && !store.get(AUTH_KEY) && !store.get(HAD_ACCOUNT_KEY)) authMode = 'register';
+if (authMode === 'login' && !store.get(AUTH_KEY) && !store.get(HAD_ACCOUNT_KEY)) authMode = 'guest';
+const inviteCode = () => (new URLSearchParams(location.search).get('room') || '').toUpperCase();
+// "By … you accept the terms and the privacy policy": signing up, or playing as a guest
+function legalHtml(mode) {
+  return `${esc(t(mode === 'guest' ? 'auth.legalGuest' : 'auth.legal'))} <a href="/terms/" target="_blank">${esc(t('auth.legalTerms'))}</a> ${esc(t('auth.legalAnd'))} <a href="/privacy/" target="_blank">${esc(t('auth.legalPrivacy'))}</a>.`;
+}
 function renderAuthMode() {
   const m = authMode;
   for (const b of $$('[data-auth-mode]')) b.classList.toggle('active', b.dataset.authMode === m);
   $('.auth-tabs').classList.toggle('hidden', m === 'reset');
-  $('#authSubmit').textContent = t({ login: 'auth.login', register: 'auth.register', recover: 'auth.recoverSubmit', forgot: 'auth.sendLink', reset: 'auth.recoverSubmit' }[m]);
+  $('#authSubmit').textContent = t({ guest: inviteCode() ? 'auth.takeSeat' : 'auth.playNow', login: 'auth.login', register: 'auth.register', recover: 'auth.recoverSubmit', forgot: 'auth.sendLink', reset: 'auth.recoverSubmit' }[m]);
   $('#authPass').autocomplete = m === 'login' ? 'current-password' : 'new-password';
   $('#authPassLabel').textContent = t(m === 'recover' || m === 'reset' ? 'auth.newPassword' : 'auth.password');
-  $('#authUserLabel').textContent = t(m === 'login' ? 'auth.userOrEmail' : 'auth.username');
+  $('#authUserLabel').textContent = t(m === 'login' ? 'auth.userOrEmail' : m === 'guest' ? 'auth.yourName' : 'auth.username');
+  $('#authUser').autocomplete = m === 'guest' ? 'nickname' : 'username';
   $('#authUser').closest('label').classList.toggle('hidden', m === 'forgot' || m === 'reset');
-  $('#authPass').closest('label').classList.toggle('hidden', m === 'forgot');
+  $('#authPass').closest('label').classList.toggle('hidden', m === 'forgot' || m === 'guest');
+  $('#authPass').required = m !== 'forgot' && m !== 'guest';
   $('#emailField').classList.toggle('hidden', m !== 'register' && m !== 'forgot');
   $('#authEmail').required = m === 'register' || m === 'forgot';
   $('#inviteField').classList.toggle('hidden', m !== 'register');
   $('#recoverField').classList.toggle('hidden', m !== 'recover');
   $('#forgotBtn').textContent = t(m === 'login' ? 'auth.forgot' : 'auth.backToLogin');
-  $('#forgotBtn').classList.toggle('hidden', m === 'register');
+  $('#forgotBtn').classList.toggle('hidden', m === 'register' || m === 'guest');
   $('#codeBtn').classList.toggle('hidden', m !== 'forgot');
   const legal = document.getElementById('authLegal');
-  if (legal) legal.classList.toggle('hidden', m !== 'register');
+  if (legal) { legal.innerHTML = legalHtml(m); legal.classList.toggle('hidden', m !== 'register' && m !== 'guest'); }
   const hint = document.querySelector('#authCard .auth-hint');
-  if (hint) hint.textContent = t(m === 'forgot' ? 'auth.forgotHint' : m === 'reset' ? 'auth.resetHint' : 'auth.hint');
+  if (hint) hint.textContent = t(m === 'forgot' ? 'auth.forgotHint' : m === 'reset' ? 'auth.resetHint' : m === 'guest' ? 'auth.guestHint' : 'auth.hint');
 }
 // the password label, the recovery-code field and "Forgot password?" join the login form
 // these labels change with the mode, so the page's static translation pass must leave them alone
@@ -473,6 +480,7 @@ $('#authUser').closest('label').insertAdjacentHTML('afterend', `<label id="email
 $('#inviteField').insertAdjacentHTML('afterend', `<label id="recoverField" class="field hidden"><span data-i18n="auth.recoveryCode"></span>
   <input id="authRecovery" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX"></label>`);
 $('#authSubmit').insertAdjacentHTML('afterend', '<button type="button" id="forgotBtn" class="link-btn"></button><button type="button" id="codeBtn" class="link-btn hidden" data-i18n="auth.haveCode"></button>');
+$('.auth-tabs').insertAdjacentHTML('afterbegin', '<button type="button" data-auth-mode="guest" data-i18n="auth.play"></button>');
 $('#forgotBtn').onclick = () => { authMode = authMode === 'login' ? 'forgot' : 'login'; renderAuthMode(); };
 $('#codeBtn').onclick = () => { authMode = 'recover'; renderAuthMode(); };
 for (const b of $$('[data-auth-mode]')) b.onclick = () => { authMode = b.dataset.authMode; renderAuthMode(); };
@@ -481,6 +489,7 @@ $('#authCard').addEventListener('submit', async e => {
   const mode = authMode;
   const body = { username: $('#authUser').value, email: $('#authEmail').value, password: $('#authPass').value, invite: $('#authInvite').value, code: $('#authRecovery').value, website: $('#authWebsite').value, lang };
   if (mode === 'reset') body.token = resetToken;
+  if (mode === 'guest') body.name = body.username;
   const res = await api(mode, body);
   if (!res.ok) return;
   if (mode === 'forgot') {
@@ -497,7 +506,70 @@ $('#authCard').addEventListener('submit', async e => {
   if (res.recoveryCode) showRecoveryCode(res.recoveryCode, mode === 'register' ? 'recovery.afterRegister' : 'recovery.afterReset');
   if (mode === 'register' && res.user.email) setTimeout(() => toast(t('auth.checkEmail', { email: res.user.email }), 'info'), 3800);
   joinPendingTable();
+  // came from an invite link: straight into that room (the emit waits for the reconnect)
+  if (inviteCode() && Site.socket) send('join', { code: inviteCode() });
 });
+
+// An invite link (?room=CODE) for someone not logged in: what they're joining, and who's there
+async function renderInvite() {
+  const code = inviteCode();
+  let box = document.getElementById('inviteBanner');
+  if (!code || account) { if (box) box.remove(); return; }
+  const res = await fetch(`/api/invite?game=${encodeURIComponent(Site.game)}&code=${encodeURIComponent(code)}`).then(r => r.json()).catch(() => null);
+  const room = res && res.room;
+  if (!room) return;
+  if (!box) { box = document.createElement('div'); box.id = 'inviteBanner'; box.className = 'invite-banner'; $('#authCard').prepend(box); }
+  const names = room.players;
+  const who = names.length ? t('invite.who', { names: names.slice(0, 3).join(', '), more: names.length > 3 ? t('invite.more', { n: names.length - 3 }) : '' }) : t('invite.empty');
+  box.innerHTML = `<span class="invite-game">${gameIcon(Site.game)} ${esc(gameTitle(Site.game))} · <span class="code">${esc(code)}</span></span>
+    <b class="invite-title">${esc(t('invite.title', { game: gameTitle(Site.game) }))}</b><span class="muted small-text">${esc(who)}</span>`;
+}
+
+// ---------- a guest's account: saved after a game, with everything they've played kept ----------
+let saveOfferedFor = null;
+// pages call this when a game ends (once per game); a guest is offered to keep their stats
+Site.gameOver = function gameOver(gameKey) {
+  if (!account || !account.guest || saveOfferedFor === gameKey || store.get('site.saveDismissed') === gameKey) return;
+  saveOfferedFor = gameKey;
+  setTimeout(() => openSaveAccount(gameKey), 2500);
+};
+function openSaveAccount(gameKey = null) {
+  let sheet = document.getElementById('saveSheet');
+  if (!sheet) {
+    document.body.insertAdjacentHTML('beforeend', `<div id="saveSheet" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="saveTitle">
+      <div class="sheet save-sheet"><div class="sheet-head"><h2 id="saveTitle"></h2><button id="saveClose" class="ghost small" type="button"></button></div>
+      <form id="saveForm" class="sheet-body save-body" autocomplete="on"></form></div></div>`);
+    sheet = document.getElementById('saveSheet');
+    sheet.addEventListener('pointerdown', e => { if (e.target === sheet) closeSave(); });
+  }
+  const closeSave = () => { sheet.classList.add('hidden'); if (gameKey) store.set('site.saveDismissed', gameKey); };
+  $('#saveTitle').textContent = t('save.title');
+  $('#saveClose').textContent = t('save.later');
+  $('#saveClose').onclick = closeSave;
+  const form = $('#saveForm');
+  form.innerHTML = `<p class="muted">${esc(t('save.lead'))}</p>
+    <ul class="save-perks"><li>${esc(t('save.perk.stats'))}</li><li>${esc(t('save.perk.chips'))}</li><li>${esc(t('save.perk.rating'))}</li><li>${esc(t('save.perk.tables'))}</li></ul>
+    <label class="field"><span>${esc(t('auth.username'))}</span><input name="username" maxlength="20" autocomplete="username" value="${esc(account.username)}" required></label>
+    <label class="field"><span>${esc(t('auth.email'))}</span><input name="email" type="email" maxlength="254" autocomplete="email" required></label>
+    <label class="field"><span>${esc(t('auth.password'))}</span><input name="password" type="password" autocomplete="new-password" required></label>
+    <button type="submit" class="primary big-btn">${esc(t('save.submit'))}</button>
+    <p class="muted small-text">${legalHtml('register')}</p>`;
+  addPasswordToggles(form);
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const r = await api('guest/save', { ...Object.fromEntries(new FormData(form).entries()), lang });
+    if (!r.ok) return;
+    sheet.classList.add('hidden');
+    account = r.user;
+    store.set(HAD_ACCOUNT_KEY, '1');
+    renderAccount();
+    toast(t('save.done', { name: r.user.username }), 'info');
+    if (r.recoveryCode) showRecoveryCode(r.recoveryCode, 'recovery.afterRegister');
+    setTimeout(() => toast(t('auth.checkEmail', { email: r.user.email }), 'info'), 4000);
+  };
+  sheet.classList.remove('hidden');
+  form.querySelector('[name="email"]').focus();
+}
 // back from the confirmation link
 if (qs0().get('verified')) {
   setTimeout(() => toast(t(qs0().get('verified') === '1' ? 'auth.verified' : 'auth.verifyFailed'), qs0().get('verified') === '1' ? 'info' : ''), 600);
@@ -514,6 +586,7 @@ function renderAccount() {
   $('#boardBtn').classList.toggle('hidden', !account);
   document.body.dataset.theme = (account && account.theme) || '';
   document.body.classList.toggle('signed-in', !!account);
+  if (account) document.getElementById('inviteBanner')?.remove();
   if (account) {
     $('#profileBtn').innerHTML = avatar(account.username, account.avatar, account.equipped);
     $('#profileBtn').title = t('profile.open');
@@ -667,6 +740,15 @@ function bindProfileControls() {
       const slot = b.dataset.slot;
       const res = await api('equip', { slot, itemId: account.equipped[slot] === b.dataset.equip ? null : b.dataset.equip });
       if (res.ok) { account = res.user; renderAccount(); renderProfile(); }
+    };
+  }
+  if ($('#guestSave')) {
+    $('#guestSave').onclick = () => { closeOverlay('profile'); openSaveAccount(); };
+    $('#guestLeave').onclick = async () => {
+      if (!(await askConfirm({ title: t('save.leave'), text: t('save.leaveText'), danger: true }))) return;
+      await api('logout', {});
+      closeOverlay('profile');
+      setAccount(null, null);
     };
   }
   const form = $('#passwordForm');
@@ -979,6 +1061,13 @@ function wardrobeHtml() {
 }
 
 function accountHtml() {
+  // a guest: nothing to change yet, but everything to keep
+  if (account.guest) {
+    return `<section class="player-section"><h3>${esc(t('save.profileTitle'))}</h3>
+      <p class="muted small-text">${esc(t('save.profileText'))}</p>
+      <button id="guestSave" class="primary" type="button">${esc(t('save.submit'))}</button></section>
+      <div class="row account-actions"><button id="guestLeave" class="danger" type="button">${esc(t('save.leave'))}</button></div>`;
+  }
   const [bm, bd] = (account.birthday || '-').split('-');
   const months = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { month: 'long' }));
   return `<section class="player-section">
@@ -1721,6 +1810,7 @@ Site.init = function init({ game, socket, urlRoom, hooks }) {
   Site.urlRoom = urlRoom;
   Object.assign(Site.hooks, hooks);
   socket.on('gift', refreshAccount);
+  renderInvite();
   socket.on('tableGame', call => { loadTables(); followTable(call, account && call.byId === account.id); });
   // the admin reset this account's password: every open page goes back to the login form
   socket.on('loggedOut', () => { store.set(AUTH_KEY, null); account = null; renderAccount(); toast(t('toast.loggedOut')); });
@@ -1775,8 +1865,8 @@ function renderFooter() {
   if (hint) {
     let legal = document.getElementById('authLegal');
     if (!legal) { legal = document.createElement('p'); legal.id = 'authLegal'; legal.className = 'muted small-text auth-legal'; hint.after(legal); }
-    legal.innerHTML = `${esc(t('auth.legal'))} <a href="/terms/" target="_blank">${esc(t('auth.legalTerms'))}</a> ${esc(t('auth.legalAnd'))} <a href="/privacy/" target="_blank">${esc(t('auth.legalPrivacy'))}</a>.`;
-    legal.classList.toggle('hidden', authMode !== 'register');
+    legal.innerHTML = legalHtml(authMode);
+    legal.classList.toggle('hidden', authMode !== 'register' && authMode !== 'guest');
   }
 }
 renderFooter();

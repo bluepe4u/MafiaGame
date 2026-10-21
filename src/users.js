@@ -41,6 +41,7 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
 }
 
 function passwordMatches(password, user) {
+  if (!user || !user.salt || !user.hash) return false; // a guest has no password
   const { hash } = hashPassword(password, user.salt);
   return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(user.hash, 'hex'));
 }
@@ -172,6 +173,56 @@ class UserStore {
     return { user, token: this.newSession(user), invite, recoveryCode };
   }
 
+  // ---------- guests: a name is enough to play ----------
+  // Someone who opens an invite gets a light account with just a name: their stats, chips and
+  // achievements work at once, and register() isn't needed to play. saveGuest() turns it into a
+  // full account (username, email, password) with everything kept; unsaved guests are removed
+  // after a month (pruneGuests). Guests can't log in elsewhere, rate or be rated, or show on the
+  // leaderboard.
+  createGuest(name) {
+    let base = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 18);
+    if (!USERNAME_RE.test(base)) throw new GameError('err.usernameInvalid', { min: 2, max: 20 });
+    let username = base;
+    for (let n = 2; this.byName(username); n++) username = `${base} ${n}`;
+    const user = { id: crypto.randomBytes(8).toString('hex'), username, guest: true, avatar: null, likes: 0, dislikes: 0, createdAt: Date.now(), lastSeen: Date.now() };
+    this.users[user.id] = user;
+    this.claimDaily(user); // the welcome chips (and today's bonus), so a poker buy-in works at once
+    return { user, token: this.newSession(user) };
+  }
+
+  saveGuest(user, { username, email, password }) {
+    if (!user.guest) throw new GameError('err.invalidTarget');
+    username = String(username || '').trim().replace(/\s+/g, ' ');
+    if (!USERNAME_RE.test(username)) throw new GameError('err.usernameInvalid', { min: 2, max: 20 });
+    const other = this.byName(username);
+    if (other && other !== user) throw new GameError('err.usernameTaken');
+    const mail = this.cleanEmail(email, user);
+    if (String(password || '').length < MIN_PASSWORD) throw new GameError('err.passwordShort', { min: MIN_PASSWORD });
+    Object.assign(user, { username, email: mail, emailVerified: false, ...hashPassword(String(password)) });
+    delete user.guest;
+    delete user.lastSeen;
+    const recoveryCode = this.newRecoveryCode(user);
+    this.save();
+    return { user, recoveryCode };
+  }
+
+  seen(user) {
+    if (user.guest) { user.lastSeen = Date.now(); this.save(); }
+  }
+
+  // guests nobody saved, gone quiet for a month (keepIds: still at a table or in a room)
+  pruneGuests(keepIds = new Set(), now = Date.now()) {
+    const cutoff = now - 30 * 24 * 60 * 60 * 1000;
+    const gone = Object.values(this.users).filter(u => u.guest && (u.lastSeen || u.createdAt) < cutoff && !keepIds.has(u.id)).map(u => u.id);
+    for (const id of gone) delete this.users[id];
+    if (gone.length) {
+      const g = new Set(gone);
+      for (const [h, id] of Object.entries(this.sessions)) if (g.has(id)) delete this.sessions[h];
+      this.save();
+    }
+    return gone;
+  }
+
   // ---------- email: optional for older accounts, needs the password to change ----------
   setEmail(user, email, password) {
     if (!passwordMatches(String(password || ''), user)) throw new GameError('err.badPassword');
@@ -277,7 +328,7 @@ class UserStore {
     if (recent.length >= LOGIN_MAX_FAILURES) throw new GameError('err.tooManyLogins');
     // the username or the email
     const user = this.byName(key) || this.byEmail(key);
-    if (!user || !passwordMatches(String(password || ''), user)) {
+    if (!user || user.guest || !passwordMatches(String(password || ''), user)) {
       this.failures.set(key, [...recent, now]);
       throw new GameError('err.badLogin');
     }
@@ -657,7 +708,7 @@ class UserStore {
   // The user's own view: the public profile and the email (never shown to anyone else).
   selfProfile(user) {
     if (!user) return null;
-    return { ...this.publicProfile(user), email: user.email || null, emailVerified: !!user.emailVerified, usdtAccess: !!user.usdtAccess };
+    return { ...this.publicProfile(user), email: user.email || null, emailVerified: !!user.emailVerified, usdtAccess: !!user.usdtAccess, guest: !!user.guest };
   }
 
   setUsdtAccess(user, on) {
@@ -677,7 +728,9 @@ class UserStore {
       avatar: user.avatar ? `/avatars/${user.avatar}` : null,
       likes,
       dislikes: user.dislikes,
-      score: likes - user.dislikes + (user.bonus || 0),
+      // guests aren't rated: no score, no decency status
+      score: user.guest ? null : likes - user.dislikes + (user.bonus || 0),
+      guest: !!user.guest,
       stats: { ...emptyStats(), ...user.stats },
       monoStats: { ...emptyMonoStats(), ...user.monoStats },
       spyStats: { ...emptySpyStats(), ...user.spyStats },

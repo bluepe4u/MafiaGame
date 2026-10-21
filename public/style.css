@@ -1329,3 +1329,14 @@ body.signed-in .seo-about { display: none; }
 .blog-md { font-family: var(--mono); font-size: .85rem; line-height: 1.5; }
 .ghost-file { cursor: pointer; padding: 6px 11px; border: 1px solid var(--border); border-radius: 9px; font-size: .8rem; }
 .blog-preview { border-top: 1px solid var(--border); padding-top: 10px; }
+
+/* an invite link: what you're joining */
+.invite-banner { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); }
+.invite-game { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); }
+.invite-game svg { width: 16px; height: 16px; }
+.invite-title { font-family: var(--serif); font-weight: 400; font-size: 1.55rem; line-height: 1.15; }
+/* saving a guest's account */
+.save-sheet { max-width: 460px; }
+.save-body { display: flex; flex-direction: column; gap: 12px; }
+.save-perks { margin: 0; padding-left: 20px; color: var(--text); }
+.save-perks li + li { margin-top: 4px; }
