@@ -75,7 +75,7 @@ function leftRoom() {
   store.set(SESSION_KEY, null);
   state = null;
   urlRoom = '';
-  history.replaceState(null, '', '/monopoly/');
+  history.replaceState(null, '', '/tycoon/');
   render();
 }
 
@@ -91,7 +91,7 @@ $('#leaveBtn').onclick = async () => {
   leftRoom();
 };
 $('#topRoom').onclick = async () => {
-  try { await navigator.clipboard.writeText(`${location.origin}/monopoly/?room=${state.code}`); toast(t('toast.linkCopied'), 'info'); } catch {}
+  try { await navigator.clipboard.writeText(`${location.origin}/tycoon/?room=${state.code}`); toast(t('toast.linkCopied'), 'info'); } catch {}
 };
 $('#copyLink').onclick = () => $('#topRoom').click();
 
@@ -130,7 +130,7 @@ function render() {
   $('#leaveBtn').classList.toggle('hidden', !inRoom);
   if (inRoom) $('#topCode').textContent = state.code;
   $('#topRound').textContent = inRoom && state.game ? t('mono.round', { n: state.game.round }) : '';
-  if (inRoom && urlRoom !== state.code) { urlRoom = state.code; history.replaceState(null, '', `/monopoly/?room=${state.code}`); }
+  if (inRoom && urlRoom !== state.code) { urlRoom = state.code; history.replaceState(null, '', `/tycoon/?room=${state.code}`); }
   renderReactBar();
   updateTurnAlert(monoNeed());
   Voice.update(!!(state && state.me && state.features && state.features.voice && state.settings.voice !== false));

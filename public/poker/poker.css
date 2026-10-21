@@ -422,3 +422,14 @@ body.poker[data-phase="playing"] main, body.poker[data-phase="ended"] main { max
 .pk-pl.owe { border-color: rgba(239, 68, 68, .3); } .pk-pl.owed { border-color: rgba(16, 185, 129, .35); }
 .pk-pl.st-received, .pk-pl.st-forgiven { opacity: .6; }
 .pk-transfers { margin: 0 0 6px; padding-left: 18px; line-height: 1.7; }
+
+/* the fair deal check */
+.pk-fair-sheet { max-width: 640px; }
+.pk-fair-sum { margin: 0 0 8px; }
+.pk-fair-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
+.pk-fair-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.pk-fair-table th, .pk-fair-table td { padding: 5px 6px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.pk-fair-table th { font-weight: 600; color: var(--muted); font-size: .75rem; }
+.pk-fair-table tr.bad td { background: rgba(224, 70, 78, .12); }
+.pk-fair-board { display: flex; gap: 2px; flex-wrap: wrap; }
+.pk-fair-line code, .pk-fair-sheet code { font-family: 'Geist Mono', monospace; font-size: .8em; }

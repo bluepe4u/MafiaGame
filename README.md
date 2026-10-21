@@ -42,6 +42,16 @@ Google sign-in, and the server only gets access to the files it creates):
 bash deploy/connect-gdrive.sh root@<server>
 ```
 
+**Watchdog:** systemd restarts the app if it crashes; a timer also checks `/health` every two minutes
+and restarts it if it hangs (`deploy/watchdog.sh`).
+
+**Stats and errors:** the admin panel's Stats tab shows page views and distinct visitors per day,
+where visitors came from, games started and script errors from the pages, all kept on the server
+(`src/stats.js`): no cookies, no tracking script, no third parties; visitors are counted with a
+daily-salted hash and IPs are never stored.
+
+Old game addresses (`/monopoly/`, `/citadels/`, `/spyfall/`) redirect to the new ones.
+
 Back up now: `sudo /opt/mafia/deploy/backup.sh` · list / restore: `sudo /opt/mafia/deploy/restore.sh [latest | <file>]`
 (the current data is moved aside, not deleted).
 
@@ -51,7 +61,7 @@ create invites for everyone else in the admin panel (Приглашения / In
 opens registration with the code filled in, optionally seating the newcomer at a table.
 
 **Tables:** a group's permanent place (one link that never changes). Whoever starts the next game
-from the table — Mafia or Monopoly — takes everyone at the table into the new room.
+from the table — in any of the games — takes everyone at the table into the new room.
 
 **Voice chat:** push-to-talk (or an open mic) straight between the browsers in a room (WebRTC).
 In Mafia the Mafia hear each other at night, and players who are out talk only among themselves —
@@ -82,9 +92,9 @@ night blurred, no "your night move" alerts, room codes masked and kept out of th
 Everything secret is in a separate "secret window" (role, night moves, results, secret chats, and
 where the Mafia's night voices play) that you keep out of the stream capture.
 
-## Monopoly
+## Магнат (Tycoon)
 
-The site also hosts Monopoly at `/monopoly/` (switch games from the menu on the logo). It shares
+The site also hosts Tycoon, a property-trading board game, at `/tycoon/` (switch games from the menu on the logo). It shares
 accounts, photos and decency status with Mafia, and keeps its own stats and leaderboard.
 
 - Official rules for 2–8 players: the 40 squares in order with official prices and rents (street
@@ -100,7 +110,7 @@ accounts, photos and decency status with Mafia, and keeps its own stats and lead
 
 ## Шпион (Find the spy)
 
-`/spyfall/` («Шпион») — 3–12 players. Everyone but the spy gets the same location and one of its
+`/spy/` («Шпион») — 3–12 players. Everyone but the spy gets the same location and one of its
 6 roles; the spy sees only the list. 95 locations of our own in 5 sets (Classic 30, Russia 20,
 Adventure 15, City 15, Travel 15), in Russian and English; the host picks the sets and how many
 locations are in play (10–60, drawn at random for the whole game). The app keeps whose turn
@@ -110,9 +120,9 @@ points over several rounds (spy 2/4, town 1, the successful accuser 2). Your car
 you hold it. Same accounts, tables, voice chat, stats (profile tab), archive and admin tools as the
 other games; `src/spyfall/` holds the locations, the engine (no I/O, tested) and its namespace.
 
-## Цитадели (Citadels)
+## Королевства (Kingdoms)
 
-`/citadels/` — 3–8 players, the 2016 edition with the beginner set of nine characters from the
+`/kingdoms/` — a city-building card game with secret characters, 3–8 players, with the beginner set of nine characters from the
 house rules sheet: Witch, Thief, Magician, King, Abbot, Merchant, Architect, Diplomat, Queen.
 
 - The draft goes round from the crown, with face-up discards by player count (5 → 2, 6 → 1,
@@ -177,6 +187,15 @@ house rules sheet: Witch, Thief, Magician, King, Abbot, Merchant, Architect, Dip
   pot, best hand) in the profile, a leaderboard, the archive. `src/poker/hand.js` is the hand
   evaluator and equity calculator, shared with the browser; `src/poker/game.js` the engine (no I/O,
   tested in `test/poker.test.js`, including random sessions where the chips must add up).
+- **Provably fair deck** (`src/poker/fair.js`): before every hand the table shows sha256 of a secret
+  server seed (the first one already in the lobby). Each player's browser then sends a fresh random
+  seed of its own, so the server can't have chosen the deck in advance. The deck is a Fisher-Yates
+  shuffle fed by HMAC-SHA256(server seed, "client seeds:game:hand:counter"), with rejection sampling.
+  When the session ends the server seeds are revealed: "Check the deal" recomputes every deck in the
+  browser (`public/poker/fair.js`) and compares it with what that browser saw during the game
+  (commitments, its own seed, its cards and the board); the log downloads as JSON and can be
+  checked by anyone at `/poker/fair.html`. Seeds stay secret until the end, since they would
+  reveal folded hands. Poker asks once per browser to confirm the player is 18+.
 
 ## Rules as implemented
 

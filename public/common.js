@@ -1,7 +1,7 @@
 'use strict';
 
-// Shared by all the games (Mafia at /, Monopoly at /monopoly/, Spyfall at /spyfall/, Citadels at
-// /citadels/): small helpers, the login, avatars and cosmetics, sounds and turn alerts, one profile
+// Shared by all the games (Mafia at /, Tycoon at /tycoon/, Find the spy at /spy/, Kingdoms at
+// /kingdoms/, poker at /poker/): small helpers, the login, avatars and cosmetics, sounds and turn alerts, one profile
 // window (stats for every game, wardrobe, account), the admin panel, gifts and the "back to my game" banner.
 // A page loads i18n.js, then this file, then its own script, which calls Site.init().
 
@@ -10,6 +10,18 @@ const store = {
   set(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
 };
 const AUTH_KEY = 'mafia.auth'; // one login for the whole site
+// script errors go to our own server for the admin's stats tab: a few per page load, our files only
+let errorsSent = 0;
+function reportError(msg, src, line) {
+  if (errorsSent >= 5 || (src && !src.startsWith(location.origin))) return;
+  errorsSent += 1;
+  try {
+    const body = JSON.stringify({ msg: String(msg || '').slice(0, 300), src: src || '', line: line || 0, page: location.pathname });
+    navigator.sendBeacon('/api/err', new Blob([body], { type: 'application/json' }));
+  } catch {}
+}
+window.addEventListener('error', e => reportError(e.message, e.filename, e.lineno));
+window.addEventListener('unhandledrejection', e => reportError(e.reason && (e.reason.stack || e.reason.message || e.reason), '', 0));
 const ALERTS_KEY = 'mafia.alerts';
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
@@ -60,7 +72,7 @@ const Site = {
   },
 };
 // the games: page, icon and name in one place
-const GAME_INFO = { mafia: { path: '/', icon: 'hat', name: 'site.mafia' }, mono: { path: '/monopoly/', icon: 'dice', name: 'site.monopoly' }, spy: { path: '/spyfall/', icon: 'spy', name: 'site.spyfall' }, cit: { path: '/citadels/', icon: 'castle', name: 'site.citadels' }, poker: { path: '/poker/', icon: 'chip', name: 'site.poker' } };
+const GAME_INFO = { mafia: { path: '/', icon: 'hat', name: 'site.mafia' }, mono: { path: '/tycoon/', icon: 'dice', name: 'site.monopoly' }, spy: { path: '/spy/', icon: 'spy', name: 'site.spyfall' }, cit: { path: '/kingdoms/', icon: 'castle', name: 'site.citadels' }, poker: { path: '/poker/', icon: 'chip', name: 'site.poker' } };
 const gameInfoOf = game => GAME_INFO[game] || GAME_INFO.mafia;
 const gameTitle = game => t(gameInfoOf(game).name);
 const gameUrl = (game, code) => `${gameInfoOf(game).path}?room=${code}&join=1`;
@@ -233,6 +245,7 @@ document.body.insertAdjacentHTML('beforeend', `
           <button data-admin-tab="users" data-i18n="admin.tab.users"></button>
           <button data-admin-tab="invites" data-i18n="admin.tab.invites"></button>
           <button data-admin-tab="features" data-i18n="admin.tab.features"></button>
+          <button data-admin-tab="stats" data-i18n="admin.tab.stats"></button>
         </div>
         <div id="adminBody" class="admin-body"></div>
       </div>
@@ -426,6 +439,8 @@ function renderAuthMode() {
   $('#recoverField').classList.toggle('hidden', authMode !== 'recover');
   $('#forgotBtn').textContent = t(authMode === 'recover' ? 'auth.backToLogin' : 'auth.forgot');
   $('#forgotBtn').classList.toggle('hidden', authMode === 'register');
+  const legal = document.getElementById('authLegal');
+  if (legal) legal.classList.toggle('hidden', authMode !== 'register');
 }
 // the password label, the recovery-code field and "Forgot password?" join the login form
 $('#authPass').closest('label').querySelector('span').id = 'authPassLabel';
@@ -1025,7 +1040,30 @@ const gameName = gameTitle;
 
 async function renderAdmin() {
   for (const b of $$('[data-admin-tab]')) b.classList.toggle('active', b.dataset.adminTab === adminTab);
-  return adminTab === 'live' ? renderAdminLive() : adminTab === 'invites' ? renderAdminInvites() : adminTab === 'features' ? renderAdminFeatures() : renderAdminUsers();
+  return adminTab === 'live' ? renderAdminLive() : adminTab === 'invites' ? renderAdminInvites() : adminTab === 'features' ? renderAdminFeatures() : adminTab === 'stats' ? renderAdminStats() : renderAdminUsers();
+}
+
+// visits per day (no cookies: see src/stats.js), where people come from, games started, script errors
+async function renderAdminStats() {
+  const res = await api('admin/stats');
+  if (!res.ok || adminTab !== 'stats') return;
+  const st = res.stats;
+  const max = Math.max(1, ...st.days.map(d => d.views));
+  const list = (rows, label = x => esc(x)) => (rows.length ? `<ul class="admin-stat-list">${rows.map(([k, n]) => `<li><span>${label(k)}</span><b>${n}</b></li>`).join('')}</ul>` : `<p class="muted small-text">${esc(t('admin.stats.none'))}</p>`);
+  $('#adminBody').innerHTML = `
+    <section class="player-section"><h3>${esc(t('admin.stats.days'))}</h3>
+      <div class="admin-chart">${st.days.map(d => `<div class="admin-bar" title="${d.day}: ${esc(t('admin.stats.views'))} ${d.views} · ${esc(t('admin.stats.visitors'))} ${d.visitors} · ${esc(t('admin.stats.games'))} ${d.games}">
+        <i style="height:${Math.round((d.views / max) * 100)}%"></i><em style="height:${Math.round((d.visitors / max) * 100)}%"></em><span>${d.day.slice(8)}</span></div>`).join('')}</div>
+      <p class="muted small-text">${esc(t('admin.stats.legend'))} · ${esc(t('admin.stats.total', { v: st.days.reduce((a, d) => a + d.visitors, 0), g: st.days.reduce((a, d) => a + d.games, 0) }))}</p>
+    </section>
+    <section class="player-section"><h3>${esc(t('admin.stats.pages'))}</h3>${list(st.pages)}</section>
+    <section class="player-section"><h3>${esc(t('admin.stats.refs'))}</h3>${list(st.refs)}</section>
+    <section class="player-section"><h3>${esc(t('admin.stats.gamesBy'))}</h3>${list(st.games, g => esc(gameName(g)))}</section>
+    <section class="player-section"><h3>${esc(t('admin.stats.errors'))}</h3>
+      ${st.errors.length ? `<ul class="admin-errors">${st.errors.map(e => `<li><b>${esc(e.msg)}</b>${e.count > 1 ? ` ×${e.count}` : ''}
+        <span class="muted small-text">${esc(e.page)} · ${esc((e.src || '').replace(location.origin, ''))}:${e.line} · ${esc(ago(e.at))}</span></li>`).join('')}</ul>`
+        : `<p class="muted small-text">${esc(t('admin.stats.noErrors'))}</p>`}
+    </section>`;
 }
 
 async function renderAdminLive() {
@@ -1525,6 +1563,7 @@ langSelect.onchange = () => {
   applyStaticTranslations();
   renderAuthMode();
   renderAlertsBtn();
+  renderFooter();
   renderAccount();
   if (!$('#profile').classList.contains('hidden')) renderProfile();
   if (!$('#admin').classList.contains('hidden')) renderAdmin();
@@ -1580,6 +1619,24 @@ if (qs.get('invite')) {
   authMode = 'register';
   $('#authInvite').value = qs.get('invite').toUpperCase().slice(0, 12);
 }
+// the links every home screen ends with, and what signing up means
+const REPO_URL = 'https://github.com/bluepe4u/MafiaGame';
+function renderFooter() {
+  const home = document.getElementById('home');
+  if (!home) return;
+  let el = document.getElementById('siteFooter');
+  if (!el) { el = document.createElement('footer'); el.id = 'siteFooter'; el.className = 'site-footer'; home.append(el); }
+  el.innerHTML = [['/terms/', 'footer.terms'], ['/privacy/', 'footer.privacy'], ['/poker/fair.html', 'footer.fair'], [REPO_URL, 'footer.source']]
+    .map(([href, key]) => `<a href="${href}"${href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>${esc(t(key))}</a>`).join(' · ');
+  const hint = document.querySelector('#authCard .auth-hint');
+  if (hint) {
+    let legal = document.getElementById('authLegal');
+    if (!legal) { legal = document.createElement('p'); legal.id = 'authLegal'; legal.className = 'muted small-text auth-legal'; hint.after(legal); }
+    legal.innerHTML = `${esc(t('auth.legal'))} <a href="/terms/" target="_blank">${esc(t('auth.legalTerms'))}</a> ${esc(t('auth.legalAnd'))} <a href="/privacy/" target="_blank">${esc(t('auth.legalPrivacy'))}</a>.`;
+    legal.classList.toggle('hidden', authMode !== 'register');
+  }
+}
+renderFooter();
 // remember a table link through logging in / registering
 try { if (qs.get('table')) sessionStorage.setItem(PENDING_TABLE_KEY, qs.get('table')); } catch {}
 

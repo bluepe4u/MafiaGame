@@ -164,7 +164,7 @@
     'cit.alert.pick': 'Choose your character',
     'cit.alert.turn': 'Your turn: {char}',
 
-    'cit.board.title': 'Citadels leaderboard',
+    'cit.board.title': 'Kingdoms leaderboard',
     'cit.board.tab.wins': 'Wins',
     'cit.board.tab.winrate': 'Win rate',
     'cit.board.tab.best': 'Best score',
@@ -438,7 +438,7 @@
     'cit.alert.pick': 'Выберите героя',
     'cit.alert.turn': 'Ваш ход: {char}',
 
-    'cit.board.title': 'Рейтинг Цитаделей',
+    'cit.board.title': 'Рейтинг «Королевств»',
     'cit.board.tab.wins': 'Победы',
     'cit.board.tab.winrate': 'Винрейт',
     'cit.board.tab.best': 'Рекорд',

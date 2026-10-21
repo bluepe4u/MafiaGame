@@ -20,6 +20,7 @@ const { Pledges, LIMIT_DAYS: DEBT_LIMIT_DAYS, BAN_DAYS: DEBT_BAN_DAYS } = requir
 const { createVoiceHub, iceServers } = require('./src/voice');
 const insights = require('./src/insights');
 const { SttQueue } = require('./src/stt');
+const { Stats } = require('./src/stats');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -34,6 +35,7 @@ tables.prune(Object.keys(users.users));
 const archive = new Archive(DATA_DIR);
 archive.prune(Object.keys(users.users));
 const pledges = new Pledges(DATA_DIR);
+const stats = new Stats(DATA_DIR);
 // unpaid USDT debts: a debtor first loses the USDT tables (and everyone sees the mark), then the site
 users.debtOf = id => pledges.debtOf(id);
 users.banned = id => pledges.debtOf(id).level >= 2;
@@ -72,6 +74,22 @@ app.use((req, res, next) => {
   if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
+// visit counts for the pages people open (see src/stats.js: no cookies, no tracking script)
+const PAGES = new Set(['/', '/poker/', '/tycoon/', '/spy/', '/kingdoms/', '/terms/', '/privacy/', '/poker/fair.html']);
+app.use((req, res, next) => {
+  if (req.method === 'GET' && PAGES.has(req.path)) {
+    stats.view({ page: req.path, ip: req.ip, ua: req.get('user-agent'), referrer: req.get('referer'), host: req.hostname });
+  }
+  next();
+});
+app.get('/favicon.ico', (_req, res) => res.type('image/png').set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'public', 'icon-48.png')));
+// the games' old addresses (before they got their own names): old invite links keep working
+const MOVED = { monopoly: 'tycoon', citadels: 'kingdoms', spyfall: 'spy' };
+app.get(/^\/(monopoly|citadels|spyfall)(\/.*)?$/, (req, res) => {
+  const [, from, rest] = req.path.match(/^\/(\w+)(\/.*)?$/);
+  const query = req.originalUrl.slice(req.path.length);
+  res.redirect(301, `/${MOVED[from]}${rest || '/'}${query}`);
+});
 // browsers re-check the page's files on every load (cheap: unchanged files answer 304), so
 // nobody keeps running an old version after an update
 app.use(express.static(path.join(__dirname, 'public'), { setHeaders: res => res.setHeader('Cache-Control', 'no-cache') }));
@@ -97,6 +115,19 @@ const currentUser = req => {
 };
 
 app.use('/api', express.json({ limit: '2mb' }));
+// script errors from the pages (common.js reports them), a few per minute per address
+const errorBudget = new Map(); // ip -> { n, until }
+app.post('/api/err', (req, res) => {
+  const now = Date.now();
+  const b = errorBudget.get(req.ip);
+  if (!b || b.until < now) errorBudget.set(req.ip, { n: 1, until: now + 60000 });
+  else if (++b.n > 10) return res.status(429).end();
+  if (errorBudget.size > 5000) errorBudget.clear();
+  const body = req.body || {};
+  const e = stats.error({ msg: body.msg, src: body.src, line: body.line, page: body.page, ua: req.get('user-agent') });
+  console.warn(`client error on ${e.page}: ${e.msg} (${e.src}:${e.line})`);
+  res.status(204).end();
+});
 app.post('/api/register', api(req => {
   const { user, token, invite, recoveryCode } = users.register(req.body.username, req.body.password, req.body.invite);
   if (invite.tableId) { try { tables.join(invite.tableId, user); } catch {} }
@@ -162,6 +193,10 @@ const targetUser = req => {
   if (!u) throw new GameError('err.invalidTarget');
   return u;
 };
+app.get('/api/admin/stats', api(req => {
+  adminUser(req);
+  return { stats: stats.summary(Math.min(90, Math.max(1, Number(req.query.days) || 14))) };
+}));
 app.get('/api/admin/users', api(req => {
   adminUser(req);
   return { users: Object.values(users.users).map(u => users.adminView(u)).sort((a, b) => a.username.localeCompare(b.username)) };
@@ -473,7 +508,7 @@ app.post('/api/admin/badge', api(req => {
 app.get('/qr.svg', async (req, res) => {
   const code = String(req.query.room || '').toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) return res.status(400).end();
-  const page = { mono: '/monopoly/', spy: '/spyfall/', cit: '/citadels/', poker: '/poker/' }[req.query.game] || '/';
+  const page = { mono: '/tycoon/', spy: '/spy/', cit: '/kingdoms/', poker: '/poker/' }[req.query.game] || '/';
   const svg = await QRCode.toString(`${req.protocol}://${req.get('host')}${page}?room=${code}`, { type: 'svg', margin: 1 });
   res.type('image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(svg);
 });
@@ -486,7 +521,7 @@ const rooms = new Map(); // code -> Room
 const mono = attachMonopoly({
   io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) || spy.has(code) || cit.has(code) || poker.has(code),
   onArchive: record => archive.add(record),
-  onStart: room => room.tableId && tables.saveSettings(room.tableId, 'mono', room.settings),
+  onStart: room => { stats.game('mono'); if (room.tableId) tables.saveSettings(room.tableId, 'mono', room.settings); },
 });
 
 const voiceHub = createVoiceHub(io.of('/'));
@@ -495,12 +530,12 @@ const voiceAllowed = room => users.features.voice && room.settings.voice !== fal
 const spy = attachSpyfall({
   io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) || mono.has(code) || cit.has(code) || poker.has(code),
   onArchive: record => archive.add(record),
-  onStart: room => room.tableId && tables.saveSettings(room.tableId, 'spy', room.settings),
+  onStart: room => { stats.game('spy'); if (room.tableId) tables.saveSettings(room.tableId, 'spy', room.settings); },
 });
 const cit = attachCitadels({
   io, app, users, api, currentUser, dataDir: DATA_DIR, codeTaken: code => rooms.has(code) || mono.has(code) || spy.has(code) || poker.has(code),
   onArchive: record => archive.add(record),
-  onStart: room => room.tableId && tables.saveSettings(room.tableId, 'cit', room.settings),
+  onStart: room => { stats.game('cit'); if (room.tableId) tables.saveSettings(room.tableId, 'cit', room.settings); },
 });
 // Poker (Texas hold'em): chips only
 const poker = attachPoker({
@@ -518,7 +553,7 @@ const poker = attachPoker({
   },
   usdtOk: uid => !!users.users[uid]?.usdt,
   debtor: uid => pledges.debtOf(uid).level >= 1,
-  onStart: room => room.tableId && tables.saveSettings(room.tableId, 'poker', room.settings),
+  onStart: room => { stats.game('poker'); if (room.tableId) tables.saveSettings(room.tableId, 'poker', room.settings); },
 });
 const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets(), ...spy.sockets(), ...cit.sockets(), ...poker.sockets()];
 const roomSummary = room => ({
@@ -553,7 +588,7 @@ const roomOptions = () => ({
     if (game) finishMafiaGame(game, record).catch(e => console.error('Insights failed:', e.message));
   },
   onRound: (room, day) => noteRound(room, day),
-  onStart: room => room.tableId && tables.saveSettings(room.tableId, 'mafia', room.settings),
+  onStart: room => { stats.game('mafia'); if (room.tableId) tables.saveSettings(room.tableId, 'mafia', room.settings); },
   features: () => users.features,
   onRate: (targetUserId, oldValue, newValue, fromUserId) => {
     users.applyRating(targetUserId, oldValue, newValue, fromUserId);
@@ -773,6 +808,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     tables.saveNow();
     archive.saveNow();
     pledges.saveNow();
+    stats.saveNow();
     shuttingDown = true;
     io.close();
     server.close(() => process.exit(0));

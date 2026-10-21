@@ -56,6 +56,7 @@ socket.on('state', s => {
   clockOffset = s.serverNow - Date.now();
   const prev = state;
   state = s;
+  fairOnState(s);
   fxOnState(prev, s);
   render();
   autoPre();
@@ -1176,11 +1177,105 @@ function openHand(n) {
     <ul class="pk-hand-players">${players}</ul>
     ${eqRows}
     <h4>${esc(t('pk.actions'))}</h4>${actionsLog(x)}
+    ${x.fair ? `<p class="pk-fair-line muted small-text" title="${esc(t('pk.fair.commitHint'))}">🔒 ${esc(t('pk.fair.commit'))}: <code>${x.fair.commit.slice(0, 16)}…</code></p>` : ''}
     <div class="pk-hand-pots">${r.pots.map((p, i) => `<div>${esc(t(i ? 'pk.sidePot' : 'pk.mainPot', { n: fmt(p.amount) }))} → <b>${esc(p.winners.map(nameOf).join(', '))}</b></div>`).join('')}</div>`;
   $('#handSheet').classList.remove('hidden');
 }
 $('#handClose').onclick = () => closeOverlay('handSheet');
 $('#cheatClose').onclick = () => closeOverlay('cheatSheet');
+
+// ---------- provably fair deal ----------
+// Our browser sends a fresh seed for every hand once it has seen the commitment to the server's
+// seed for it, and remembers what it saw during the game: the check after the session compares
+// the revealed seeds with this, not with what the server says later.
+const FAIR_KEY = 'pk.fair';
+let fairSeen = null;
+let fairLast = '';
+const randomHex = n => [...crypto.getRandomValues(new Uint8Array(n))].map(b => b.toString(16).padStart(2, '0')).join('');
+function fairBook() {
+  try { return JSON.parse(store.get(FAIR_KEY)) || { sent: {}, games: {} }; } catch { return { sent: {}, games: {} }; }
+}
+function fairSave(book) {
+  // the last few sessions are enough
+  const games = Object.keys(book.games);
+  for (const id of games.slice(0, Math.max(0, games.length - 3))) delete book.games[id];
+  const sent = Object.keys(book.sent);
+  for (const c of sent.slice(0, Math.max(0, sent.length - 400))) delete book.sent[c];
+  store.set(FAIR_KEY, JSON.stringify(book));
+}
+function fairOnState(s) {
+  const seated = s.me && s.players.some(p => p.id === s.me.id);
+  if (s.fairNext && s.fairNext !== fairSeen && seated) {
+    fairSeen = s.fairNext;
+    const seed = randomHex(16);
+    const book = fairBook();
+    book.sent[s.fairNext] = seed;
+    fairSave(book);
+    socket.emit('seed', { seed }, () => {});
+  }
+  const h = s.game && s.game.hand;
+  if (!h || !h.fair || !s.gameId) return;
+  const entry = { commit: h.fair.commit, clients: h.fair.clients, seats: h.seats, sbPid: h.sbPid, hole: h.hole, board: h.board, rabbit: h.rabbit ? h.rabbit.cards : null };
+  const key = `${s.gameId}:${h.n}:${JSON.stringify(entry)}`;
+  if (key === fairLast) return;
+  fairLast = key;
+  const book = fairBook();
+  (book.games[s.gameId] = book.games[s.gameId] || {})[h.n] = entry;
+  fairSave(book);
+}
+
+// one revealed hand against what we saw: the commitment, our seed in the mix, the cards
+async function fairCheck(e, seen, sent, me) {
+  const v = await PokerFair.verify(e);
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const out = { n: e.n, v, commit: v.commitOk && (!seen || seen.commit === e.commit), seen: !!seen, seed: null, cards: null };
+  // our seed is only in the hands we were dealt into
+  if (sent[e.commit] && seen && seen.seats.includes(me)) out.seed = e.clients.includes(sent[e.commit]);
+  if (seen) {
+    out.commit = out.commit && same(seen.clients, e.clients);
+    const from = seen.seats.indexOf(seen.sbPid);
+    const dealt = seen.seats.map((_, k) => seen.seats[(from + k) % seen.seats.length]);
+    const holeOk = Object.entries(seen.hole).every(([pid, c]) => same(c, v.hole[dealt.indexOf(pid)]));
+    const boardOk = same(seen.board, v.board.slice(0, seen.board.length));
+    const rabbitOk = !seen.rabbit || same(seen.rabbit, v.board.slice(seen.board.length, seen.board.length + seen.rabbit.length));
+    out.cards = holeOk && boardOk && rabbitOk;
+  }
+  out.ok = out.commit && out.seed !== false && out.cards !== false;
+  return out;
+}
+
+async function openFair() {
+  $('#fairBody').innerHTML = `<p class="muted">${esc(t('pk.fair.checking'))}</p>`;
+  $('#fairSheet').classList.remove('hidden');
+  const res = await send('fairLog');
+  if (!res.ok) return closeOverlay('fairSheet');
+  const hands = res.result.hands;
+  const book = fairBook();
+  const seenGame = book.games[state.gameId] || {};
+  const rows = [];
+  for (const e of hands) rows.push(await fairCheck(e, seenGame[e.n], book.sent, myId()));
+  const bad = rows.filter(r => !r.ok);
+  const mark = x => (x === null ? `<span class="muted">—</span>` : x ? '<b class="pos">✓</b>' : '<b class="neg">✗</b>');
+  $('#fairBody').innerHTML = `
+    <p class="pk-fair-sum ${bad.length ? 'neg' : 'pos'}"><b>${esc(bad.length ? t('pk.fair.bad', { n: bad.length }) : t('pk.fair.allOk', { n: rows.length }))}</b></p>
+    <p class="muted small-text">${esc(t('pk.fair.how'))}</p>
+    <div class="pk-fair-actions"><button id="fairDownload" class="ghost small">${esc(t('pk.fair.download'))}</button>
+      <button id="fairPage" class="ghost small">${esc(t('pk.fair.independent'))}</button></div>
+    <table class="pk-fair-table"><thead><tr><th>#</th><th>${esc(t('pk.fair.col.commit'))}</th><th>${esc(t('pk.fair.col.seed'))}</th><th>${esc(t('pk.fair.col.cards'))}</th><th></th></tr></thead>
+    <tbody>${rows.map(r => `<tr class="${r.ok ? '' : 'bad'}"><td>${r.n}</td><td>${mark(r.commit)}</td><td>${mark(r.seed)}</td>
+      <td>${r.seen ? mark(r.cards) : `<span class="muted small-text">${esc(t('pk.fair.notSeen'))}</span>`}</td>
+      <td class="pk-fair-board">${r.v.board.map(c => cardHtml(c, { cls: 'xs' })).join('')}</td></tr>`).join('')}</tbody></table>`;
+  $('#fairPage').onclick = () => window.open('/poker/fair.html', '_blank', 'noopener');
+  $('#fairDownload').onclick = () => {
+    const blob = new Blob([JSON.stringify({ code: state.code, gameId: state.gameId, hands }, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `poker-${state.code}-fair-log.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+}
+$('#fairClose').onclick = () => closeOverlay('fairSheet');
 
 // ---------- host controls ----------
 function renderHost() {
@@ -1211,10 +1306,12 @@ function openResults() {
     ${state.settings.bank === 'usdt' && g.settlement ? `<h4>${esc(t('pk.usdt.results'))}</h4>
       <ul class="pk-transfers">${g.settlement.map(x => `<li><b>${esc(nameOf(x.from))}</b> → <b>${esc(nameOf(x.to))}</b>: <span class="pk-usd">${usd(x.cents)}</span></li>`).join('') || `<li>${esc(t('pk.usdt.even'))}</li>`}</ul>
       <p class="muted small-text">${esc(t('pk.usdt.resultsHint'))}</p><button id="resPledges" class="ghost">${esc(t('pk.pl.title'))}</button>` : ''}
+    ${g.history.some(x => x.fair) ? `<button id="resFair" class="ghost">🔒 ${esc(t('pk.fair.check'))}</button>` : ''}
     ${state.settings.bank === 'chips' ? `<p class="muted small-text">${esc(t('pk.chips.back'))}</p>` : ''}
     ${isHost() ? `<button id="toLobby" class="primary">${esc(t('pk.backToLobby'))}</button>` : ''}`;
   if (isHost()) $('#toLobby').onclick = () => { closeOverlay('results'); send('restart'); };
   if ($('#resPledges')) $('#resPledges').onclick = () => { closeOverlay('results'); openPledges(); };
+  if ($('#resFair')) $('#resFair').onclick = () => { closeOverlay('results'); openFair(); };
   $('#results').classList.remove('hidden');
 }
 $('#resultsClose').onclick = () => closeOverlay('results');
@@ -1327,7 +1424,7 @@ $('#boardBtn').onclick = openBoard;
 $('#homeBoard').onclick = openBoard;
 $('#boardClose').onclick = () => closeOverlay('boardSheet');
 
-const OVERLAYS = ['boardSheet', 'results', 'handSheet', 'cheatSheet', 'pledgeSheet', 'walletSheet'];
+const OVERLAYS = ['fairSheet', 'boardSheet', 'results', 'handSheet', 'cheatSheet', 'pledgeSheet', 'walletSheet'];
 for (const id of OVERLAYS) $('#' + id).addEventListener('pointerdown', e => { if (e.target.id === id) closeOverlay(id); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { for (const id of OVERLAYS) closeOverlay(id); toggleStickers(false); } });
 new ResizeObserver(() => document.documentElement.style.setProperty('--topbar-h', `${$('.topbar').offsetHeight}px`)).observe($('.topbar'));
@@ -1350,3 +1447,12 @@ $('#profileBtn').onclick = () => openProfile();
 $('#homeProfile').onclick = () => openProfile();
 applyStaticTranslations();
 render();
+
+// poker is 18+: asked once per browser
+const AGE_KEY = 'pk.age18';
+if (!store.get(AGE_KEY)) {
+  askConfirm({ title: t('pk.age.title'), text: t('pk.age.text'), ok: t('pk.age.yes'), cancel: t('pk.age.no') }).then(yes => {
+    if (yes) store.set(AGE_KEY, '1');
+    else location.href = '/';
+  });
+}

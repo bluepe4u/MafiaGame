@@ -45,7 +45,7 @@ const defaultSettings = () => ({
   bank: 'chips', usdtBuyIn: 10,
 });
 
-const SAVED_FIELDS = ['code', 'players', 'spectators', 'hostId', 'settings', 'phase', 'g', 'gameId', 'lastActivity', 'tableId'];
+const SAVED_FIELDS = ['code', 'players', 'spectators', 'hostId', 'settings', 'phase', 'g', 'gameId', 'lastActivity', 'tableId', 'fairNext'];
 const id = (bytes = 6) => crypto.randomBytes(bytes).toString('hex');
 const emptySeatStats = () => ({ hands: 0, vpip: 0, pfr: 0, won: 0, showdowns: 0, sdWon: 0, allIns: 0, allInsWon: 0, biggestPot: 0, best: null });
 
@@ -53,10 +53,11 @@ class PokerRoom {
   constructor({
     code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout,
     profileOf = () => null, onGameEnd = () => {}, onStart = () => {}, onArchive = () => {}, onSettle = () => {}, tableId = null,
-    wallet = OPEN_WALLET, usdtOk = () => true, debtor = () => false,
+    wallet = OPEN_WALLET, usdtOk = () => true, debtor = () => false, fair = null,
     features = () => ({ family: true, voice: true, transcripts: true }),
   } = {}) {
     this.onSettle = onSettle;
+    this.fair = fair; // provably fair decks (src/poker/fair.js); without it the deck comes from rng
     this.wallet = wallet; // site chips: { balance(userId), take(userId, n, reason, extra) -> bool, give(userId, n, reason, extra) }
     this.usdtOk = usdtOk; // userId -> has a USDT address to be paid at
     this.debtor = debtor; // userId -> owes USDT for too long: no USDT tables
@@ -81,6 +82,29 @@ class PokerRoom {
     this.timer = null;
     this.timerSeq = 0;
     this.lastActivity = Date.now();
+    this.fairNext = null; // { seed, commit } of the next hand: the commitment is public, the seed is not
+    this.armFair();
+  }
+
+  // a seed for the next hand, committed to before the players' seeds for it are in
+  armFair() {
+    if (this.fair && !this.fairNext) {
+      const seed = this.fair.newSeed();
+      this.fairNext = { seed, commit: this.fair.commit(seed) };
+    }
+  }
+
+  // each browser sends a fresh seed of its own whenever it sees a new commitment
+  setClientSeed(pid, seed) {
+    const p = this.player(pid);
+    if (!p) return; // spectators aren't dealt in
+    p.clientSeed = this.fair ? this.fair.cleanClientSeed(seed) : '';
+  }
+
+  // after the session: every hand's seeds, to recompute the decks
+  fairLog() {
+    this.assert(this.phase === 'ended' && this.g && this.g.fairLog, 'err.pk.notNow');
+    return { hands: this.g.fairLog };
   }
 
   toJSON() { return Object.fromEntries(SAVED_FIELDS.map(k => [k, this[k]])); }
@@ -91,6 +115,7 @@ class PokerRoom {
     for (const k of SAVED_FIELDS) if (data[k] !== undefined) room[k] = data[k];
     room.settings = { ...defaults, ...room.settings };
     for (const p of [...room.players, ...room.spectators]) p.connected = false;
+    room.armFair();
     // a fresh clock for whatever was running when the server went down
     const h = room.g && room.g.hand;
     if (room.phase === 'playing' && h) {
@@ -319,6 +344,7 @@ class PokerRoom {
       paused: false,
       ending: false,
       startedAt: Date.now(),
+      fairLog: this.fair ? [] : null, // { n, commit, seed, clients, nonce, players }, revealed when the session ends
     };
     for (const p of this.players) p.ready = false;
     this.phase = 'playing';
@@ -388,7 +414,21 @@ class PokerRoom {
     const sbPid = live.length === 2 ? g.button : this.nextSeat(g.button, p => live.includes(p));
     const bbPid = this.nextSeat(sbPid, p => live.includes(p));
     const seats = g.order.filter(p => live.includes(p));
-    const deck = this.shuffle(PH.DECK);
+    let deck;
+    let fair = null;
+    if (this.fair && g.fairLog) {
+      this.armFair();
+      const { seed, commit } = this.fairNext;
+      const clients = seats.map(p => this.player(p)?.clientSeed || '');
+      const nonce = `${this.gameId}:${g.handN}`;
+      deck = this.fair.deckOf(seed, clients, nonce);
+      const from = seats.indexOf(sbPid);
+      const dealt = seats.map((_, k) => seats[(from + k) % seats.length]);
+      g.fairLog.push({ n: g.handN, commit, seed, clients, nonce, players: dealt.map(p => this.player(p)?.name || '?') });
+      fair = { commit, clients };
+      this.fairNext = null;
+      this.armFair();
+    } else deck = this.shuffle(PH.DECK);
     const h = {
       n: g.handN, button: g.button, sbPid, bbPid, seats, deck, board: [], burned: 0,
       hole: {}, bets: {}, total: {}, folded: {}, allIn: {}, acted: {}, shown: {},
@@ -396,7 +436,7 @@ class PokerRoom {
       blinds: { ...g.blinds },
       street: 'preflop', stage: 'betting',
       currentBet: 0, minRaise: g.blinds.bb, lastAggr: null, toAct: null, actEndsAt: null,
-      actions: [], equity: [], nextAt: null, squeeze: false, result: null, rabbit: null,
+      actions: [], equity: [], nextAt: null, squeeze: false, result: null, rabbit: null, fair,
     };
     g.hand = h;
     // two cards each, one at a time from the small blind
@@ -758,7 +798,7 @@ class PokerRoom {
     return {
       n: h.n, button: h.button, sbPid: h.sbPid, bbPid: h.bbPid, blinds: h.blinds, seats: h.seats, start: h.start,
       hole: h.hole, shown: { ...h.shown }, board: h.board, actions: h.actions, result: h.result, rabbit: null, at: Date.now(),
-      rabbitCards: h.board.length < 5 ? this.rabbitOf(h) : null,
+      rabbitCards: h.board.length < 5 ? this.rabbitOf(h) : null, fair: h.fair || null,
     };
   }
 
@@ -1016,6 +1056,7 @@ class PokerRoom {
       me: me ? { id: me.id, name: me.name, spectator: !!this.spectator(pid) } : null,
       gameId: this.gameId,
       tableId: this.tableId,
+      fairNext: this.fairNext ? this.fairNext.commit : null,
     };
     const g = this.g;
     if (!g) return view;
@@ -1036,7 +1077,7 @@ class PokerRoom {
         currentBet: h.currentBet, minRaise: h.minRaise, toAct: h.toAct, actEndsAt: h.actEndsAt, actions: h.actions,
         pot: h.seats.reduce((a, p) => a + h.total[p], 0),
         pots: h.stage === 'betting' || h.stage === 'runout' ? this.pots() : null,
-        equity: h.equity, nextAt: h.nextAt, squeeze: h.squeeze, result: h.result, rabbit: h.rabbit,
+        equity: h.equity, nextAt: h.nextAt, squeeze: h.squeeze, result: h.result, rabbit: h.rabbit, fair: h.fair || null,
         hole: holeFor(h, false),
         options: this.options(pid),
       },

@@ -55,7 +55,7 @@ function leftRoom() {
   store.set(SESSION_KEY, null);
   state = null;
   urlRoom = '';
-  history.replaceState(null, '', '/spyfall/');
+  history.replaceState(null, '', '/spy/');
   render();
 }
 
@@ -74,7 +74,7 @@ $('#leaveBtn').onclick = async () => {
   leftRoom();
 };
 $('#topRoom').onclick = $('#copyLink').onclick = async () => {
-  try { await navigator.clipboard.writeText(`${location.origin}/spyfall/?room=${state.code}`); toast(t('toast.linkCopied'), 'info'); } catch {}
+  try { await navigator.clipboard.writeText(`${location.origin}/spy/?room=${state.code}`); toast(t('toast.linkCopied'), 'info'); } catch {}
 };
 
 // ---------- helpers ----------
@@ -97,7 +97,7 @@ function render() {
   $('#leaveBtn').classList.toggle('hidden', !inRoom);
   if (inRoom) $('#topCode').textContent = state.code;
   $('#topRound').textContent = inRoom && state.game ? t('spy.roundOf', { n: state.game.roundN, of: state.game.rounds }) : '';
-  if (inRoom && urlRoom !== state.code) { urlRoom = state.code; history.replaceState(null, '', `/spyfall/?room=${state.code}`); }
+  if (inRoom && urlRoom !== state.code) { urlRoom = state.code; history.replaceState(null, '', `/spy/?room=${state.code}`); }
   updateTurnAlert(spyNeed());
   Voice.update(!!(state && state.me && state.features && state.features.voice && state.settings.voice !== false));
   if (!inRoom) return show('home');

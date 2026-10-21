@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { PokerRoom } = require('./game');
+const fair = require('./fair');
 const { GameError } = require('../game');
 const { limitSocket } = require('../ratelimit');
 const { createVoiceHub } = require('../voice');
@@ -54,6 +55,7 @@ function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onA
     usdtOk,
     debtor,
     features: () => users.features,
+    fair,
   });
 
   function newCode() {
@@ -160,6 +162,8 @@ function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onA
     on('act', p => { const { room, pid } = ctx(); room.act(pid, String(p.type || ''), p.amount); });
     act('rabbit', 'rabbit');
     act('show', 'show');
+    act('seed', 'setClientSeed', p => [p.seed]);
+    on('fairLog', () => { const { room } = ctx(); return room.fairLog(); });
     act('sitOut', 'sitOut', p => [!!p.on]);
     act('rebuy', 'rebuy');
     act('sit', 'sit');

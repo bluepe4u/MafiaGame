@@ -1,7 +1,7 @@
 'use strict';
 
 // Citadels cards: characters and the district deck of the 2016 edition. Names and texts live
-// in the client's translations (public/citadels/cit-i18n.js); here are only the numbers.
+// in the client's translations (public/kingdoms/cit-i18n.js); here are only the numbers.
 
 // One character per rank in a game. `color`: the districts its income counts.
 const CHARACTERS = {

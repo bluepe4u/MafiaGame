@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /secret.html
+Disallow: /avatars/
+
+Sitemap: https://bluepeau.club/sitemap.xml

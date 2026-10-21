@@ -104,7 +104,7 @@ function leftRoom() {
   state = null;
   urlRoom = '';
   targeting = null;
-  history.replaceState(null, '', '/citadels/');
+  history.replaceState(null, '', '/kingdoms/');
   closeAll();
   render();
 }
@@ -122,7 +122,7 @@ $('#leaveBtn').onclick = async () => {
   leftRoom();
 };
 $('#topRoom').onclick = async () => {
-  try { await navigator.clipboard.writeText(`${location.origin}/citadels/?room=${state.code}`); toast(t('toast.linkCopied'), 'info'); } catch {}
+  try { await navigator.clipboard.writeText(`${location.origin}/kingdoms/?room=${state.code}`); toast(t('toast.linkCopied'), 'info'); } catch {}
 };
 $('#copyLink').onclick = () => $('#topRoom').click();
 
@@ -164,7 +164,7 @@ function render() {
   $('#leaveBtn').classList.toggle('hidden', !inRoom);
   if (inRoom) $('#topCode').textContent = state.code;
   $('#topRound').textContent = inRoom && state.game ? roundChip() : '';
-  if (inRoom && urlRoom !== state.code) { urlRoom = state.code; history.replaceState(null, '', `/citadels/?room=${state.code}`); }
+  if (inRoom && urlRoom !== state.code) { urlRoom = state.code; history.replaceState(null, '', `/kingdoms/?room=${state.code}`); }
   renderReactBar();
   updateTurnAlert(citNeed());
   Voice.update(!!(state && state.me && state.features && state.features.voice && state.settings.voice !== false));

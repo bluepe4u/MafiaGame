@@ -1203,3 +1203,33 @@ body.streamer .room-pill .code { letter-spacing: .2em; }
 .debt-banner.lvl1 { background: rgba(249, 115, 22, .16); color: #fed7aa; border-color: rgba(249, 115, 22, .45); }
 .debt-banner.lvl2 { background: rgba(220, 38, 38, .2); color: #fecaca; border-color: rgba(220, 38, 38, .55); }
 .debt-banner:hover { filter: brightness(1.15); }
+
+/* the legal pages and the poker fair check page */
+.legal-page { overflow-y: auto; }
+.legal { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; line-height: 1.6; }
+.legal h1 { font-size: 1.8rem; margin: 12px 0 4px; }
+.legal h2 { font-size: 1.05rem; margin: 22px 0 6px; }
+.legal p, .legal li { color: var(--text, #e8e8ef); }
+.legal ul { padding-left: 20px; }
+.legal a { color: #9d90ff; }
+.legal-nav { font-size: .85rem; }
+.legal textarea { width: 100%; font-family: 'Geist Mono', monospace; font-size: .8rem; margin-top: 6px; }
+body[data-lang="ru"] .legal section[lang="en"], body[data-lang="en"] .legal section[lang="ru"] { display: none; }
+.fair-hand { border-top: 1px solid var(--border); padding: 10px 0; }
+.fair-hand.bad { background: rgba(224, 70, 78, .12); }
+.fair-hand ul { list-style: none; padding: 0; margin: 6px 0; }
+.fair-card { display: inline-block; font-family: 'Geist Mono', monospace; font-weight: 600; padding: 1px 4px; border-radius: 4px; background: #f4f1ea; color: #15151a; }
+.fair-card.s-h, .fair-card.s-d { color: #d0323a; }
+.site-footer { text-align: center; font-size: .78rem; color: var(--muted); padding: 18px 16px 28px; }
+.site-footer a { color: inherit; }
+
+/* admin: stats */
+.admin-chart { display: flex; align-items: flex-end; gap: 4px; height: 120px; padding-top: 6px; }
+.admin-bar { flex: 1; position: relative; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.admin-bar i, .admin-bar em { position: absolute; bottom: 16px; width: 70%; border-radius: 4px 4px 0 0; max-height: calc(100% - 16px); }
+.admin-bar i { background: rgba(139, 124, 255, .35); }
+.admin-bar em { background: #8b7cff; width: 40%; }
+.admin-bar span { position: absolute; bottom: 0; font-size: .65rem; color: var(--muted); }
+.admin-stat-list, .admin-errors { list-style: none; padding: 0; margin: 0; }
+.admin-stat-list li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid var(--border); font-size: .85rem; }
+.admin-errors li { display: flex; flex-direction: column; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: .82rem; word-break: break-word; }

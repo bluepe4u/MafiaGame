@@ -140,6 +140,33 @@ EOF
 systemctl daemon-reload
 systemctl enable --now "${SERVICE}-backup.timer" >/dev/null
 
+# --- Watchdog ------------------------------------------------------------------
+# systemd restarts the app when it crashes; this restarts it when it hangs (no answer on /health)
+log "Scheduling the health watchdog"
+cat > "/etc/systemd/system/${SERVICE}-watchdog.service" <<EOF
+[Unit]
+Description=Restart $SERVICE if it stops answering
+
+[Service]
+Type=oneshot
+Environment=PORT=$PORT
+Environment=SERVICE=$SERVICE
+ExecStart=$APP_DIR/deploy/watchdog.sh
+EOF
+cat > "/etc/systemd/system/${SERVICE}-watchdog.timer" <<EOF
+[Unit]
+Description=Check $SERVICE every two minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable --now "${SERVICE}-watchdog.timer" >/dev/null
+
 # --- Caddy (HTTPS) -----------------------------------------------------------
 if [[ -n "$DOMAIN" ]]; then
   if ! command -v caddy >/dev/null; then
