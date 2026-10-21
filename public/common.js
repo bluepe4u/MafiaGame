@@ -405,22 +405,6 @@ for (const h of document.querySelectorAll('#lobby .card-head')) {
 }
 for (const b of document.querySelectorAll('.rules-link')) b.onclick = () => openRules();
 
-// ---------- first visit: how this works ----------
-const ONBOARD_KEY = 'site.onboarded';
-function renderOnboarding() {
-  let box = $('#onboarding');
-  if (!box) {
-    $('#playCard').insertAdjacentHTML('afterbegin', `<div id="onboarding" class="onboarding hidden"><b data-i18n="onboard.title"></b>
-      <ol><li data-i18n="onboard.1"></li><li data-i18n="onboard.2"></li><li data-i18n="onboard.3"></li></ol>
-      <div class="row"><button class="small" id="onboardRules" type="button" data-i18n="rules.open"></button><button class="ghost small" id="onboardOk" type="button" data-i18n="onboard.ok"></button></div></div>`);
-    box = $('#onboarding');
-    applyStaticTranslations(box);
-    $('#onboardOk').onclick = () => { store.set(ONBOARD_KEY, '1'); box.classList.add('hidden'); };
-    $('#onboardRules').onclick = () => openRules();
-  }
-  box.classList.toggle('hidden', !!store.get(ONBOARD_KEY) || !account);
-}
-
 // ---------- accounts ----------
 let account = null; // the logged-in user's profile (see UserStore.publicProfile)
 let authMode = 'login';
@@ -597,7 +581,6 @@ function renderAccount() {
     queueGifts(account.gifts);
   }
   Site.hooks.onAccount();
-  renderOnboarding();
   refreshHome();
 }
 
@@ -1452,13 +1435,16 @@ async function loadTables() {
 function renderTables() {
   let box = $('#tables');
   if (!box) {
-    $('#playCard').insertAdjacentHTML('afterbegin', '<div id="tables" class="tables hidden"></div>');
+    // after "Start a room" and the code: the main actions come first
+    $('#playCard').insertAdjacentHTML('beforeend', '<div id="tables" class="tables hidden"></div>');
     box = $('#tables');
   }
   box.classList.toggle('hidden', !account || !Site.home);
   if (!account || !Site.home) return;
   const createForm = `<form class="row table-create hidden" id="tableCreate"><input id="tableName" maxlength="40" placeholder="${esc(t('table.namePlaceholder'))}"><button class="primary small" type="submit">${esc(t('table.create'))}</button></form>`;
-  if (!myTables.length) {
+  if (!myTables.length && account.guest) {
+    box.innerHTML = createForm; // guests can't make tables (they can join public ones below)
+  } else if (!myTables.length) {
     box.innerHTML = `<button class="ghost table-new" id="tableNew">${ico('table')} ${esc(t('table.createFirst'))}</button>${createForm}<p class="muted small-text table-help">${esc(t('table.help'))}</p>`;
   } else {
     box.innerHTML = myTables.map(tb => {

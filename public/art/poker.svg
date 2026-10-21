@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 520" role="img" aria-label="A poker table">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="35%" r="75%"><stop offset="0" stop-color="#16382b"/><stop offset=".6" stop-color="#0b1a14"/><stop offset="1" stop-color="#070d0a"/></radialGradient>
+    <radialGradient id="felt" cx="50%" cy="42%" r="62%"><stop offset="0" stop-color="#1c8a62"/><stop offset=".65" stop-color="#0f5c40"/><stop offset="1" stop-color="#0a3f2c"/></radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2a1e"/><stop offset="1" stop-color="#1c130c"/></linearGradient>
+    <radialGradient id="lamp" cx="50%" cy="0%" r="70%"><stop offset="0" stop-color="#fff6d8" stop-opacity=".22"/><stop offset="1" stop-color="#fff6d8" stop-opacity="0"/></radialGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity=".45"/></filter>
+    <g id="card"><rect width="52" height="74" rx="7" fill="#f7f4ec"/><rect x=".5" y=".5" width="51" height="73" rx="6.5" fill="none" stroke="#d9d3c4"/></g>
+    <g id="back"><rect width="52" height="74" rx="7" fill="#2a2a3a"/><rect x="4" y="4" width="44" height="66" rx="5" fill="none" stroke="#e5484d" stroke-width="2"/><path d="M10 10h32v54H10z" fill="url(#hatch)" opacity=".5"/></g>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="#e5484d"/></pattern>
+    <g id="chipR"><ellipse cx="0" cy="0" rx="17" ry="7" fill="#c62f37"/><ellipse cx="0" cy="-3" rx="17" ry="7" fill="#e5484d"/><ellipse cx="0" cy="-3" rx="11" ry="4.4" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="4 4"/></g>
+    <g id="chipB"><ellipse cx="0" cy="0" rx="17" ry="7" fill="#1d4ed8"/><ellipse cx="0" cy="-3" rx="17" ry="7" fill="#3b82f6"/><ellipse cx="0" cy="-3" rx="11" ry="4.4" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="4 4"/></g>
+    <g id="chipK"><ellipse cx="0" cy="0" rx="17" ry="7" fill="#111"/><ellipse cx="0" cy="-3" rx="17" ry="7" fill="#2b2b2b"/><ellipse cx="0" cy="-3" rx="11" ry="4.4" fill="none" stroke="#f5c542" stroke-width="2" stroke-dasharray="4 4"/></g>
+  </defs>
+  <rect width="640" height="520" fill="url(#bg)"/>
+  <rect width="640" height="520" fill="url(#lamp)"/>
+  <!-- the table -->
+  <ellipse cx="320" cy="276" rx="290" ry="168" fill="#000" opacity=".35"/>
+  <ellipse cx="320" cy="262" rx="290" ry="166" fill="url(#rim)"/>
+  <ellipse cx="320" cy="258" rx="262" ry="142" fill="url(#felt)"/>
+  <ellipse cx="320" cy="258" rx="200" ry="98" fill="none" stroke="#ffffff" stroke-opacity=".14" stroke-width="2"/>
+  <!-- the board -->
+  <g filter="url(#sh)">
+    <use href="#card" x="186" y="200"/><text x="196" y="226" font-family="Georgia, serif" font-weight="700" font-size="22" fill="#c8303a">K</text><text x="203" y="258" font-size="26" fill="#c8303a" text-anchor="middle">♥</text>
+    <use href="#card" x="246" y="200"/><text x="256" y="226" font-family="Georgia, serif" font-weight="700" font-size="22" fill="#15151a">9</text><text x="263" y="258" font-size="26" fill="#15151a" text-anchor="middle">♣</text>
+    <use href="#card" x="306" y="200"/><text x="316" y="226" font-family="Georgia, serif" font-weight="700" font-size="22" fill="#15151a">K</text><text x="323" y="258" font-size="26" fill="#15151a" text-anchor="middle">♠</text>
+    <use href="#card" x="366" y="200"/><text x="376" y="226" font-family="Georgia, serif" font-weight="700" font-size="22" fill="#c8303a">4</text><text x="383" y="258" font-size="26" fill="#c8303a" text-anchor="middle">♦</text>
+    <use href="#back" x="426" y="200"/>
+  </g>
+  <!-- the pot -->
+  <g transform="translate(290 312)"><use href="#chipR" y="0"/><use href="#chipR" y="-6"/><use href="#chipR" y="-12"/></g>
+  <g transform="translate(330 316)"><use href="#chipB" y="0"/><use href="#chipB" y="-6"/></g>
+  <g transform="translate(360 306)"><use href="#chipK" y="0"/><use href="#chipK" y="-6"/><use href="#chipK" y="-12"/><use href="#chipK" y="-18"/></g>
+  <rect x="282" y="330" width="76" height="22" rx="11" fill="#000" fill-opacity=".45"/><text x="320" y="346" text-anchor="middle" font-family="Menlo, monospace" font-size="13" fill="#e9f7ef">POT 480</text>
+  <!-- seats -->
+  <g font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle">
+    <g transform="translate(78 236)"><circle r="26" fill="#2b2b38" stroke="#3a3a4a" stroke-width="3"/><circle r="26" fill="#6d5bd0" opacity=".85"/><text y="5" fill="#fff" font-size="15" font-weight="700">AN</text><rect x="-34" y="32" width="68" height="20" rx="10" fill="#111118"/><text y="46" fill="#cfcfd8">1 240</text></g>
+    <g transform="translate(196 92)"><circle r="26" fill="#c2410c" opacity=".9"/><text y="5" fill="#fff" font-size="15" font-weight="700">BO</text><rect x="-34" y="32" width="68" height="20" rx="10" fill="#111118"/><text y="46" fill="#cfcfd8">880</text></g>
+    <g transform="translate(444 92)"><circle r="26" fill="#0e7490" opacity=".9"/><text y="5" fill="#fff" font-size="15" font-weight="700">DI</text><rect x="-34" y="32" width="68" height="20" rx="10" fill="#111118"/><text y="46" fill="#cfcfd8">2 015</text></g>
+    <g transform="translate(562 236)"><circle r="26" fill="#2b2b38" stroke="#3a3a4a" stroke-width="3"/><text y="5" fill="#8a8a98" font-size="13">fold</text></g>
+    <!-- dealer button -->
+    <g transform="translate(470 168)"><circle r="12" fill="#f7f4ec" filter="url(#sh)"/><text y="5" fill="#15151a" font-weight="800" font-size="13">D</text></g>
+  </g>
+  <!-- your hand -->
+  <g transform="translate(272 392)" filter="url(#sh)">
+    <g transform="rotate(-9 26 37)"><use href="#card"/><text x="10" y="26" font-family="Georgia, serif" font-weight="700" font-size="22" fill="#15151a">A</text><text x="17" y="58" font-size="26" fill="#15151a" text-anchor="middle">♠</text></g>
+    <g transform="translate(46 0) rotate(8 26 37)"><use href="#card"/><text x="10" y="26" font-family="Georgia, serif" font-weight="700" font-size="22" fill="#c8303a">A</text><text x="17" y="58" font-size="26" fill="#c8303a" text-anchor="middle">♦</text></g>
+  </g>
+  <rect x="238" y="478" width="164" height="26" rx="13" fill="#34d399"/><text x="320" y="496" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="13" fill="#062016">Two pair, aces up</text>
+</svg>

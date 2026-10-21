@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 520" role="img" aria-label="A city of districts under a crown">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b1a2e"/><stop offset=".7" stop-color="#132a46"/><stop offset="1" stop-color="#1d3a5c"/></linearGradient>
+    <radialGradient id="glow" cx="50%" cy="22%" r="40%"><stop offset="0" stop-color="#f5d27a" stop-opacity=".35"/><stop offset="1" stop-color="#f5d27a" stop-opacity="0"/></radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe29a"/><stop offset=".55" stop-color="#e2a93b"/><stop offset="1" stop-color="#a8701c"/></linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity=".5"/></filter>
+    <g id="coin"><ellipse cx="0" cy="3" rx="20" ry="7" fill="#8a5a12"/><ellipse cx="0" cy="0" rx="20" ry="7" fill="url(#gold)"/><ellipse cx="0" cy="0" rx="13" ry="4" fill="none" stroke="#a8701c" stroke-width="1.5"/></g>
+  </defs>
+  <rect width="640" height="520" fill="url(#sky)"/>
+  <rect width="640" height="520" fill="url(#glow)"/>
+  <g fill="#fff"><circle cx="70" cy="60" r="1.6"/><circle cx="140" cy="110" r="1.2"/><circle cx="560" cy="70" r="1.8"/><circle cx="600" cy="150" r="1.2"/><circle cx="470" cy="40" r="1.2"/><circle cx="210" cy="40" r="1.4"/><circle cx="40" cy="170" r="1.1"/><circle cx="520" cy="200" r="1.1"/></g>
+  <!-- the crown -->
+  <g transform="translate(250 60)" filter="url(#sh)">
+    <path d="M10 92 L0 22 L38 54 L70 0 L102 54 L140 22 L130 92 Z" fill="url(#gold)"/>
+    <rect x="8" y="90" width="124" height="20" rx="5" fill="url(#gold)"/>
+    <circle cx="0" cy="22" r="8" fill="url(#gold)"/><circle cx="70" cy="0" r="9" fill="url(#gold)"/><circle cx="140" cy="22" r="8" fill="url(#gold)"/>
+    <circle cx="70" cy="68" r="9" fill="#dc2626"/><circle cx="34" cy="74" r="6" fill="#2563eb"/><circle cx="106" cy="74" r="6" fill="#16a34a"/>
+  </g>
+  <!-- the city: districts of four kinds -->
+  <g filter="url(#sh)">
+    <!-- religious: blue spire -->
+    <g transform="translate(70 252)"><rect x="0" y="60" width="78" height="140" fill="#1e3a8a"/><path d="M0 60 L39 0 L78 60 Z" fill="#3b82f6"/><rect x="32" y="110" width="14" height="26" rx="7" fill="#fde68a"/><circle cx="39" cy="84" r="8" fill="#fde68a"/></g>
+    <!-- noble: gold palace -->
+    <g transform="translate(160 226)"><rect x="0" y="70" width="128" height="156" fill="#8a6416"/><rect x="0" y="54" width="128" height="18" fill="#e2a93b"/><rect x="18" y="20" width="26" height="52" fill="#a8701c"/><rect x="84" y="20" width="26" height="52" fill="#a8701c"/><path d="M18 20 l13 -18 l13 18 z M84 20 l13 -18 l13 18 z" fill="#e2a93b"/><g fill="#fde68a"><rect x="16" y="96" width="14" height="22" rx="7"/><rect x="57" y="96" width="14" height="22" rx="7"/><rect x="98" y="96" width="14" height="22" rx="7"/><rect x="50" y="150" width="28" height="76" rx="14"/></g></g>
+    <!-- trade: green market -->
+    <g transform="translate(300 290)"><rect x="0" y="40" width="112" height="122" fill="#14532d"/><path d="M-6 44 L56 0 L118 44 Z" fill="#16a34a"/><g fill="#fde68a"><rect x="14" y="66" width="22" height="20"/><rect x="76" y="66" width="22" height="20"/></g><path d="M10 110 h92 v6 h-92 z" fill="#22c55e"/><rect x="40" y="120" width="32" height="42" fill="#0f3d22"/></g>
+    <!-- military: red tower -->
+    <g transform="translate(424 224)"><rect x="12" y="40" width="70" height="188" fill="#7f1d1d"/><path d="M0 40 h94 v-18 h-14 v10 h-12 v-10 h-14 v10 h-14 v-10 h-14 v10 h-12 v-10 h-14 z" fill="#dc2626"/><rect x="38" y="74" width="18" height="30" rx="9" fill="#fde68a"/><path d="M47 0 v24 M47 0 l22 8 l-22 8" fill="#f87171" stroke="#fca5a5" stroke-width="3"/></g>
+    <!-- another religious one -->
+    <g transform="translate(532 286)"><rect x="0" y="44" width="62" height="122" fill="#1e3a8a"/><path d="M-4 46 Q31 -14 66 46 Z" fill="#3b82f6"/><circle cx="31" cy="90" r="9" fill="#fde68a"/></g>
+  </g>
+  <rect x="0" y="450" width="640" height="70" fill="#0a1626"/>
+  <!-- gold on the ground -->
+  <g transform="translate(110 470)"><use href="#coin" y="0"/><use href="#coin" y="-9"/><use href="#coin" y="-18"/><use href="#coin" y="-27"/></g>
+  <g transform="translate(160 478)"><use href="#coin" y="0"/><use href="#coin" y="-9"/></g>
+  <!-- a character card -->
+  <g transform="translate(470 330) rotate(10)" filter="url(#sh)">
+    <rect width="120" height="170" rx="10" fill="#f6efdc"/><rect x="8" y="8" width="104" height="104" rx="6" fill="#1d3a5c"/>
+    <path d="M30 70 L24 40 L42 54 L60 30 L78 54 L96 40 L90 70 Z" fill="url(#gold)"/><rect x="28" y="70" width="64" height="10" rx="3" fill="url(#gold)"/>
+    <circle cx="20" cy="20" r="11" fill="#e2a93b"/><text x="20" y="25" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="14" fill="#3b2a06">4</text>
+    <text x="60" y="138" text-anchor="middle" font-family="Georgia, serif" font-size="20" fill="#2b1d08">King</text><text x="60" y="156" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="9.5" fill="#6b5a3a">takes the crown</text>
+  </g>
+</svg>

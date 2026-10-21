@@ -49,52 +49,16 @@
 
   <main id="app">
     <section id="home" class="screen">
-      <div class="hero hub-hero">
+      <div class="hub-hero">
+        <div class="hub-copy">
         <p class="eyebrow" data-i18n="hub.eyebrow">Free game nights in the browser</p>
         <h1><span data-i18n="hub.heroA">Game night,</span> <em data-i18n="hub.heroB">in one link.</em></h1>
         <p class="muted hero-sub" data-i18n="hub.tagline">Mafia, poker and party games for your group. Start a room, send the link, and everyone plays from their own phone or laptop, with voice chat built in.</p>
         <ul class="hub-trust">
           <li data-i18n="hub.trust.free">Free, no ads</li><li data-i18n="hub.trust.noSignup">Join without an account</li><li data-i18n="hub.trust.noDownload">Nothing to install</li><li data-i18n="hub.trust.open">Open source</li>
         </ul>
-      </div>
-
-      <section id="games" class="hub-section" aria-labelledby="gamesTitle">
-        <h2 id="gamesTitle" class="hub-h2" data-i18n="hub.games">Pick a game</h2>
-        <div class="hub-games">
-          <a class="hub-game g-mafia" href="/mafia/" data-game-ico="mafia">
-            <span class="hub-game-ico"></span>
-            <b class="hub-game-name" data-i18n="site.mafia">Mafia</b>
-            <span class="hub-game-text" data-i18n="hub.desc.mafia">Find the mafia hiding among you. The site narrates the nights.</span>
-            <span class="hub-game-meta"><span data-players="4–12">4–12 players</span> <span class="hub-game-go">→</span></span>
-          </a>
-          <a class="hub-game g-poker" href="/poker/" data-game-ico="poker">
-            <span class="hub-game-ico"></span>
-            <b class="hub-game-name" data-i18n="site.poker">Poker</b>
-            <span class="hub-game-text" data-i18n="hub.desc.poker">Texas hold'em for your group, for free chips. Every deck can be checked.</span>
-            <span class="hub-game-meta"><span data-players="2–9">2–9 players</span> <span class="hub-game-go">→</span></span>
-          </a>
-          <a class="hub-game g-spy" href="/spy/" data-game-ico="spy">
-            <span class="hub-game-ico"></span>
-            <b class="hub-game-name" data-i18n="site.spyfall">Find the spy</b>
-            <span class="hub-game-text" data-i18n="hub.desc.spy">Everyone knows the place except the spy. Ask, bluff and vote.</span>
-            <span class="hub-game-meta"><span data-players="3–12">3–12 players</span> <span class="hub-game-go">→</span></span>
-          </a>
-          <a class="hub-game g-tycoon" href="/tycoon/" data-game-ico="tycoon">
-            <span class="hub-game-ico"></span>
-            <b class="hub-game-name" data-i18n="site.monopoly">Tycoon</b>
-            <span class="hub-game-text" data-i18n="hub.desc.mono">Buy streets, build and trade until one of you owns the town.</span>
-            <span class="hub-game-meta"><span data-players="2–8">2–8 players</span> <span class="hub-game-go">→</span></span>
-          </a>
-          <a class="hub-game g-kingdoms" href="/kingdoms/" data-game-ico="kingdoms">
-            <span class="hub-game-ico"></span>
-            <b class="hub-game-name" data-i18n="site.citadels">Kingdoms</b>
-            <span class="hub-game-text" data-i18n="hub.desc.cit">Pick a secret character each round and build the finest city.</span>
-            <span class="hub-game-meta"><span data-players="3–8">3–8 players</span> <span class="hub-game-go">→</span></span>
-          </a>
         </div>
-      </section>
-
-      <section class="hub-section hub-account" aria-label="Account">
+        <div class="hub-play">
       <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
       <form id="authCard" class="card home-card hidden" autocomplete="on">
         <div class="tabs auth-tabs" role="tablist">
@@ -116,7 +80,50 @@
           <button id="joinBtn" data-i18n="ui.join"></button>
         </div>
       </div>
+        </div>
+      </div>
+
+      <section id="games" class="hub-section" aria-labelledby="gamesTitle">
+        <h2 id="gamesTitle" class="hub-h2" data-i18n="hub.games">Pick a game</h2>
+        <div class="hub-games">
+          <a class="hub-game g-mafia" href="/mafia/" data-game-ico="mafia">
+            <span class="hub-thumb gp-art gp-art-mafia" aria-hidden="true"><span class="art-moon"></span><span class="art-ring"><i></i><i class="on"></i><i></i><i class="out"></i><i></i><i></i><i></i><i></i></span></span>
+            <span class="hub-game-ico"></span>
+            <b class="hub-game-name" data-i18n="site.mafia">Mafia</b>
+            <span class="hub-game-text" data-i18n="hub.desc.mafia">Find the mafia hiding among you. The site narrates the nights.</span>
+            <span class="hub-game-meta"><span data-players="4–12">4–12 players</span> <span class="hub-game-go">→</span></span>
+          </a>
+          <a class="hub-game g-poker" href="/poker/" data-game-ico="poker">
+            <span class="hub-thumb gp-art-img" aria-hidden="true"><img src="/art/poker.svg" alt="" width="640" height="520" loading="lazy"></span>
+            <span class="hub-game-ico"></span>
+            <b class="hub-game-name" data-i18n="site.poker">Poker</b>
+            <span class="hub-game-text" data-i18n="hub.desc.poker">Texas hold'em for your group, for free chips. Every deck can be checked.</span>
+            <span class="hub-game-meta"><span data-players="2–9">2–9 players</span> <span class="hub-game-go">→</span></span>
+          </a>
+          <a class="hub-game g-spy" href="/spy/" data-game-ico="spy">
+            <span class="hub-thumb gp-art gp-art-spy" aria-hidden="true"><span class="art-card"><span class="art-card-k">Location</span><b>Airport</b></span><span class="art-card spy"><span class="art-card-k">Location</span><b>?</b></span></span>
+            <span class="hub-game-ico"></span>
+            <b class="hub-game-name" data-i18n="site.spyfall">Find the spy</b>
+            <span class="hub-game-text" data-i18n="hub.desc.spy">Everyone knows the place except the spy. Ask, bluff and vote.</span>
+            <span class="hub-game-meta"><span data-players="3–12">3–12 players</span> <span class="hub-game-go">→</span></span>
+          </a>
+          <a class="hub-game g-tycoon" href="/tycoon/" data-game-ico="tycoon">
+            <span class="hub-thumb gp-art-img" aria-hidden="true"><img src="/art/tycoon.svg" alt="" width="640" height="520" loading="lazy"></span>
+            <span class="hub-game-ico"></span>
+            <b class="hub-game-name" data-i18n="site.monopoly">Tycoon</b>
+            <span class="hub-game-text" data-i18n="hub.desc.mono">Buy streets, build and trade until one of you owns the town.</span>
+            <span class="hub-game-meta"><span data-players="2–8">2–8 players</span> <span class="hub-game-go">→</span></span>
+          </a>
+          <a class="hub-game g-kingdoms" href="/kingdoms/" data-game-ico="kingdoms">
+            <span class="hub-thumb gp-art-img" aria-hidden="true"><img src="/art/kingdoms.svg" alt="" width="640" height="520" loading="lazy"></span>
+            <span class="hub-game-ico"></span>
+            <b class="hub-game-name" data-i18n="site.citadels">Kingdoms</b>
+            <span class="hub-game-text" data-i18n="hub.desc.cit">Pick a secret character each round and build the finest city.</span>
+            <span class="hub-game-meta"><span data-players="3–8">3–8 players</span> <span class="hub-game-go">→</span></span>
+          </a>
+        </div>
       </section>
+
 
       <section class="hub-section" aria-labelledby="howTitle">
         <h2 id="howTitle" class="hub-h2" data-i18n="hub.how">How it works</h2>
