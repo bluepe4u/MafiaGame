@@ -283,6 +283,14 @@ app.get('/api/admin/users', api(req => {
   adminUser(req);
   return { users: Object.values(users.users).map(u => users.adminView(u)).sort((a, b) => a.username.localeCompare(b.username)) };
 }));
+// USDT poker tables: private, only for the accounts the admin lets in
+app.post('/api/admin/usdt', api(req => {
+  adminUser(req);
+  const u = targetUser(req);
+  users.setUsdtAccess(u, req.body.on);
+  refreshUser(u.id);
+  return { user: users.adminView(u) };
+}));
 app.post('/api/admin/karma', api(req => {
   adminUser(req);
   const u = targetUser(req);
@@ -560,6 +568,7 @@ app.post('/api/pledges/mark', api(req => {
 app.get('/api/wallet', api(req => ({ wallet: users.walletView(currentUser(req)) })));
 // where to be paid in USDT (only its owner sees it; in a settlement the payer sees the receiver's)
 app.post('/api/wallet/usdt', api(req => {
+  if (!currentUser(req).usdtAccess) throw new GameError('err.invalidTarget');
   const user = currentUser(req);
   users.setUsdt(user, { network: String(req.body.network || ''), address: req.body.address });
   refreshUser(user.id);
@@ -724,6 +733,7 @@ const poker = attachPoker({
     give: (uid, n, reason, extra) => { const u = users.users[uid]; if (u) { users.addChips(u, n, reason, extra); setImmediate(() => refreshUser(uid)); } },
   },
   usdtOk: uid => !!users.users[uid]?.usdt,
+  usdtAccess: uid => !!users.users[uid]?.usdtAccess,
   onStart: room => { stats.game('poker'); if (room.tableId) tables.saveSettings(room.tableId, 'poker', room.settings); },
 });
 const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets(), ...spy.sockets(), ...cit.sockets(), ...poker.sockets()];

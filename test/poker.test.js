@@ -399,3 +399,18 @@ test('a room closed mid-hand: the hand is called off and the chips go back', () 
   assert.strictEqual(room.phase, 'ended');
   assert.deepStrictEqual(w.bal, { uA: 500, uB: 500 });
 });
+
+test('USDT: private tables, only for accounts the admin let in', () => {
+  const ok = new Set(['uAnn', 'uBob']);
+  const room = new PokerRoom({ code: 'T', setTimer: () => 1, clearTimer: () => {}, usdtAccess: u => ok.has(u) });
+  const ann = room.join('Ann', { userId: 'uAnn' });
+  const cid = room.join('Cid', { userId: 'uCid' });
+  // someone without access at the table: it can't become a USDT table
+  assert.throws(() => room.updateSettings(ann.id, { bank: 'usdt' }), /err\.invalidTarget/);
+  room.leave(cid.id);
+  room.updateSettings(ann.id, { bank: 'usdt' });
+  // and to anyone without access a USDT table doesn't exist
+  assert.throws(() => room.join('Cid', { userId: 'uCid' }), /err\.roomNotFound/);
+  assert.throws(() => room.join('Guest'), /err\.roomNotFound/);
+  assert.ok(room.join('Bob', { userId: 'uBob' }));
+});

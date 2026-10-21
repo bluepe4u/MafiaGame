@@ -53,13 +53,14 @@ class PokerRoom {
   constructor({
     code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout,
     profileOf = () => null, onGameEnd = () => {}, onStart = () => {}, onArchive = () => {}, onSettle = () => {}, tableId = null,
-    wallet = OPEN_WALLET, usdtOk = () => true, fair = null,
+    wallet = OPEN_WALLET, usdtOk = () => true, usdtAccess = () => true, fair = null,
     features = () => ({ family: true, voice: true, transcripts: true }),
   } = {}) {
     this.onSettle = onSettle;
     this.fair = fair; // provably fair decks (src/poker/fair.js); without it the deck comes from rng
     this.wallet = wallet; // site chips: { balance(userId), take(userId, n, reason, extra) -> bool, give(userId, n, reason, extra) }
     this.usdtOk = usdtOk; // userId -> has a USDT address to be paid at
+    this.usdtAccess = usdtAccess; // userId -> may play at USDT tables (given in the admin panel; private, never public)
     this.code = code;
     this.rng = rng;
     this.onChange = onChange;
@@ -152,6 +153,8 @@ class PokerRoom {
   join(name, { userId = null, spectate = false } = {}) {
     name = String(name || '').trim().slice(0, 20);
     this.assert(name, 'err.nameRequired');
+    // a USDT table is only for players the admin let in; to anyone else it doesn't exist
+    this.assert(this.settings.bank !== 'usdt' || (userId && this.usdtAccess(userId)), 'err.roomNotFound');
     this.assert(![...this.players, ...this.spectators].some(p => p.name.toLowerCase() === name.toLowerCase()), 'err.nameTaken');
     if (spectate || this.phase !== 'lobby' || this.players.length >= MAX_PLAYERS) {
       this.assert(this.spectators.length < MAX_SPECTATORS, 'err.roomFull', { max: MAX_SPECTATORS });
@@ -258,6 +261,10 @@ class PokerRoom {
     for (const k of BOOL_SETTINGS) if (s[k] !== undefined) next[k] = !!s[k];
     if (s.bank !== undefined) {
       this.assert(BANKS.includes(s.bank), 'err.invalidTarget');
+      if (s.bank === 'usdt') {
+        const people = [...this.players, ...this.spectators];
+        this.assert(people.every(p => p.userId && this.usdtAccess(p.userId)), 'err.invalidTarget');
+      }
       next.bank = s.bank;
     }
     if (s.usdtBuyIn !== undefined) {
@@ -318,7 +325,8 @@ class PokerRoom {
       const short = this.players.filter(p => !p.userId || this.wallet.balance(p.userId) < this.settings.startStack);
       this.assert(!short.length, 'err.pk.noChips', { names: names(short), n: this.settings.startStack });
     } else {
-      // real money: everyone agrees to the buy-in (ready) and has an address to be paid at
+      // real money: only players the admin let in, everyone agrees to the buy-in (ready) and has an address to be paid at
+      this.assert(this.players.every(p => p.userId && this.usdtAccess(p.userId)), 'err.invalidTarget');
       const noAddr = this.players.filter(p => !p.userId || !this.usdtOk(p.userId));
       this.assert(!noAddr.length, 'err.pk.usdtNoAddress', { names: names(noAddr) });
       const notReady = this.players.filter(p => !p.ready);

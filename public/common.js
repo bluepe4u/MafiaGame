@@ -1235,6 +1235,7 @@ async function renderAdminUsers() {
       <div class="admin-controls">
         <label class="admin-bonus">${esc(t('admin.bonus'))} <input type="number" value="${u.bonus}" data-bonus></label>
         <label class="check"><input type="checkbox" class="switch" data-shield ${u.dislikeShield ? 'checked' : ''}> ${esc(t('admin.shield'))}</label>
+        <label class="check"><input type="checkbox" class="switch" data-usdt ${u.usdtAccess ? 'checked' : ''}> ${esc(t('admin.usdt'))}</label>
         <button class="danger small" data-lowest>${esc(t('admin.lowest'))}</button>
       </div>
       <div class="muted small-text">${esc(t('admin.dislikedBy'))}: ${u.dislikedBy.length ? u.dislikedBy.map(esc).join(', ') : esc(t('admin.nobody'))}</div>
@@ -1258,6 +1259,7 @@ async function renderAdminUsers() {
     const after = r => { if (r.ok) renderAdmin(); };
     row.querySelector('[data-bonus]').onchange = e => api('admin/karma', { userId, bonus: e.target.value }).then(after);
     row.querySelector('[data-shield]').onchange = e => api('admin/karma', { userId, dislikeShield: e.target.checked }).then(after);
+    row.querySelector('[data-usdt]').onchange = e => api('admin/usdt', { userId, on: e.target.checked }).then(after);
     row.querySelector('[data-lowest]').onclick = () => api('admin/karma', { userId, lowest: true }).then(after);
     row.querySelector('[data-give]').onchange = e => e.target.value && api('admin/gift', { userId, itemId: e.target.value }).then(r => {
       if (r.ok) toast(t('admin.gifted', { name: r.user.username }), 'info');

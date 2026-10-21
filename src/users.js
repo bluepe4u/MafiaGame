@@ -98,6 +98,13 @@ class UserStore {
     this.ratingLog = data.ratingLog || [];
     this.invites = data.invites || {};
     this.features = { ...DEFAULT_FEATURES, ...data.features };
+    // USDT poker is private: everyone who had an account before it went private keeps access
+    // (once); everyone else only gets it from the admin panel
+    if (!this.store.db.meta('grant:usdtAccess')) {
+      for (const u of Object.values(this.users)) u.usdtAccess = true;
+      this.store.db.meta('grant:usdtAccess', Date.now());
+      if (Object.keys(this.users).length) this.saveNow();
+    }
   }
 
   saveNow() {
@@ -395,7 +402,7 @@ class UserStore {
   adminView(user) {
     return {
       ...this.publicProfile(user),
-      email: user.email || null, emailVerified: !!user.emailVerified,
+      email: user.email || null, emailVerified: !!user.emailVerified, usdtAccess: !!user.usdtAccess,
       rawLikes: user.likes, rawDislikes: user.dislikes,
       bonus: user.bonus || 0, dislikeShield: !!user.dislikeShield, admin: !!user.admin,
       dislikedBy: this.dislikedBy(user.id),
@@ -650,7 +657,12 @@ class UserStore {
   // The user's own view: the public profile and the email (never shown to anyone else).
   selfProfile(user) {
     if (!user) return null;
-    return { ...this.publicProfile(user), email: user.email || null, emailVerified: !!user.emailVerified };
+    return { ...this.publicProfile(user), email: user.email || null, emailVerified: !!user.emailVerified, usdtAccess: !!user.usdtAccess };
+  }
+
+  setUsdtAccess(user, on) {
+    user.usdtAccess = !!on;
+    this.save();
   }
 
   // What other players (and the user) get to see.

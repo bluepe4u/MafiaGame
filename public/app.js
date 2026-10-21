@@ -1184,9 +1184,11 @@ function render() {
 }
 
 // ---------- effects: phase cards, death and entrance animations, sounds, Halloween ----------
+// TODO(after 2026-10-31): remove Halloween mode entirely (this block, the pumpkin button, the
+// body.halloween styles, the Wet Paint font and the fx.halloween / settings.halloween strings).
+// Until then it's off unless a player switches it on with the pumpkin button.
 const SPOOKY_KEY = 'mafia.spooky';
-const inSpookySeason = () => { const d = new Date(); return d.getMonth() === 9 || (d.getMonth() === 10 && d.getDate() <= 2); };
-let spooky = store.get(SPOOKY_KEY) ? store.get(SPOOKY_KEY) === 'on' : inSpookySeason();
+let spooky = store.get(SPOOKY_KEY) === 'on';
 const PUMPKIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6c-1-.2-1.4-1.6-.6-3"/><path d="M12 6c4.9-1.6 9 1.4 9 6.5S17.4 21 12 21 3 17.6 3 12.5 7.1 4.4 12 6z"/><path d="M8.5 11l1.5 1.5L8.5 14M15.5 11 14 12.5l1.5 1.5M9 17c2 1 4 1 6 0"/></svg>';
 const BAT = '<svg viewBox="0 0 64 28"><path d="M32 9c1.5-3 2.5-4 3-6 .6 2 .4 3.5 0 5 4-3 9-5.5 15-6-2 2.5-2 5 0 8 2-2 6-3 10-2-3 2-4 6-4 10-3-2-7-3-10-1-1-3-4-5-8-5-2 0-4 2-6 6-2-4-4-6-6-6-4 0-7 2-8 5-3-2-7-1-10 1 0-4-1-8-4-10 4-1 8 0 10 2 2-3 2-5.5 0-8 6 .5 11 3 15 6-.4-1.5-.6-3 0-5 .5 2 1.5 3 3 6z"/></svg>';
 

@@ -301,13 +301,16 @@ test('database: the old users.json is imported once, as it was', () => {
   const legacy = { users: { u1: { id: 'u1', username: 'Вася', salt: 's', hash: 'h', likes: 3, dislikes: 1, createdAt: 1 } }, sessions: { abc: 'u1' }, invites: {}, ratingLog: [{ from: 'u1', to: 'u1', value: 1, at: 1 }], features: { family: true } };
   fs.writeFileSync(path.join(dir, 'users.json'), JSON.stringify(legacy));
   const store = new UserStore(dir);
-  assert.deepStrictEqual(store.users, legacy.users);
+  // the accounts from before keep everything, and get the private USDT tables (granted once)
+  assert.deepStrictEqual(store.users, { u1: { ...legacy.users.u1, usdtAccess: true } });
   assert.deepStrictEqual(store.sessions, legacy.sessions);
   assert.strictEqual(store.features.family, true);
   assert.strictEqual(store.features.signup, true);
   assert.ok(!fs.existsSync(path.join(dir, 'users.json')));
   assert.ok(fs.existsSync(path.join(dir, 'users.json.migrated')));
   store.users.u1.likes = 4;
+  const { user: fresh } = store.register('Новый', 'pass', null, { email: 'new@example.com' });
+  assert.ok(!fresh.usdtAccess);
   store.saveNow();
   assert.strictEqual(new UserStore(dir).users.u1.likes, 4);
 });

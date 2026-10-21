@@ -218,7 +218,9 @@ function renderSettings() {
     ${voiceOk ? `<label class="check"><input type="checkbox" class="switch" data-bool="voice" ${s.voice !== false ? 'checked' : ''} ${host ? '' : 'disabled'}> <span><b>${esc(t('ui.voice'))}</b></span></label>` : ''}
   </div>`;
   const usdt = s.bank === 'usdt';
-  const bank = `<h3>${esc(t('pk.set.group.bank'))}</h3>
+  // USDT tables are private: the choice only shows to accounts the admin let in
+  const usdtAllowed = !!(account && account.usdtAccess);
+  const bank = !usdtAllowed && !usdt ? '' : `<h3>${esc(t('pk.set.group.bank'))}</h3>
     <div class="pk-bank">${['chips', 'usdt'].map(b => `<button class="pk-bank-opt ${s.bank === b ? 'on' : ''}" data-bank="${b}" ${host ? '' : 'disabled'}>
       <b>${esc(t('pk.bank.' + b))}</b><small>${esc(t('pk.bank.' + b + '.hint'))}</small></button>`).join('')}</div>
     ${usdt ? `<div class="num-grid pk-usdt-row"><label class="field"><span>${esc(t('pk.set.usdtBuyIn'))}</span>
@@ -250,13 +252,13 @@ async function openWallet() {
       <p class="muted small-text">${esc(t('pk.chips.hint'))}${w.daily ? ` ${esc(t('pk.chips.streak', { n: w.daily.streak }))}` : ''}</p></div>
     <h4>${esc(t('pk.ach.title'))} · ${done.length}/${w.achievements.length}</h4>
     <div class="pk-ach-grid">${w.achievements.map(a => `<div class="pk-ach ${a.at ? 'got' : ''}"><b>${esc(t('ach.' + a.id))}</b><span class="muted small-text">${esc(t('ach.' + a.id + '.text'))}</span><span class="pk-lot-price">+${fmtRaw(a.reward)}</span></div>`).join('')}</div>
-    <h4>${esc(t('pk.usdt.title'))}</h4>
+    ${account && account.usdtAccess ? `<h4>${esc(t('pk.usdt.title'))}</h4>
     <p class="muted small-text">${esc(t('pk.usdt.hint'))}</p>
     <div class="row pk-usdt-form"><select id="usdtNet">${Object.entries(USDT_NETS).map(([k, n]) => `<option value="${k}" ${w.usdt && w.usdt.network === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
       <input id="usdtAddr" placeholder="${esc(t('pk.usdt.address'))}" value="${esc(w.usdt ? w.usdt.address : '')}" spellcheck="false" autocomplete="off">
-      <button id="usdtSave" class="primary small">${esc(t('pk.usdt.save'))}</button></div>
+      <button id="usdtSave" class="primary small">${esc(t('pk.usdt.save'))}</button></div>` : ''}
     ${w.log.length ? `<h4>${esc(t('pk.chips.log'))}</h4><ul class="pk-log">${w.log.slice(0, 25).map(e => `<li><span class="muted">${esc(fmtTime(e.at))}</span> <b class="${e.n > 0 ? 'pos' : 'neg'}">${e.n > 0 ? '+' : ''}${fmtRaw(e.n)}</b> ${esc(reason(e))}</li>`).join('')}</ul>` : ''}`;
-  $('#usdtSave').onclick = async () => {
+  if ($('#usdtSave')) $('#usdtSave').onclick = async () => {
     const r = await api('wallet/usdt', { network: $('#usdtNet').value, address: $('#usdtAddr').value });
     if (r.ok) { toast(t('pk.usdt.saved'), 'info'); refreshAccount(); }
   };
@@ -316,7 +318,9 @@ async function openPledges() {
   $('#pledgeSheet').classList.remove('hidden');
 }
 async function refreshPledgeCount() {
-  if (!account) return $('#pledgeCount').classList.add('hidden');
+  // settlements belong to the private USDT tables: hidden from everyone else
+  $('#homePledges').classList.toggle('hidden', !(account && account.usdtAccess));
+  if (!account || !account.usdtAccess) return $('#pledgeCount').classList.add('hidden');
   const token = store.get(AUTH_KEY);
   try {
     const res = await fetch('/api/pledges', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
@@ -326,8 +330,6 @@ async function refreshPledgeCount() {
   } catch {}
 }
 $('#homePledges').onclick = openPledges;
-// the debt banner on every page links here
-if (new URLSearchParams(location.search).has('pay')) setTimeout(() => openPledges(), 600);
 $('#pledgeClose').onclick = () => closeOverlay('pledgeSheet');
 
 // ---------- the table ----------

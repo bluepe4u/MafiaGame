@@ -15,7 +15,7 @@ const { createVoiceHub } = require('../voice');
 const ROOM_IDLE_MS = 60 * 60 * 1000;
 const STICKERS = ['nh', 'gg', 'ship', 'fish', 'tilt', 'bluff', 'snap', 'cry', 'lucky', 'think', 'allin', 'cooler'];
 
-function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onArchive = () => {}, onStart = () => {}, onSettle = () => {}, wallet, usdtOk }) {
+function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onArchive = () => {}, onStart = () => {}, onSettle = () => {}, wallet, usdtOk, usdtAccess }) {
   const voiceAllowed = room => users.features.voice && room.settings.voice !== false;
   const nsp = io.of('/poker');
   const voice = createVoiceHub(nsp);
@@ -51,6 +51,7 @@ function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onA
     onSettle,
     wallet,
     usdtOk,
+    usdtAccess,
     features: () => users.features,
     fair,
   });
