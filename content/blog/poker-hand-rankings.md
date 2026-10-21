@@ -47,4 +47,4 @@ If the best five cards are exactly equal, the pot is split. Suits never break ti
 
 ## Practice without the risk
 
-The quickest way to learn the hands is to play them. On [bluepeau.club](/poker/) you can open a private hold'em table for your friends in the browser and play for free site chips: the table highlights your best combination as the board comes out, and the cheat sheet with all ten hands is one tap away. Every deck is provably fair, so after the session anyone can check that the cards weren't stacked.
+The quickest way to learn the hands is to play them. On [Anytable](/poker/) you can open a private hold'em table for your friends in the browser and play for free site chips: the table highlights your best combination as the board comes out, and the cheat sheet with all ten hands is one tap away. Every deck is provably fair, so after the session anyone can check that the cards weren't stacked.

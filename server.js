@@ -83,7 +83,7 @@ app.use((req, res, next) => {
   next();
 });
 // visit counts for the pages people open (see src/stats.js: no cookies, no tracking script)
-const PAGES = new Set(['/', '/poker/', '/tycoon/', '/spy/', '/kingdoms/', '/terms/', '/privacy/', '/poker/fair.html']);
+const PAGES = new Set(['/', '/mafia/', '/poker/', '/tycoon/', '/spy/', '/kingdoms/', '/terms/', '/privacy/', '/poker/fair.html']);
 app.use((req, res, next) => {
   if (req.method === 'GET' && (PAGES.has(req.path) || /^\/blog\/([\w-]+\/)?$/.test(req.path))) {
     stats.view({ page: req.path, ip: req.ip, ua: req.get('user-agent'), referrer: req.get('referer'), host: req.hostname });
@@ -91,6 +91,8 @@ app.use((req, res, next) => {
   next();
 });
 app.get('/favicon.ico', (_req, res) => res.type('image/png').set('Cache-Control', 'public, max-age=604800').sendFile(path.join(__dirname, 'public', 'icon-48.png')));
+// Mafia used to be the home page: its old room links (/?room=CODE) go to its new address
+app.get('/', (req, res, next) => (req.query.room ? res.redirect(302, `/mafia/${req.originalUrl.slice(1)}`) : next()));
 // the games' old addresses (before they got their own names): old invite links keep working
 const MOVED = { monopoly: 'tycoon', citadels: 'kingdoms', spyfall: 'spy' };
 app.get(/^\/(monopoly|citadels|spyfall)(\/.*)?$/, (req, res) => {
@@ -479,6 +481,13 @@ app.get('/api/tables/public', api(req => {
   list.sort((a, b) => (!!b.live - !!a.live) || b.online - a.online || b.members - a.members);
   return { tables: list.slice(0, 30) };
 }));
+// "join with a code" on the home page: which game the room belongs to (codes are unique across games)
+const GAME_PATHS = { mafia: '/mafia/', mono: '/tycoon/', spy: '/spy/', cit: '/kingdoms/', poker: '/poker/' };
+app.get('/api/whereis', (req, res) => {
+  const code = String(req.query.code || '').toUpperCase();
+  const game = /^[A-Z]{4}$/.test(code) ? GAMES.find(g => { const i = gameInfo(g, code); return i && !i.private; }) : null;
+  res.json({ ok: true, path: game ? GAME_PATHS[game] : null });
+});
 // what an invite link shows before joining: the game, who's there (no account needed)
 app.get('/api/invite', (req, res) => {
   const code = String(req.query.code || '').toUpperCase();
@@ -652,7 +661,7 @@ app.get(/^\/blog\/([\w-]+)\/$/, (req, res) => {
   if (!post || post.status !== 'published') return html(res, blogLib.renderIndex(blog, siteUrl(req), uiLang(req), { notFound: true }), 404);
   html(res, blogLib.renderPost(blog, post, siteUrl(req)));
 });
-const SITEMAP_PAGES = [['/', 1.0, 'weekly'], ['/poker/', 0.9, 'weekly'], ['/spy/', 0.8, 'monthly'], ['/tycoon/', 0.8, 'monthly'], ['/kingdoms/', 0.8, 'monthly'],
+const SITEMAP_PAGES = [['/', 1.0, 'weekly'], ['/mafia/', 0.9, 'weekly'], ['/poker/', 0.9, 'weekly'], ['/spy/', 0.8, 'monthly'], ['/tycoon/', 0.8, 'monthly'], ['/kingdoms/', 0.8, 'monthly'],
   ['/blog/', 0.8, 'daily'], ['/blog/ru/', 0.8, 'daily'], ['/poker/fair.html', 0.4, 'yearly'], ['/terms/', 0.2, 'yearly'], ['/privacy/', 0.2, 'yearly']];
 app.get('/sitemap.xml', (req, res) => {
   const base = siteUrl(req);
@@ -667,13 +676,13 @@ app.get('/sitemap.xml', (req, res) => {
 app.get('/llms.txt', (req, res) => {
   const base = siteUrl(req);
   const posts = blog.published().map(p => `- [${p.title}](${base}/blog/${p.slug}/): ${p.description}`).join('\n');
-  res.type('text/plain; charset=utf-8').set('Cache-Control', 'public, max-age=600').send(`# bluepeau.club
+  res.type('text/plain; charset=utf-8').set('Cache-Control', 'public, max-age=600').send(`# Anytable
 
 > Free browser games to play with friends: Mafia (Werewolf), Texas hold'em poker, Tycoon (a property trading game), Find the spy and Kingdoms (a city-building card game with secret roles). No downloads, one link to invite everyone, voice chat built in, English and Russian.
 
 ## Games
 
-- [Mafia](${base}/): 4–12 players, the site is the narrator: secret roles, nights and votes.
+- [Mafia](${base}/mafia/): 4–12 players, the site is the narrator: secret roles, nights and votes.
 - [Poker](${base}/poker/): private no-limit Texas hold'em for 2–9 players, free site chips, provably fair decks.
 - [Tycoon](${base}/tycoon/): roll, buy streets, build and trade, 2–8 players.
 - [Find the spy](${base}/spy/): everyone knows the location except the spy, 3–12 players.
@@ -713,7 +722,7 @@ app.post('/api/admin/blog/preview', api(req => { adminUser(req); return { html: 
 app.get('/qr.svg', async (req, res) => {
   const code = String(req.query.room || '').toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) return res.status(400).end();
-  const page = { mono: '/tycoon/', spy: '/spy/', cit: '/kingdoms/', poker: '/poker/' }[req.query.game] || '/';
+  const page = { mono: '/tycoon/', spy: '/spy/', cit: '/kingdoms/', poker: '/poker/' }[req.query.game] || '/mafia/';
   const svg = await QRCode.toString(`${req.protocol}://${req.get('host')}${page}?room=${code}`, { type: 'svg', margin: 1 });
   res.type('image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(svg);
 });

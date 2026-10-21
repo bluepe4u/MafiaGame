@@ -9,7 +9,7 @@ tags: mafia rules, mafia roles, werewolf game, party games, how to play mafia on
 ---
 Mafia (also called Werewolf) is a game of lies and deduction for 4 to 12 players. A small group of mafia hides among the town. Every night the mafia removes one player; every day the town argues and votes someone out. **The town wins when every mafia member is gone. The mafia wins when they are as many as everyone else.**
 
-You don't need cards or a narrator to play it online: on [bluepeau.club](/) everyone joins from their own phone, gets a secret role on their own screen, and the site runs the nights and counts the votes.
+You don't need cards or a narrator to play it online: on [Anytable](/mafia/) everyone joins from their own phone, gets a secret role on their own screen, and the site runs the nights and counts the votes.
 
 ## The roles
 
@@ -45,7 +45,7 @@ A good rule of thumb is one mafia for every three players:
 - 9–11 players: 3 mafia
 - 12 players: 4 mafia
 
-Add a cop from four players and a doctor from five; the hooker joins from nine. That's the set bluepeau.club suggests by default, and the host can change it in the lobby.
+Add a cop from four players and a doctor from five; the hooker joins from nine. That's the set Anytable suggests by default, and the host can change it in the lobby.
 
 ## Tips for the town
 

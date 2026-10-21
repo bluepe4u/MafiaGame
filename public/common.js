@@ -54,8 +54,10 @@ for (const el of document.querySelectorAll('.trophy')) el.outerHTML = ico('troph
 for (const a of document.querySelectorAll('#siteMenu a')) {
   const i = a.querySelector('.site-ico');
   const href = a.getAttribute('href');
-  if (i) i.outerHTML = ico(href.includes('monopoly') ? 'dice' : href.includes('spyfall') ? 'spy' : href.includes('citadels') ? 'castle' : href.includes('poker') ? 'chip' : 'hat', 'site-ico');
+  if (i) i.outerHTML = ico(href.includes('tycoon') ? 'dice' : href.includes('spy') ? 'spy' : href.includes('kingdoms') ? 'castle' : href.includes('poker') ? 'chip' : href.includes('blog') ? 'book' : 'hat', 'site-ico');
 }
+// the menu button (phones, and inside a room) names itself
+if ($('#brandBtn')) $('#brandBtn').setAttribute('aria-label', t('nav.games'));
 
 // The page's settings and hooks (filled in by Site.init)
 const Site = {
@@ -72,7 +74,7 @@ const Site = {
   },
 };
 // the games: page, icon and name in one place
-const GAME_INFO = { mafia: { path: '/', icon: 'hat', name: 'site.mafia' }, mono: { path: '/tycoon/', icon: 'dice', name: 'site.monopoly' }, spy: { path: '/spy/', icon: 'spy', name: 'site.spyfall' }, cit: { path: '/kingdoms/', icon: 'castle', name: 'site.citadels' }, poker: { path: '/poker/', icon: 'chip', name: 'site.poker' } };
+const GAME_INFO = { mafia: { path: '/mafia/', icon: 'hat', name: 'site.mafia' }, mono: { path: '/tycoon/', icon: 'dice', name: 'site.monopoly' }, spy: { path: '/spy/', icon: 'spy', name: 'site.spyfall' }, cit: { path: '/kingdoms/', icon: 'castle', name: 'site.citadels' }, poker: { path: '/poker/', icon: 'chip', name: 'site.poker' } };
 const gameInfoOf = game => GAME_INFO[game] || GAME_INFO.mafia;
 const gameTitle = game => t(gameInfoOf(game).name);
 const gameUrl = (game, code) => `${gameInfoOf(game).path}?room=${code}&join=1`;
@@ -1875,6 +1877,7 @@ try { if (qs.get('table')) sessionStorage.setItem(PENDING_TABLE_KEY, qs.get('tab
 
 // The page tells us whether its home screen is showing (for the "back to my game" banner).
 Site.setHome = function setHome(home) {
+  document.body.classList.toggle('at-home', !!home); // the games show in the top bar on the home screen
   if (home === Site.home) return;
   Site.home = home;
   refreshHome();

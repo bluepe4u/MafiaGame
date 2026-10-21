@@ -12,9 +12,9 @@ const { Marked } = require('marked');
 const { GameError } = require('./game');
 const { Saved } = require('./db');
 
-const SITE = 'bluepeau.club';
+const SITE = 'Anytable';
 const LANGS = ['en', 'ru'];
-const GAMES = { mafia: '/', poker: '/poker/', tycoon: '/tycoon/', spy: '/spy/', kingdoms: '/kingdoms/' };
+const GAMES = { mafia: '/mafia/', poker: '/poker/', tycoon: '/tycoon/', spy: '/spy/', kingdoms: '/kingdoms/' };
 const MAX_BODY = 100000;
 const RESERVED = ['ru', 'en', 'rss', 'img']; // paths of the blog itself
 const MAX_IMAGE = 3 * 1024 * 1024;
@@ -131,8 +131,20 @@ class BlogStore {
       const meta = Object.fromEntries(m[1].split('\n').map(l => l.match(/^(\w+):\s*(.*)$/)).filter(Boolean).map(x => [x[1], x[2].trim()]));
       const slug = slugify(meta.slug || meta.title);
       const key = `seeded:blog:${slug}`;
-      if (!slug || this.store.db.meta(key) || this.bySlug(slug)) continue;
-      this.upsert({ ...meta, slug, body: m[2].trim(), status: 'published' }, null);
+      if (!slug) continue;
+      const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
+      const have = this.bySlug(slug);
+      // a shipped article nobody has edited in the admin panel follows its file when the file changes
+      const untouched = have && have.author === null && (have.seedHash ? have.updatedAt === have.seededAt : have.updatedAt === have.publishedAt);
+      if (have && untouched && have.seedHash !== hash) {
+        const next = this.upsert({ ...have, ...meta, id: have.id, slug, body: m[2].trim(), status: have.status }, null);
+        Object.assign(next, { seedHash: hash, seededAt: next.updatedAt });
+        added += 1;
+        continue;
+      }
+      if (this.store.db.meta(key) || have) continue;
+      const post = this.upsert({ ...meta, slug, body: m[2].trim(), status: 'published' }, null);
+      Object.assign(post, { seedHash: hash, seededAt: post.updatedAt });
       this.store.db.meta(key, Date.now());
       added += 1;
     }
@@ -157,7 +169,7 @@ class BlogStore {
 // its own index: /blog/ in English, /blog/ru/ in Russian; an article links its translation.
 const T = {
   en: {
-    blog: 'Blog', index: '/blog/', eyebrow: 'The bluepeau.club blog', h1a: 'Game night,', h1b: 'explained.',
+    blog: 'Blog', index: '/blog/', eyebrow: 'The Anytable blog', h1a: 'Game night,', h1b: 'explained.',
     tagline: 'Rules, strategy and ideas for playing Mafia, poker and party games with friends.',
     min: 'min read', all: 'All articles', more: 'More articles', empty: 'No articles yet: check back soon.',
     play: 'Play', otherLang: 'Читать по-русски', hasOther: 'Есть статьи на русском', rss: 'RSS',
@@ -166,7 +178,7 @@ const T = {
     ctaSub: 'Free, in the browser, one link for everyone.',
   },
   ru: {
-    blog: 'Блог', index: '/blog/ru/', eyebrow: 'Блог bluepeau.club', h1a: 'Игровой вечер —', h1b: 'по правилам.',
+    blog: 'Блог', index: '/blog/ru/', eyebrow: 'Блог Anytable', h1a: 'Игровой вечер —', h1b: 'по правилам.',
     tagline: 'Правила, стратегия и идеи для Мафии, покера и игр с друзьями.',
     min: 'мин чтения', all: 'Все статьи', more: 'Ещё статьи', empty: 'Статей пока нет — загляните позже.',
     play: 'Играть', otherLang: 'Read in English', hasOther: 'Articles in English', rss: 'RSS',
@@ -177,7 +189,7 @@ const T = {
 };
 const otherOf = lang => (lang === 'ru' ? 'en' : 'ru');
 const dateOf = (ts, lang) => new Date(ts).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-const MARK = '<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><path d="M7 19h18l-2.2-7.5c-.3-1-1.4-1.5-2.3-1l-2.2 1.1a3 3 0 0 1-2.6 0l-2.2-1.1c-.9-.5-2 0-2.3 1z"/><rect x="4" y="19" width="24" height="2.6" rx="1.3"/></svg>';
+const MARK = '<svg class="brand-mark at-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><circle cx="16" cy="16" r="6" fill="none" stroke="#fff" stroke-width="2.6"/><circle cx="16" cy="5.6" r="2.3" fill="#fff"/><circle cx="26.4" cy="16" r="2.3" fill="#fff"/><circle cx="16" cy="26.4" r="2.3" fill="#fff"/><circle cx="5.6" cy="16" r="2.3" fill="#fff"/></svg>';
 
 function page({ base, lang, title, description, canonical, ogImage, alternates = [], jsonLd = [], body, type = 'website', robots = '', switchTo }) {
   const tr = T[lang];
@@ -215,7 +227,7 @@ function page({ base, lang, title, description, canonical, ogImage, alternates =
 <body class="blog-page" data-phase="home">
   <div class="backdrop" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="grain"></div></div>
   <header class="topbar blog-top">
-    <a class="brand" href="/">${MARK}<span>bluepeau</span></a>
+    <a class="brand" href="/">${MARK}<span>Anytable</span></a>
     <a class="blog-top-link" href="${tr.index}">${esc(tr.blog)}</a>
     <nav class="blog-games" aria-label="Games">${games}</nav>
     <span class="spacer"></span>

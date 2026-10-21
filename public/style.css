@@ -1340,3 +1340,44 @@ body.signed-in .seo-about { display: none; }
 .save-body { display: flex; flex-direction: column; gap: 12px; }
 .save-perks { margin: 0; padding-left: 20px; color: var(--text); }
 .save-perks li + li { margin-top: 4px; }
+
+/* the top bar: the Anytable logo, the games (home screens on wide windows), a menu button otherwise */
+.site-brand { color: var(--text); text-decoration: none; }
+.brand-mark.at-mark rect:first-child { fill: var(--accent); }
+.game-nav { display: none; gap: 2px; align-items: center; }
+.game-nav a { color: var(--muted); text-decoration: none; font-size: .88rem; padding: 6px 11px; border-radius: 99px; white-space: nowrap; }
+.game-nav a:hover { color: var(--text); background: var(--surface-2); }
+.game-nav a[aria-current] { color: var(--text); background: var(--surface-3); }
+.nav-burger svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.site-menu .site-home { font-weight: 600; border-bottom: 1px solid var(--border); }
+@media (min-width: 980px) {
+  body.at-home .game-nav { display: flex; }
+  body.at-home .nav-burger { display: none; }
+}
+
+/* the home page (public/index.html) */
+.hub-hero { margin-bottom: 40px; }
+.hub-trust { list-style: none; padding: 0; margin: 22px 0 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 20px; color: var(--muted); font-size: .9rem; }
+.hub-trust li::before { content: '✓ '; color: var(--good); }
+.hub-section { width: min(1080px, 100%); margin: 0 auto 64px; }
+.hub-h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(2rem, 5vw, 2.8rem); letter-spacing: -.01em; margin: 0 0 18px; }
+.hub-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.hub-game { --g: var(--accent); display: flex; flex-direction: column; gap: 10px; padding: 20px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border);
+  border-top: 3px solid var(--g); color: var(--text); text-decoration: none; transition: transform .2s, border-color .2s; }
+.hub-game:hover { transform: translateY(-2px); border-color: var(--border-strong); border-top-color: var(--g); }
+.hub-game-ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--g) 16%, transparent); color: var(--g); }
+.hub-game-ico svg { width: 24px; height: 24px; }
+.hub-game-name { font-family: var(--serif); font-weight: 400; font-size: 1.75rem; line-height: 1; }
+.hub-game-text { color: var(--muted); font-size: .92rem; line-height: 1.5; }
+.hub-game-meta { margin-top: auto; display: flex; justify-content: space-between; color: var(--muted); font-size: .85rem; }
+.hub-game-go { color: var(--g); font-weight: 700; }
+.g-mafia { --g: #818cf8; } .g-poker { --g: #34d399; } .g-spy { --g: #fb7185; } .g-tycoon { --g: #fbbf24; } .g-kingdoms { --g: #38bdf8; }
+.hub-account { display: flex; flex-direction: column; align-items: center; }
+.hub-steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.hub-steps li { display: flex; flex-direction: column; gap: 6px; padding: 22px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); }
+.hub-steps li span:last-child { color: var(--muted); }
+.hub-step-n { font-family: var(--mono); color: var(--muted); font-size: .85rem; }
+.hub-faq details { padding: 14px 18px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); margin-bottom: 10px; }
+.hub-faq summary { cursor: pointer; font-weight: 600; }
+.hub-faq details p { margin-top: 8px; color: var(--muted); }
+.hub-blog a { color: #b9afff; }

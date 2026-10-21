@@ -1,6 +1,15 @@
-# Mafia
+# Anytable
 
-A web app for playing Mafia (Werewolf) with 4–12 players, each on their own computer (desktop-first; narrow screens still work). The app acts as the narrator; voice is handled outside the app (same room or a call).
+Free game nights in the browser: Mafia (Werewolf), Texas hold'em poker, Find the spy, Tycoon and
+Kingdoms, each player on their own phone or computer, with voice chat built in. Live at
+bluepeau.club for now. The home page (`/`) shows the five games; each game has its own page
+(`/mafia/`, `/poker/`, `/spy/`, `/tycoon/`, `/kingdoms/`), and they share one account, one top bar,
+tables, the blog (`/blog/`) and the admin panel. Old addresses (`/?room=…` for Mafia, `/monopoly/`,
+`/citadels/`, `/spyfall/`) redirect.
+
+**Playing without an account:** an invite link (or "Play now") needs only a name. Guests get chips
+and stats at once, aren't rated and aren't on the leaderboard; after a finished game they're offered
+to save an account, which keeps everything. Unsaved guests quiet for a month are removed.
 
 ## Run
 
@@ -69,7 +78,7 @@ Rubik Wet Paint for the Halloween theme. Nothing loads from Google.
 Back up now: `sudo /opt/mafia/deploy/backup.sh` · list / restore: `sudo /opt/mafia/deploy/restore.sh [latest | <file>]`
 (the current data is moved aside, not deleted).
 
-**Accounts:** username, email and password. Anyone can sign up while "Open sign-up" is on in the
+**Accounts:** username, email and password (or just a name, as a guest; see above). Anyone can sign up while "Open sign-up" is on in the
 admin panel (Функции / Features); turned off, registration needs an invite again. Accounts made
 before emails existed keep working without one and can add it in the profile. On a fresh install
 (no accounts yet) the server writes a one-time admin invite code to `/var/lib/mafia/admin-invite.txt`;
@@ -209,7 +218,10 @@ house rules sheet: Witch, Thief, Magician, King, Abbot, Merchant, Architect, Dip
   wallet to wallet and pastes the transaction hash (linked to the explorer), the receiver confirms.
   The site never holds money, and site chips and USDT never convert into each other
   (`src/pledges.js`, `src/achievements.js`).
-- Nothing about USDT is enforced: the site only shows who owes whom and lets players mark payments.
+- USDT tables are private: only accounts with access (admin panel → Players → "Private USDT poker
+  tables"; every account from before this change has it) see the option, can open, start or join
+  one; to everyone else such a table doesn't exist. Nothing about USDT is enforced: the site only
+  shows who owes whom and lets players mark payments.
 - GGPoker-style controls: presets (2.5/3/4 BB, ⅓ ½ ¾ pot, pot, max), a slider, pre-actions
   (check/fold, call, call any), F/C/R keys, amounts in chips or big blinds, a four-colour deck,
   drawn poker stickers instead of emoji, the hand history with each street's equity.

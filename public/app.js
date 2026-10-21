@@ -69,7 +69,7 @@ const progress = (done, total) => `<div class="bar-track"><div class="bar-fill" 
 const roleTag = r => r ? `<span class="tag ${state.roleInfo[r].team}">${esc(roleName(r))}</span>` : '';
 // identifies "the moment" a host action was requested for; if it changes, the action is stale
 const momentKey = () => state ? `${state.phase}:${state.day}:${state.speech ? state.speech.index : ''}` : '';
-const inviteUrl = () => `${location.origin}/?room=${state.code}`;
+const inviteUrl = () => `${location.origin}/mafia/?room=${state.code}`;
 
 // ---------- host confirmation (dialog + press-and-hold) ----------
 let pending = null;
@@ -164,7 +164,7 @@ function leftRoom() {
   urlRoom = '';
   chatSeen.town = chatSeen.mafia = chatSeen.dead = null;
   chatRendered = '';
-  history.replaceState(null, '', '/');
+  history.replaceState(null, '', '/mafia/');
   render();
 }
 
@@ -1013,7 +1013,7 @@ $('#streamerBtn').onclick = () => {
   store.set(STREAMER_KEY, streamerOn() ? null : 'on');
   renderStreamerBtn();
   if (streamerOn()) toast(t('streamer.on'), 'info');
-  if (state && state.me) { history.replaceState(null, '', streamerOn() ? '/' : `/?room=${state.code}`); render(); }
+  if (state && state.me) { history.replaceState(null, '', streamerOn() ? '/mafia/' : `/mafia/?room=${state.code}`); render(); }
 };
 
 function openSecret() {
@@ -1168,10 +1168,10 @@ function render() {
   document.body.classList.toggle('streamer', streamerOn());
   document.body.classList.toggle('streamer-night', hideSecrets() && state.phase === 'night');
   renderStreamerBtn();
-  if (inRoom && streamerOn() && location.search.includes('room=')) history.replaceState(null, '', '/'); // keep the code off screen
+  if (inRoom && streamerOn() && location.search.includes('room=')) history.replaceState(null, '', '/mafia/'); // keep the code off screen
   if (inRoom && urlRoom !== state.code) {
     urlRoom = state.code;
-    history.replaceState(null, '', streamerOn() ? '/' : `/?room=${state.code}`); // streamers: no room code in the address bar
+    history.replaceState(null, '', streamerOn() ? '/mafia/' : `/mafia/?room=${state.code}`); // streamers: no room code in the address bar
   }
   if (!inRoom || state.phase === 'lobby' || state.phase === 'ended') $('#reveal').classList.add('hidden');
   if (!inRoom || state.phase !== 'ended') $('#recap').classList.add('hidden');

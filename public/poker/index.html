@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#08090d">
-  <title>Poker with friends online — free Texas hold'em · Покер с друзьями</title>
-  <meta name="description" content="Private Texas hold'em tables for your group: invite by link, a smooth table, rabbit hunt, all-in equity, hand history and a provably fair deck. Free play chips.">
+  <title>Poker with friends — free Texas hold'em · Anytable</title>
+  <meta name="description" content="Private Texas hold'em tables for your group: invite by link, free chips, a provably fair deck. Покер с друзьями онлайн: бесплатный холдем на фишки.">
   <link rel="canonical" href="https://bluepeau.club/poker/">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="bluepeau.club">
-  <meta property="og:title" content="Poker with friends online — free Texas hold'em · Покер с друзьями">
-  <meta property="og:description" content="Private Texas hold'em tables for your group: invite by link, a smooth table, rabbit hunt, all-in equity, hand history and a provably fair deck. Free play chips.">
+  <meta property="og:site_name" content="Anytable">
+  <meta property="og:title" content="Poker with friends — free Texas hold'em · Anytable">
+  <meta property="og:description" content="Private Texas hold'em tables for your group: invite by link, free chips, a provably fair deck. Покер с друзьями онлайн: бесплатный холдем на фишки.">
   <meta property="og:url" content="https://bluepeau.club/poker/">
   <meta property="og:image" content="https://bluepeau.club/og/poker.png">
   <meta property="og:image:width" content="1200">
@@ -20,7 +20,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23e0464e'/%3E%3Cpath d='M16 6c3 4 8 7 8 11a4 4 0 0 1-7 2.5L18 25h-4l1-5.5A4 4 0 0 1 8 17c0-4 5-7 8-11z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2334d399'/%3E%3Cpath d='M16 6c3 4 8 7 8 11a4 4 0 0 1-7 2.5L18 25h-4l1-5.5A4 4 0 0 1 8 17c0-4 5-7 8-11z' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/geist-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/fonts/fonts.css">
@@ -31,19 +31,11 @@
   <div class="backdrop" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="grain"></div></div>
 
   <header class="topbar">
+    <a class="brand site-brand" href="/"><svg class="brand-mark at-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><circle cx="16" cy="16" r="6" fill="none" stroke="#fff" stroke-width="2.6"/><circle cx="16" cy="5.6" r="2.3" fill="#fff"/><circle cx="26.4" cy="16" r="2.3" fill="#fff"/><circle cx="16" cy="26.4" r="2.3" fill="#fff"/><circle cx="5.6" cy="16" r="2.3" fill="#fff"/></svg><span>Anytable</span></a>
+    <nav class="game-nav" aria-label="Games"><a href="/mafia/" data-i18n="site.mafia"></a><a href="/poker/" aria-current="page" data-i18n="site.poker"></a><a href="/spy/" data-i18n="site.spyfall"></a><a href="/tycoon/" data-i18n="site.monopoly"></a><a href="/kingdoms/" data-i18n="site.citadels"></a><a href="/blog/" data-i18n="footer.blog"></a></nav>
     <div class="brand-switch">
-      <button id="brandBtn" class="brand" type="button" aria-haspopup="true">
-        <svg class="brand-mark pk-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><path d="M16 6c3 4 8 7 8 11a4 4 0 0 1-7 2.5L18 25h-4l1-5.5A4 4 0 0 1 8 17c0-4 5-7 8-11z"/></svg>
-        <span data-i18n="site.poker"></span>
-        <svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <nav id="siteMenu" class="site-menu hidden">
-        <a href="/"><span class="site-ico"></span><span data-i18n="site.mafia"></span></a>
-        <a href="/tycoon/"><span class="site-ico"></span><span data-i18n="site.monopoly"></span></a>
-        <a href="/spy/"><span class="site-ico"></span><span data-i18n="site.spyfall"></span></a>
-        <a href="/kingdoms/"><span class="site-ico"></span><span data-i18n="site.citadels"></span></a>
-        <a href="/poker/" class="current"><span class="site-ico"></span><span data-i18n="site.poker"></span></a>
-      </nav>
+      <button id="brandBtn" class="icon-btn nav-burger" type="button" aria-haspopup="true" data-i18n-aria="nav.games"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <nav id="siteMenu" class="site-menu hidden"><a href="/" class="site-home"><span data-i18n="nav.home"></span></a><a href="/mafia/"><span class="site-ico"></span><span data-i18n="site.mafia"></span></a><a href="/poker/" class="current"><span class="site-ico"></span><span data-i18n="site.poker"></span></a><a href="/spy/"><span class="site-ico"></span><span data-i18n="site.spyfall"></span></a><a href="/tycoon/"><span class="site-ico"></span><span data-i18n="site.monopoly"></span></a><a href="/kingdoms/"><span class="site-ico"></span><span data-i18n="site.citadels"></span></a><a href="/blog/"><span class="site-ico"></span><span data-i18n="footer.blog"></span></a></nav>
     </div>
     <button id="topRoom" class="room-pill hidden" type="button"><span data-i18n="ui.room"></span> <span id="topCode" class="code"></span></button>
     <div id="topRound" class="phase-chip"></div>
@@ -102,7 +94,7 @@
         <p data-i18n="seo.poker.intro">A private no-limit hold&#x27;em table for your group, right in the browser. Invite friends with a link, play for free chips and replay the biggest hands. Every deck is provably fair: after the session, anyone can check that the cards weren&#x27;t stacked.</p>
         <ol class="seo-steps"><li data-i18n="seo.poker.s0">Open a table and share the link: 2–9 players.</li><li data-i18n="seo.poker.s1">Set the stack, the blinds and the turn clock, then deal.</li><li data-i18n="seo.poker.s2">After the session, check any deal and compare stats on the leaderboard.</li></ol>
         <div class="seo-faq"><details><summary data-i18n="seo.poker.q0">Is it real money?</summary><p data-i18n="seo.poker.a0">No. You play for free chips with no money value: 500 to start and a bonus every day.</p></details><details><summary data-i18n="seo.poker.q1">What does &quot;provably fair&quot; mean?</summary><p data-i18n="seo.poker.a1">Before every hand the server locks in a secret seed, and each player&#x27;s browser adds its own. After the session the seeds are revealed, so any deck can be recomputed.</p></details><details><summary data-i18n="seo.poker.q2">Do I need to install anything?</summary><p data-i18n="seo.poker.a2">No. It runs in the browser on a phone or a computer.</p></details></div>
-        <p class="seo-more muted small-text"><a href="/" data-i18n="site.mafia">Mafia</a> · <a href="/tycoon/" data-i18n="site.monopoly">Tycoon</a> · <a href="/spy/" data-i18n="site.spyfall">Find the spy</a> · <a href="/kingdoms/" data-i18n="site.citadels">Kingdoms</a></p>
+        <p class="seo-more muted small-text"><a href="/mafia/" data-i18n="site.mafia">Mafia</a> · <a href="/tycoon/" data-i18n="site.monopoly">Tycoon</a> · <a href="/spy/" data-i18n="site.spyfall">Find the spy</a> · <a href="/kingdoms/" data-i18n="site.citadels">Kingdoms</a></p>
       </article>
       <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Poker", "url": "https://bluepeau.club/poker/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "A private no-limit hold'em table for your group, right in the browser. Invite friends with a link, play for free chips and replay the biggest hands. Every deck is provably fair: after the session, anyone can check that the cards weren't stacked."}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it real money?", "acceptedAnswer": {"@type": "Answer", "text": "No. You play for free chips with no money value: 500 to start and a bonus every day."}}, {"@type": "Question", "name": "What does \"provably fair\" mean?", "acceptedAnswer": {"@type": "Answer", "text": "Before every hand the server locks in a secret seed, and each player's browser adds its own. After the session the seeds are revealed, so any deck can be recomputed."}}, {"@type": "Question", "name": "Do I need to install anything?", "acceptedAnswer": {"@type": "Answer", "text": "No. It runs in the browser on a phone or a computer."}}]}]</script>
     </section>

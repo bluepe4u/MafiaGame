@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#070a12">
-  <title>Kingdoms — city-building card game with secret roles · Королевства</title>
-  <meta name="description" content="Pick a secret character every round, build districts and outwit your friends. 3–8 players in the browser, free, no download.">
+  <title>Kingdoms — card game with secret roles · Anytable</title>
+  <meta name="description" content="Pick a secret character each round and build the finest city, 3–8 players. Королевства — карточная игра с тайными ролями онлайн.">
   <link rel="canonical" href="https://bluepeau.club/kingdoms/">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="bluepeau.club">
-  <meta property="og:title" content="Kingdoms — city-building card game with secret roles · Королевства">
-  <meta property="og:description" content="Pick a secret character every round, build districts and outwit your friends. 3–8 players in the browser, free, no download.">
+  <meta property="og:site_name" content="Anytable">
+  <meta property="og:title" content="Kingdoms — card game with secret roles · Anytable">
+  <meta property="og:description" content="Pick a secret character each round and build the finest city, 3–8 players. Королевства — карточная игра с тайными ролями онлайн.">
   <meta property="og:url" content="https://bluepeau.club/kingdoms/">
   <meta property="og:image" content="https://bluepeau.club/og/kingdoms.png">
   <meta property="og:image:width" content="1200">
@@ -20,7 +20,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23d4a24c'/%3E%3Cpath d='M7 25V13l3 2V9l3 2V6l3-2 3 2v5l3-2v6l3-2v12z' fill='%23111827'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2338bdf8'/%3E%3Cpath d='M7 25V13l3 2V9l3 2V6l3-2 3 2v5l3-2v6l3-2v12z' fill='%23111827'/%3E%3C/svg%3E">
   <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/geist-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/fonts/fonts.css">
@@ -31,19 +31,11 @@
   <div class="backdrop" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="grain"></div></div>
 
   <header class="topbar">
+    <a class="brand site-brand" href="/"><svg class="brand-mark at-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><circle cx="16" cy="16" r="6" fill="none" stroke="#fff" stroke-width="2.6"/><circle cx="16" cy="5.6" r="2.3" fill="#fff"/><circle cx="26.4" cy="16" r="2.3" fill="#fff"/><circle cx="16" cy="26.4" r="2.3" fill="#fff"/><circle cx="5.6" cy="16" r="2.3" fill="#fff"/></svg><span>Anytable</span></a>
+    <nav class="game-nav" aria-label="Games"><a href="/mafia/" data-i18n="site.mafia"></a><a href="/poker/" data-i18n="site.poker"></a><a href="/spy/" data-i18n="site.spyfall"></a><a href="/tycoon/" data-i18n="site.monopoly"></a><a href="/kingdoms/" aria-current="page" data-i18n="site.citadels"></a><a href="/blog/" data-i18n="footer.blog"></a></nav>
     <div class="brand-switch">
-      <button id="brandBtn" class="brand" type="button" aria-haspopup="true">
-        <svg class="brand-mark cit-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><path d="M7 25V13l3 2V9l3 2V6l3-2 3 2v5l3-2v6l3-2v12z"/></svg>
-        <span data-i18n="site.citadels"></span>
-        <svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <nav id="siteMenu" class="site-menu hidden">
-        <a href="/"><span class="site-ico"></span><span data-i18n="site.mafia"></span></a>
-        <a href="/tycoon/"><span class="site-ico"></span><span data-i18n="site.monopoly"></span></a>
-        <a href="/spy/"><span class="site-ico"></span><span data-i18n="site.spyfall"></span></a>
-        <a href="/kingdoms/" class="current"><span class="site-ico"></span><span data-i18n="site.citadels"></span></a>
-        <a href="/poker/"><span class="site-ico"></span><span data-i18n="site.poker"></span></a>
-      </nav>
+      <button id="brandBtn" class="icon-btn nav-burger" type="button" aria-haspopup="true" data-i18n-aria="nav.games"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <nav id="siteMenu" class="site-menu hidden"><a href="/" class="site-home"><span data-i18n="nav.home"></span></a><a href="/mafia/"><span class="site-ico"></span><span data-i18n="site.mafia"></span></a><a href="/poker/"><span class="site-ico"></span><span data-i18n="site.poker"></span></a><a href="/spy/"><span class="site-ico"></span><span data-i18n="site.spyfall"></span></a><a href="/tycoon/"><span class="site-ico"></span><span data-i18n="site.monopoly"></span></a><a href="/kingdoms/" class="current"><span class="site-ico"></span><span data-i18n="site.citadels"></span></a><a href="/blog/"><span class="site-ico"></span><span data-i18n="footer.blog"></span></a></nav>
     </div>
     <button id="topRoom" class="room-pill hidden" type="button"><span data-i18n="ui.room"></span> <span id="topCode" class="code"></span></button>
     <div id="topRound" class="phase-chip"></div>
@@ -98,7 +90,7 @@
         <p data-i18n="seo.kingdoms.intro">Each round, every player secretly picks a character, such as the King, the Thief or the Architect, and uses its power to build districts, take gold or slow a rival down. Whoever finishes a city first ends the game, and the most valuable city wins.</p>
         <ol class="seo-steps"><li data-i18n="seo.kingdoms.s0">Start a room for 3–8 players and invite them with a link.</li><li data-i18n="seo.kingdoms.s1">Pick a character in secret, then take turns in the order of their numbers.</li><li data-i18n="seo.kingdoms.s2">Build districts: once someone has seven, the round finishes and the cities are scored.</li></ol>
         <div class="seo-faq"><details><summary data-i18n="seo.kingdoms.q0">Is it free?</summary><p data-i18n="seo.kingdoms.a0">Yes, free and right in the browser.</p></details><details><summary data-i18n="seo.kingdoms.q1">Is it hard to learn?</summary><p data-i18n="seo.kingdoms.a1">No. It plays with a beginner set of nine characters, and the rules are one tap away.</p></details><details><summary data-i18n="seo.kingdoms.q2">How long does a game take?</summary><p data-i18n="seo.kingdoms.a2">Usually 30–60 minutes.</p></details></div>
-        <p class="seo-more muted small-text"><a href="/" data-i18n="site.mafia">Mafia</a> · <a href="/poker/" data-i18n="site.poker">Poker</a> · <a href="/tycoon/" data-i18n="site.monopoly">Tycoon</a> · <a href="/spy/" data-i18n="site.spyfall">Find the spy</a></p>
+        <p class="seo-more muted small-text"><a href="/mafia/" data-i18n="site.mafia">Mafia</a> · <a href="/poker/" data-i18n="site.poker">Poker</a> · <a href="/tycoon/" data-i18n="site.monopoly">Tycoon</a> · <a href="/spy/" data-i18n="site.spyfall">Find the spy</a></p>
       </article>
       <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Kingdoms", "url": "https://bluepeau.club/kingdoms/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "Each round, every player secretly picks a character, such as the King, the Thief or the Architect, and uses its power to build districts, take gold or slow a rival down. Whoever finishes a city first ends the game, and the most valuable city wins."}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, free and right in the browser."}}, {"@type": "Question", "name": "Is it hard to learn?", "acceptedAnswer": {"@type": "Answer", "text": "No. It plays with a beginner set of nine characters, and the rules are one tap away."}}, {"@type": "Question", "name": "How long does a game take?", "acceptedAnswer": {"@type": "Answer", "text": "Usually 30–60 minutes."}}]}]</script>
     </section>

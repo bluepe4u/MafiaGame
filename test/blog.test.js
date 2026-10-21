@@ -87,3 +87,23 @@ test('blog: the real articles in content/blog parse and publish', () => {
     assert.strictEqual(blog.translations(p).length, 1, `${p.slug} has its translation`);
   }
 });
+
+test('blog: a shipped article follows its file until someone edits it', async () => {
+  const dir = tmp();
+  const content = path.join(dir, 'content');
+  fs.mkdirSync(content);
+  const file = path.join(content, 'a.md');
+  fs.writeFileSync(file, '---\nslug: rules\ntitle: Rules\n---\nVersion one.\n');
+  const blog = new BlogStore(dir);
+  blog.seedFrom(content);
+  fs.writeFileSync(file, '---\nslug: rules\ntitle: Rules\n---\nVersion two.\n');
+  await new Promise(r => setTimeout(r, 5));
+  assert.strictEqual(blog.seedFrom(content), 1);
+  assert.strictEqual(blog.bySlug('rules').body, 'Version two.');
+  // the admin edits it: from now on the file no longer overwrites it
+  await new Promise(r => setTimeout(r, 5));
+  blog.upsert({ ...blog.bySlug('rules'), body: 'Edited by hand.' }, 'admin');
+  fs.writeFileSync(file, '---\nslug: rules\ntitle: Rules\n---\nVersion three.\n');
+  assert.strictEqual(blog.seedFrom(content), 0);
+  assert.strictEqual(blog.bySlug('rules').body, 'Edited by hand.');
+});
