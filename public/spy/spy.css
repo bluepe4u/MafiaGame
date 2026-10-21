@@ -7,7 +7,6 @@ body.spyfall {
 }
 body.spyfall .spy-mark rect:first-child { fill: #8b5cf6; }
 body.spyfall .spy-mark circle, body.spyfall .spy-mark path { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linejoin: round; }
-body.spyfall button.primary { background: linear-gradient(180deg, #a78bfa, #7c3aed); }
 body.spyfall main { max-width: 1240px; }
 
 .spy-layout { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 18px; align-items: start; }

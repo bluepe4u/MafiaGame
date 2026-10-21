@@ -15,7 +15,6 @@ body.poker {
 body.poker.four-color { --s-d: #2563eb; --s-c: #15803d; }
 body.poker .brand-mark.pk-mark rect:first-child { fill: var(--accent); }
 body.poker .brand-mark.pk-mark path { fill: #fff; }
-body.poker button.primary { background: linear-gradient(180deg, #f05a62, #c2303a); box-shadow: 0 1px 0 rgba(255, 255, 255, .25) inset, 0 10px 28px -10px rgba(224, 70, 78, .8); }
 body.poker .hero h1 em { background: linear-gradient(100deg, #fecaca, #f87171 50%, #10b981); -webkit-background-clip: text; background-clip: text; }
 body.poker .room-pill .code { background: rgba(224, 70, 78, .14); color: #fca5a5; }
 body.poker .phase-chip::before { background: #10b981; box-shadow: 0 0 10px #10b981; }

@@ -53,12 +53,13 @@
   <main id="app">
     <!-- home -->
     <section id="home" class="screen hidden">
-      <div class="hero">
-        <p class="eyebrow" data-i18n="cit.eyebrow"></p>
-        <h1><span data-i18n="cit.heroA"></span> <em data-i18n="cit.heroB"></em></h1>
-        <p class="muted hero-sub" data-i18n="cit.tagline"></p>
-      </div>
-      <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
+      <div class="gp-hero g-kingdoms">
+        <div class="gp-copy">
+          <p class="gp-tag"><span class="gp-tag-ico" data-ico="castle"></span><span data-i18n="cit.eyebrow"></span></p>
+          <h1><span data-i18n="cit.heroA"></span> <em data-i18n="cit.heroB"></em></h1>
+          <p class="gp-sub" data-i18n="cit.tagline"></p>
+          <dl class="gp-facts"><div class="gp-fact"><dt data-i18n="gp.fact.players">Players</dt><dd data-i18n="gp.kingdoms.fact.players">3–8</dd></div><div class="gp-fact"><dt data-i18n="gp.fact.length">A game</dt><dd data-i18n="gp.kingdoms.fact.length">30–60 min</dd></div><div class="gp-fact"><dt data-i18n="gp.fact.join">To join</dt><dd data-i18n="gp.kingdoms.fact.join">Just a name</dd></div></dl>
+          <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
       <form id="authCard" class="card home-card hidden" autocomplete="on">
         <div class="tabs auth-tabs" role="tablist">
           <button type="button" data-auth-mode="login" data-i18n="auth.login"></button>
@@ -84,15 +85,26 @@
           <button id="watchBtn" class="ghost" data-i18n="ui.watch"></button>
         </div>
       </div>
-      <!-- for visitors who aren't logged in, and for search engines -->
-      <article class="seo-about card">
-        <h2 data-i18n="seo.kingdoms.h">Kingdoms: a card game of secret roles and city building</h2>
-        <p data-i18n="seo.kingdoms.intro">Each round, every player secretly picks a character, such as the King, the Thief or the Architect, and uses its power to build districts, take gold or slow a rival down. Whoever finishes a city first ends the game, and the most valuable city wins.</p>
-        <ol class="seo-steps"><li data-i18n="seo.kingdoms.s0">Start a room for 3–8 players and invite them with a link.</li><li data-i18n="seo.kingdoms.s1">Pick a character in secret, then take turns in the order of their numbers.</li><li data-i18n="seo.kingdoms.s2">Build districts: once someone has seven, the round finishes and the cities are scored.</li></ol>
-        <div class="seo-faq"><details><summary data-i18n="seo.kingdoms.q0">Is it free?</summary><p data-i18n="seo.kingdoms.a0">Yes, free and right in the browser.</p></details><details><summary data-i18n="seo.kingdoms.q1">Is it hard to learn?</summary><p data-i18n="seo.kingdoms.a1">No. It plays with a beginner set of nine characters, and the rules are one tap away.</p></details><details><summary data-i18n="seo.kingdoms.q2">How long does a game take?</summary><p data-i18n="seo.kingdoms.a2">Usually 30–60 minutes.</p></details></div>
-        <p class="seo-more muted small-text"><a href="/mafia/" data-i18n="site.mafia">Mafia</a> · <a href="/poker/" data-i18n="site.poker">Poker</a> · <a href="/tycoon/" data-i18n="site.monopoly">Tycoon</a> · <a href="/spy/" data-i18n="site.spyfall">Find the spy</a></p>
-      </article>
-      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Kingdoms", "url": "https://bluepeau.club/kingdoms/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "Each round, every player secretly picks a character, such as the King, the Thief or the Architect, and uses its power to build districts, take gold or slow a rival down. Whoever finishes a city first ends the game, and the most valuable city wins."}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, free and right in the browser."}}, {"@type": "Question", "name": "Is it hard to learn?", "acceptedAnswer": {"@type": "Answer", "text": "No. It plays with a beginner set of nine characters, and the rules are one tap away."}}, {"@type": "Question", "name": "How long does a game take?", "acceptedAnswer": {"@type": "Answer", "text": "Usually 30–60 minutes."}}]}]</script>
+        </div>
+        <div class="gp-art gp-art-kingdoms" aria-hidden="true"><div class="art-crown">♛</div>
+          <div class="art-districts"><span style="--d:#d4a24c"><b>5</b></span><span style="--d:#3b82f6"><b>3</b></span><span style="--d:#16a34a"><b>2</b></span><span style="--d:#dc2626"><b>4</b></span></div></div>
+      </div>
+      <!-- what the game is, for visitors and search engines (hidden once signed in) -->
+      <section class="gp-section gp-about">
+        <h2 class="gp-h2" data-i18n="seo.kingdoms.h">Kingdoms: a card game of secret roles and city building</h2>
+        <p class="gp-intro" data-i18n="seo.kingdoms.intro">Each round, every player secretly picks a character, such as the King, the Thief or the Architect, and uses its power to build districts, take gold or slow a rival down. Whoever finishes a city first ends the game, and the most valuable city wins.</p>
+        <h3 class="gp-h3" data-i18n="gp.how">How a game goes</h3>
+        <ol class="gp-grid gp-steps"><li class="gp-card"><span class="gp-n">01</span><span data-i18n="seo.kingdoms.s0">Start a room for 3–8 players and invite them with a link.</span></li><li class="gp-card"><span class="gp-n">02</span><span data-i18n="seo.kingdoms.s1">Pick a character in secret, then take turns in the order of their numbers.</span></li><li class="gp-card"><span class="gp-n">03</span><span data-i18n="seo.kingdoms.s2">Build districts: once someone has seven, the round finishes and the cities are scored.</span></li></ol>
+      </section>
+      <section class="gp-section gp-about">
+        <h2 class="gp-h2" data-i18n="gp.kingdoms.made">Easy to start</h2>
+        <div class="gp-grid"><div class="gp-card"><b data-i18n="gp.kingdoms.f0t">A beginner set</b><span data-i18n="gp.kingdoms.f0">Nine characters, each with one clear power.</span></div><div class="gp-card"><b data-i18n="gp.kingdoms.f1t">Rules one tap away</b><span data-i18n="gp.kingdoms.f1">Every character and district is explained in the game.</span></div><div class="gp-card"><b data-i18n="gp.kingdoms.f2t">A secret draft</b><span data-i18n="gp.kingdoms.f2">Each round, characters pass round the table in secret.</span></div><div class="gp-card"><b data-i18n="gp.kingdoms.f3t">Live scoring</b><span data-i18n="gp.kingdoms.f3">See every city&#x27;s score as it grows.</span></div></div>
+      </section>
+      <section class="gp-section gp-about gp-two">
+        <div class="gp-faq"><h2 class="gp-h2" data-i18n="gp.faq">Questions</h2><details><summary data-i18n="seo.kingdoms.q0">Is it free?</summary><p data-i18n="seo.kingdoms.a0">Yes, free and right in the browser.</p></details><details><summary data-i18n="seo.kingdoms.q1">Is it hard to learn?</summary><p data-i18n="seo.kingdoms.a1">No. It plays with a beginner set of nine characters, and the rules are one tap away.</p></details><details><summary data-i18n="seo.kingdoms.q2">How long does a game take?</summary><p data-i18n="seo.kingdoms.a2">Usually 30–60 minutes.</p></details></div>
+        <div class="gp-others"><h2 class="gp-h2" data-i18n="gp.other">Other games</h2><a class="gp-other g-mafia" href="/mafia/"><i></i><b data-i18n="site.mafia">Mafia</b><span data-players="4–12">4–12</span></a><a class="gp-other g-poker" href="/poker/"><i></i><b data-i18n="site.poker">Poker</b><span data-players="2–9">2–9</span></a><a class="gp-other g-spy" href="/spy/"><i></i><b data-i18n="site.spyfall">Find the spy</b><span data-players="3–12">3–12</span></a><a class="gp-other g-tycoon" href="/tycoon/"><i></i><b data-i18n="site.monopoly">Tycoon</b><span data-players="2–8">2–8</span></a></div>
+      </section>
+      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Kingdoms", "url": "https://bluepeau.club/kingdoms/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "Each round, every player secretly picks a character, such as the King, the Thief or the Architect, and uses its power to build districts, take gold or slow a rival down. Whoever finishes a city first ends the game, and the most valuable city wins.", "isPartOf": {"@type": "WebSite", "name": "Anytable", "url": "https://bluepeau.club/"}}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, free and right in the browser."}}, {"@type": "Question", "name": "Is it hard to learn?", "acceptedAnswer": {"@type": "Answer", "text": "No. It plays with a beginner set of nine characters, and the rules are one tap away."}}, {"@type": "Question", "name": "How long does a game take?", "acceptedAnswer": {"@type": "Answer", "text": "Usually 30–60 minutes."}}]}]</script>
     </section>
 
     <!-- lobby -->

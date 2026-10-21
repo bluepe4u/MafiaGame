@@ -53,12 +53,13 @@
   <main id="app">
     <!-- home -->
     <section id="home" class="screen hidden">
-      <div class="hero">
-        <p class="eyebrow" data-i18n="pk.eyebrow"></p>
-        <h1><span data-i18n="pk.heroA"></span> <em data-i18n="pk.heroB"></em></h1>
-        <p class="muted hero-sub" data-i18n="pk.tagline"></p>
-      </div>
-      <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
+      <div class="gp-hero g-poker">
+        <div class="gp-copy">
+          <p class="gp-tag"><span class="gp-tag-ico" data-ico="chip"></span><span data-i18n="pk.eyebrow"></span></p>
+          <h1><span data-i18n="pk.heroA"></span> <em data-i18n="pk.heroB"></em></h1>
+          <p class="gp-sub" data-i18n="pk.tagline"></p>
+          <dl class="gp-facts"><div class="gp-fact"><dt data-i18n="gp.fact.players">Players</dt><dd data-i18n="gp.poker.fact.players">2–9</dd></div><div class="gp-fact"><dt data-i18n="gp.fact.stakes">Played for</dt><dd data-i18n="gp.poker.fact.stakes">Free chips</dd></div><div class="gp-fact"><dt data-i18n="gp.fact.join">To join</dt><dd data-i18n="gp.poker.fact.join">Just a name</dd></div></dl>
+          <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
       <form id="authCard" class="card home-card hidden" autocomplete="on">
         <div class="tabs auth-tabs" role="tablist">
           <button type="button" data-auth-mode="login" data-i18n="auth.login"></button>
@@ -88,15 +89,27 @@
           <button id="watchBtn" class="ghost" data-i18n="ui.watch"></button>
         </div>
       </div>
-      <!-- for visitors who aren't logged in, and for search engines -->
-      <article class="seo-about card">
-        <h2 data-i18n="seo.poker.h">Free Texas hold&#x27;em with your friends</h2>
-        <p data-i18n="seo.poker.intro">A private no-limit hold&#x27;em table for your group, right in the browser. Invite friends with a link, play for free chips and replay the biggest hands. Every deck is provably fair: after the session, anyone can check that the cards weren&#x27;t stacked.</p>
-        <ol class="seo-steps"><li data-i18n="seo.poker.s0">Open a table and share the link: 2–9 players.</li><li data-i18n="seo.poker.s1">Set the stack, the blinds and the turn clock, then deal.</li><li data-i18n="seo.poker.s2">After the session, check any deal and compare stats on the leaderboard.</li></ol>
-        <div class="seo-faq"><details><summary data-i18n="seo.poker.q0">Is it real money?</summary><p data-i18n="seo.poker.a0">No. You play for free chips with no money value: 500 to start and a bonus every day.</p></details><details><summary data-i18n="seo.poker.q1">What does &quot;provably fair&quot; mean?</summary><p data-i18n="seo.poker.a1">Before every hand the server locks in a secret seed, and each player&#x27;s browser adds its own. After the session the seeds are revealed, so any deck can be recomputed.</p></details><details><summary data-i18n="seo.poker.q2">Do I need to install anything?</summary><p data-i18n="seo.poker.a2">No. It runs in the browser on a phone or a computer.</p></details></div>
-        <p class="seo-more muted small-text"><a href="/mafia/" data-i18n="site.mafia">Mafia</a> · <a href="/tycoon/" data-i18n="site.monopoly">Tycoon</a> · <a href="/spy/" data-i18n="site.spyfall">Find the spy</a> · <a href="/kingdoms/" data-i18n="site.citadels">Kingdoms</a></p>
-      </article>
-      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Poker", "url": "https://bluepeau.club/poker/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "A private no-limit hold'em table for your group, right in the browser. Invite friends with a link, play for free chips and replay the biggest hands. Every deck is provably fair: after the session, anyone can check that the cards weren't stacked."}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it real money?", "acceptedAnswer": {"@type": "Answer", "text": "No. You play for free chips with no money value: 500 to start and a bonus every day."}}, {"@type": "Question", "name": "What does \"provably fair\" mean?", "acceptedAnswer": {"@type": "Answer", "text": "Before every hand the server locks in a secret seed, and each player's browser adds its own. After the session the seeds are revealed, so any deck can be recomputed."}}, {"@type": "Question", "name": "Do I need to install anything?", "acceptedAnswer": {"@type": "Answer", "text": "No. It runs in the browser on a phone or a computer."}}]}]</script>
+        </div>
+        <div class="gp-art gp-art-poker" aria-hidden="true"><div class="art-felt">
+          <div class="art-board"><span class="c r">K♥</span><span class="c">9♣</span><span class="c">K♠</span><span class="c r">4♦</span><span class="c back"></span></div>
+          <span class="art-pot">Pot 480</span><i class="seat s1"></i><i class="seat s2"></i><i class="seat s3"></i><i class="seat s4"></i><i class="seat s5 me"></i></div></div>
+      </div>
+      <!-- what the game is, for visitors and search engines (hidden once signed in) -->
+      <section class="gp-section gp-about">
+        <h2 class="gp-h2" data-i18n="seo.poker.h">Free Texas hold&#x27;em with your friends</h2>
+        <p class="gp-intro" data-i18n="seo.poker.intro">A private no-limit hold&#x27;em table for your group, right in the browser. Invite friends with a link, play for free chips and replay the biggest hands. Every deck is provably fair: after the session, anyone can check that the cards weren&#x27;t stacked.</p>
+        <h3 class="gp-h3" data-i18n="gp.how">How a game goes</h3>
+        <ol class="gp-grid gp-steps"><li class="gp-card"><span class="gp-n">01</span><span data-i18n="seo.poker.s0">Open a table and share the link: 2–9 players.</span></li><li class="gp-card"><span class="gp-n">02</span><span data-i18n="seo.poker.s1">Set the stack, the blinds and the turn clock, then deal.</span></li><li class="gp-card"><span class="gp-n">03</span><span data-i18n="seo.poker.s2">After the session, check any deal and compare stats on the leaderboard.</span></li></ol>
+      </section>
+      <section class="gp-section gp-about">
+        <h2 class="gp-h2" data-i18n="gp.poker.made">Made for home games</h2>
+        <div class="gp-grid"><div class="gp-card"><b data-i18n="gp.poker.f0t">Every deck can be checked</b><span data-i18n="gp.poker.f0">The table locks each deck before the hand and your browser adds its own randomness. After the session, recompute every deal yourself.</span></div><div class="gp-card"><b data-i18n="gp.poker.f1t">New players welcome</b><span data-i18n="gp.poker.f1">Your best hand is highlighted as the cards come out, and the hand rankings are one tap away.</span></div><div class="gp-card"><b data-i18n="gp.poker.f2t">The story of each hand</b><span data-i18n="gp.poker.f2">All-in odds, the card that decided it, and what the board would have been.</span></div><div class="gp-card"><b data-i18n="gp.poker.f3t">Chips, never money</b><span data-i18n="gp.poker.f3">Everyone gets free chips to start and more every day. They can&#x27;t be bought or cashed out.</span></div></div>
+      </section>
+      <section class="gp-section gp-about gp-two">
+        <div class="gp-faq"><h2 class="gp-h2" data-i18n="gp.faq">Questions</h2><details><summary data-i18n="seo.poker.q0">Is it real money?</summary><p data-i18n="seo.poker.a0">No. You play for free chips with no money value: 500 to start and a bonus every day.</p></details><details><summary data-i18n="seo.poker.q1">What does &quot;provably fair&quot; mean?</summary><p data-i18n="seo.poker.a1">Before every hand the server locks in a secret seed, and each player&#x27;s browser adds its own. After the session the seeds are revealed, so any deck can be recomputed.</p></details><details><summary data-i18n="seo.poker.q2">Do I need to install anything?</summary><p data-i18n="seo.poker.a2">No. It runs in the browser on a phone or a computer.</p></details></div>
+        <div class="gp-others"><h2 class="gp-h2" data-i18n="gp.other">Other games</h2><a class="gp-other g-mafia" href="/mafia/"><i></i><b data-i18n="site.mafia">Mafia</b><span data-players="4–12">4–12</span></a><a class="gp-other g-spy" href="/spy/"><i></i><b data-i18n="site.spyfall">Find the spy</b><span data-players="3–12">3–12</span></a><a class="gp-other g-tycoon" href="/tycoon/"><i></i><b data-i18n="site.monopoly">Tycoon</b><span data-players="2–8">2–8</span></a><a class="gp-other g-kingdoms" href="/kingdoms/"><i></i><b data-i18n="site.citadels">Kingdoms</b><span data-players="3–8">3–8</span></a></div>
+      </section>
+      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Poker", "url": "https://bluepeau.club/poker/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "A private no-limit hold'em table for your group, right in the browser. Invite friends with a link, play for free chips and replay the biggest hands. Every deck is provably fair: after the session, anyone can check that the cards weren't stacked.", "isPartOf": {"@type": "WebSite", "name": "Anytable", "url": "https://bluepeau.club/"}}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it real money?", "acceptedAnswer": {"@type": "Answer", "text": "No. You play for free chips with no money value: 500 to start and a bonus every day."}}, {"@type": "Question", "name": "What does \"provably fair\" mean?", "acceptedAnswer": {"@type": "Answer", "text": "Before every hand the server locks in a secret seed, and each player's browser adds its own. After the session the seeds are revealed, so any deck can be recomputed."}}, {"@type": "Question", "name": "Do I need to install anything?", "acceptedAnswer": {"@type": "Answer", "text": "No. It runs in the browser on a phone or a computer."}}]}]</script>
     </section>
 
     <!-- lobby -->

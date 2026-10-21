@@ -52,12 +52,13 @@
   <main id="app">
     <!-- home -->
     <section id="home" class="screen hidden">
-      <div class="hero">
-        <p class="eyebrow" data-i18n="mono.eyebrow"></p>
-        <h1><span data-i18n="mono.heroA"></span> <em data-i18n="mono.heroB"></em></h1>
-        <p class="muted hero-sub" data-i18n="mono.tagline"></p>
-      </div>
-      <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
+      <div class="gp-hero g-tycoon">
+        <div class="gp-copy">
+          <p class="gp-tag"><span class="gp-tag-ico" data-ico="dice"></span><span data-i18n="mono.eyebrow"></span></p>
+          <h1><span data-i18n="mono.heroA"></span> <em data-i18n="mono.heroB"></em></h1>
+          <p class="gp-sub" data-i18n="mono.tagline"></p>
+          <dl class="gp-facts"><div class="gp-fact"><dt data-i18n="gp.fact.players">Players</dt><dd data-i18n="gp.tycoon.fact.players">2–8</dd></div><div class="gp-fact"><dt data-i18n="gp.fact.voice">Voice chat</dt><dd data-i18n="gp.tycoon.fact.voice">Built in</dd></div><div class="gp-fact"><dt data-i18n="gp.fact.join">To join</dt><dd data-i18n="gp.tycoon.fact.join">Just a name</dd></div></dl>
+          <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
       <form id="authCard" class="card home-card hidden" autocomplete="on">
         <div class="tabs auth-tabs" role="tablist">
           <button type="button" data-auth-mode="login" data-i18n="auth.login"></button>
@@ -80,15 +81,26 @@
           <button id="watchBtn" class="ghost" data-i18n="ui.watch"></button>
         </div>
       </div>
-      <!-- for visitors who aren't logged in, and for search engines -->
-      <article class="seo-about card">
-        <h2 data-i18n="seo.tycoon.h">Tycoon: a property trading game online</h2>
-        <p data-i18n="seo.tycoon.intro">Roll the dice, buy streets, build houses and hotels, and make deals with your friends until one tycoon owns the town. A classic board-game evening without the box: everything happens in the browser.</p>
-        <ol class="seo-steps"><li data-i18n="seo.tycoon.s0">Start a room and invite 2–8 players with a link.</li><li data-i18n="seo.tycoon.s1">Take turns: buy, bid at auctions, build, and trade anything with anyone.</li><li data-i18n="seo.tycoon.s2">The last player still afloat wins, or the richest when time runs out.</li></ol>
-        <div class="seo-faq"><details><summary data-i18n="seo.tycoon.q0">Is it free?</summary><p data-i18n="seo.tycoon.a0">Yes, free and without ads.</p></details><details><summary data-i18n="seo.tycoon.q1">Can we play a shorter game?</summary><p data-i18n="seo.tycoon.a1">Yes. The lobby has settings for a quick game.</p></details><details><summary data-i18n="seo.tycoon.q2">Do I need an account?</summary><p data-i18n="seo.tycoon.a2">No, a name is enough to play. An account keeps your stats between games.</p></details></div>
-        <p class="seo-more muted small-text"><a href="/mafia/" data-i18n="site.mafia">Mafia</a> · <a href="/poker/" data-i18n="site.poker">Poker</a> · <a href="/spy/" data-i18n="site.spyfall">Find the spy</a> · <a href="/kingdoms/" data-i18n="site.citadels">Kingdoms</a></p>
-      </article>
-      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Tycoon", "url": "https://bluepeau.club/tycoon/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "Roll the dice, buy streets, build houses and hotels, and make deals with your friends until one tycoon owns the town. A classic board-game evening without the box: everything happens in the browser."}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, free and without ads."}}, {"@type": "Question", "name": "Can we play a shorter game?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The lobby has settings for a quick game."}}, {"@type": "Question", "name": "Do I need an account?", "acceptedAnswer": {"@type": "Answer", "text": "No, a name is enough to play. An account keeps your stats between games."}}]}]</script>
+        </div>
+        <div class="gp-art gp-art-tycoon" aria-hidden="true"><div class="art-tiles"><i style="--t:#e11d48"></i><i style="--t:#e11d48"></i><i style="--t:#f59e0b"></i><i style="--t:#f59e0b"></i><i style="--t:#16a34a"></i><i style="--t:#2563eb"></i></div>
+          <div class="art-dice"><span>⚄</span><span>⚂</span></div></div>
+      </div>
+      <!-- what the game is, for visitors and search engines (hidden once signed in) -->
+      <section class="gp-section gp-about">
+        <h2 class="gp-h2" data-i18n="seo.tycoon.h">Tycoon: a property trading game online</h2>
+        <p class="gp-intro" data-i18n="seo.tycoon.intro">Roll the dice, buy streets, build houses and hotels, and make deals with your friends until one tycoon owns the town. A classic board-game evening without the box: everything happens in the browser.</p>
+        <h3 class="gp-h3" data-i18n="gp.how">How a game goes</h3>
+        <ol class="gp-grid gp-steps"><li class="gp-card"><span class="gp-n">01</span><span data-i18n="seo.tycoon.s0">Start a room and invite 2–8 players with a link.</span></li><li class="gp-card"><span class="gp-n">02</span><span data-i18n="seo.tycoon.s1">Take turns: buy, bid at auctions, build, and trade anything with anyone.</span></li><li class="gp-card"><span class="gp-n">03</span><span data-i18n="seo.tycoon.s2">The last player still afloat wins, or the richest when time runs out.</span></li></ol>
+      </section>
+      <section class="gp-section gp-about">
+        <h2 class="gp-h2" data-i18n="gp.tycoon.made">Made for long evenings</h2>
+        <div class="gp-grid"><div class="gp-card"><b data-i18n="gp.tycoon.f0t">Trade anything</b><span data-i18n="gp.tycoon.f0">Streets, cash, anything, with anyone at the table.</span></div><div class="gp-card"><b data-i18n="gp.tycoon.f1t">Auctions</b><span data-i18n="gp.tycoon.f1">A street nobody buys goes under the hammer.</span></div><div class="gp-card"><b data-i18n="gp.tycoon.f2t">House rules</b><span data-i18n="gp.tycoon.f2">Starting cash, double salary, a jackpot on the free square: set them in the lobby.</span></div><div class="gp-card"><b data-i18n="gp.tycoon.f3t">A shorter game</b><span data-i18n="gp.tycoon.f3">Short on time? There&#x27;s a quicker setup, and a turn clock keeps things moving.</span></div></div>
+      </section>
+      <section class="gp-section gp-about gp-two">
+        <div class="gp-faq"><h2 class="gp-h2" data-i18n="gp.faq">Questions</h2><details><summary data-i18n="seo.tycoon.q0">Is it free?</summary><p data-i18n="seo.tycoon.a0">Yes, free and without ads.</p></details><details><summary data-i18n="seo.tycoon.q1">Can we play a shorter game?</summary><p data-i18n="seo.tycoon.a1">Yes. The lobby has settings for a quick game.</p></details><details><summary data-i18n="seo.tycoon.q2">Do I need an account?</summary><p data-i18n="seo.tycoon.a2">No, a name is enough to play. An account keeps your stats between games.</p></details></div>
+        <div class="gp-others"><h2 class="gp-h2" data-i18n="gp.other">Other games</h2><a class="gp-other g-mafia" href="/mafia/"><i></i><b data-i18n="site.mafia">Mafia</b><span data-players="4–12">4–12</span></a><a class="gp-other g-poker" href="/poker/"><i></i><b data-i18n="site.poker">Poker</b><span data-players="2–9">2–9</span></a><a class="gp-other g-spy" href="/spy/"><i></i><b data-i18n="site.spyfall">Find the spy</b><span data-players="3–12">3–12</span></a><a class="gp-other g-kingdoms" href="/kingdoms/"><i></i><b data-i18n="site.citadels">Kingdoms</b><span data-players="3–8">3–8</span></a></div>
+      </section>
+      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Tycoon", "url": "https://bluepeau.club/tycoon/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "Roll the dice, buy streets, build houses and hotels, and make deals with your friends until one tycoon owns the town. A classic board-game evening without the box: everything happens in the browser.", "isPartOf": {"@type": "WebSite", "name": "Anytable", "url": "https://bluepeau.club/"}}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, free and without ads."}}, {"@type": "Question", "name": "Can we play a shorter game?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The lobby has settings for a quick game."}}, {"@type": "Question", "name": "Do I need an account?", "acceptedAnswer": {"@type": "Answer", "text": "No, a name is enough to play. An account keeps your stats between games."}}]}]</script>
     </section>
 
     <!-- lobby -->

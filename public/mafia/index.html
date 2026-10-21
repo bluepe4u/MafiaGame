@@ -58,12 +58,13 @@
 
   <main id="app">
     <section id="home" class="screen hidden">
-      <div class="hero">
-        <p class="eyebrow" data-i18n="ui.eyebrow"></p>
-        <h1><span data-i18n="ui.heroA"></span> <em data-i18n="ui.heroB"></em></h1>
-        <p class="muted hero-sub" data-i18n="ui.tagline"></p>
-      </div>
-      <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
+      <div class="gp-hero g-mafia">
+        <div class="gp-copy">
+          <p class="gp-tag"><span class="gp-tag-ico" data-ico="hat"></span><span data-i18n="ui.eyebrow"></span></p>
+          <h1><span data-i18n="ui.heroA"></span> <em data-i18n="ui.heroB"></em></h1>
+          <p class="gp-sub" data-i18n="ui.tagline"></p>
+          <dl class="gp-facts"><div class="gp-fact"><dt data-i18n="gp.fact.players">Players</dt><dd data-i18n="gp.mafia.fact.players">4–12</dd></div><div class="gp-fact"><dt data-i18n="gp.fact.narrator">Narrator</dt><dd data-i18n="gp.mafia.fact.narrator">The site</dd></div><div class="gp-fact"><dt data-i18n="gp.fact.join">To join</dt><dd data-i18n="gp.mafia.fact.join">Just a name</dd></div></dl>
+          <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
       <form id="authCard" class="card home-card hidden" autocomplete="on">
         <div class="tabs auth-tabs" role="tablist">
           <button type="button" data-auth-mode="login" data-i18n="auth.login"></button>
@@ -86,15 +87,26 @@
           <button id="watchBtn" class="ghost" data-i18n="ui.watch"></button>
         </div>
       </div>
-      <!-- for visitors who aren't logged in, and for search engines -->
-      <article class="seo-about card">
-        <h2 data-i18n="seo.mafia.h">Play Mafia online with friends</h2>
-        <p data-i18n="seo.mafia.intro">Mafia (also called Werewolf) is the classic game of lies and deduction. The town tries to find the mafia hiding among them, and every night the mafia takes someone out. Everyone plays from their own phone or laptop, and the site is the narrator: it deals the secret roles, runs the nights and counts the votes.</p>
-        <ol class="seo-steps"><li data-i18n="seo.mafia.s0">Start a room and send your friends the link or the code (4–12 players).</li><li data-i18n="seo.mafia.s1">Everyone gets a secret role on their own screen: citizen, mafia, doctor, cop and more.</li><li data-i18n="seo.mafia.s2">Argue it out over the built-in voice chat, vote, and find out who was right.</li></ol>
-        <div class="seo-faq"><details><summary data-i18n="seo.mafia.q0">Is it free?</summary><p data-i18n="seo.mafia.a0">Yes. Nothing to download and no ads: a browser is all you need.</p></details><details><summary data-i18n="seo.mafia.q1">How many players do we need?</summary><p data-i18n="seo.mafia.a1">From 4 to 12. The site picks a balanced set of roles for your group.</p></details><details><summary data-i18n="seo.mafia.q2">Do we need a host?</summary><p data-i18n="seo.mafia.a2">No. The site runs the nights and days, so everyone gets to play.</p></details></div>
-        <p class="seo-more muted small-text"><a href="/poker/" data-i18n="site.poker">Poker</a> · <a href="/tycoon/" data-i18n="site.monopoly">Tycoon</a> · <a href="/spy/" data-i18n="site.spyfall">Find the spy</a> · <a href="/kingdoms/" data-i18n="site.citadels">Kingdoms</a></p>
-      </article>
-      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Mafia", "url": "https://bluepeau.club/mafia/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "Mafia (also called Werewolf) is the classic game of lies and deduction. The town tries to find the mafia hiding among them, and every night the mafia takes someone out. Everyone plays from their own phone or laptop, and the site is the narrator: it deals the secret roles, runs the nights and counts the votes."}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Nothing to download and no ads: a browser is all you need."}}, {"@type": "Question", "name": "How many players do we need?", "acceptedAnswer": {"@type": "Answer", "text": "From 4 to 12. The site picks a balanced set of roles for your group."}}, {"@type": "Question", "name": "Do we need a host?", "acceptedAnswer": {"@type": "Answer", "text": "No. The site runs the nights and days, so everyone gets to play."}}]}]</script>
+        </div>
+        <div class="gp-art gp-art-mafia" aria-hidden="true"><span class="art-moon"></span><span class="art-chip">Night 3</span>
+          <div class="art-ring"><i></i><i class="on"></i><i></i><i class="out"></i><i></i><i></i><i></i><i></i></div></div>
+      </div>
+      <!-- what the game is, for visitors and search engines (hidden once signed in) -->
+      <section class="gp-section gp-about">
+        <h2 class="gp-h2" data-i18n="seo.mafia.h">Play Mafia online with friends</h2>
+        <p class="gp-intro" data-i18n="seo.mafia.intro">Mafia (also called Werewolf) is the classic game of lies and deduction. The town tries to find the mafia hiding among them, and every night the mafia takes someone out. Everyone plays from their own phone or laptop, and the site is the narrator: it deals the secret roles, runs the nights and counts the votes.</p>
+        <h3 class="gp-h3" data-i18n="gp.how">How a game goes</h3>
+        <ol class="gp-grid gp-steps"><li class="gp-card"><span class="gp-n">01</span><span data-i18n="seo.mafia.s0">Start a room and send your friends the link or the code (4–12 players).</span></li><li class="gp-card"><span class="gp-n">02</span><span data-i18n="seo.mafia.s1">Everyone gets a secret role on their own screen: citizen, mafia, doctor, cop and more.</span></li><li class="gp-card"><span class="gp-n">03</span><span data-i18n="seo.mafia.s2">Argue it out over the built-in voice chat, vote, and find out who was right.</span></li></ol>
+      </section>
+      <section class="gp-section gp-about">
+        <h2 class="gp-h2" data-i18n="gp.mafia.made">Made for game nights</h2>
+        <div class="gp-grid"><div class="gp-card"><b data-i18n="gp.mafia.f0t">The site is the narrator</b><span data-i18n="gp.mafia.f0">Nobody sits out to host: roles, nights and votes run themselves.</span></div><div class="gp-card"><b data-i18n="gp.mafia.f1t">Voice with night channels</b><span data-i18n="gp.mafia.f1">Talk in the built-in voice chat; at night the mafia hears only each other.</span></div><div class="gp-card"><b data-i18n="gp.mafia.f2t">Classic roles, balanced</b><span data-i18n="gp.mafia.f2">Citizens, mafia, cop, doctor and hooker, in a set that fits your group.</span></div><div class="gp-card"><b data-i18n="gp.mafia.f3t">The whole story after</b><span data-i18n="gp.mafia.f3">The recap shows every role and every night move.</span></div></div>
+      </section>
+      <section class="gp-section gp-about gp-two">
+        <div class="gp-faq"><h2 class="gp-h2" data-i18n="gp.faq">Questions</h2><details><summary data-i18n="seo.mafia.q0">Is it free?</summary><p data-i18n="seo.mafia.a0">Yes. Nothing to download and no ads: a browser is all you need.</p></details><details><summary data-i18n="seo.mafia.q1">How many players do we need?</summary><p data-i18n="seo.mafia.a1">From 4 to 12. The site picks a balanced set of roles for your group.</p></details><details><summary data-i18n="seo.mafia.q2">Do we need a host?</summary><p data-i18n="seo.mafia.a2">No. The site runs the nights and days, so everyone gets to play.</p></details></div>
+        <div class="gp-others"><h2 class="gp-h2" data-i18n="gp.other">Other games</h2><a class="gp-other g-poker" href="/poker/"><i></i><b data-i18n="site.poker">Poker</b><span data-players="2–9">2–9</span></a><a class="gp-other g-spy" href="/spy/"><i></i><b data-i18n="site.spyfall">Find the spy</b><span data-players="3–12">3–12</span></a><a class="gp-other g-tycoon" href="/tycoon/"><i></i><b data-i18n="site.monopoly">Tycoon</b><span data-players="2–8">2–8</span></a><a class="gp-other g-kingdoms" href="/kingdoms/"><i></i><b data-i18n="site.citadels">Kingdoms</b><span data-players="3–8">3–8</span></a></div>
+      </section>
+      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Mafia", "url": "https://bluepeau.club/mafia/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "Mafia (also called Werewolf) is the classic game of lies and deduction. The town tries to find the mafia hiding among them, and every night the mafia takes someone out. Everyone plays from their own phone or laptop, and the site is the narrator: it deals the secret roles, runs the nights and counts the votes.", "isPartOf": {"@type": "WebSite", "name": "Anytable", "url": "https://bluepeau.club/"}}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Nothing to download and no ads: a browser is all you need."}}, {"@type": "Question", "name": "How many players do we need?", "acceptedAnswer": {"@type": "Answer", "text": "From 4 to 12. The site picks a balanced set of roles for your group."}}, {"@type": "Question", "name": "Do we need a host?", "acceptedAnswer": {"@type": "Answer", "text": "No. The site runs the nights and days, so everyone gets to play."}}]}]</script>
     </section>
 
     <section id="lobby" class="screen hidden">

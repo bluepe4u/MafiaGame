@@ -14,8 +14,6 @@ body.mono {
 body.mono .brand-mark.mono-mark rect:first-child { fill: var(--accent); }
 body.mono .brand-mark.mono-mark .die { fill: #fff; }
 body.mono .brand-mark.mono-mark circle { fill: var(--accent); }
-body.mono button.primary { background: linear-gradient(180deg, #34d36f, #16a34a); box-shadow: 0 1px 0 rgba(255, 255, 255, .25) inset, 0 10px 28px -10px rgba(34, 197, 94, .8); }
-body.mono button.primary:hover:not(:disabled) { background: linear-gradient(180deg, #4ade80, #22c55e); }
 body.mono .hero h1 em { background: linear-gradient(100deg, #fff1a8, var(--gold) 55%, #d4a017); -webkit-background-clip: text; background-clip: text; }
 body.mono .room-pill .code { background: rgba(245, 197, 66, .14); color: var(--gold); }
 body.mono .phase-chip::before { background: var(--accent); box-shadow: 0 0 10px var(--accent); }

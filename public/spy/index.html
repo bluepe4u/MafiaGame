@@ -52,12 +52,13 @@
   <main id="app">
     <!-- home -->
     <section id="home" class="screen hidden">
-      <div class="hero">
-        <p class="eyebrow" data-i18n="spy.eyebrow"></p>
-        <h1><span data-i18n="spy.heroA"></span> <em data-i18n="spy.heroB"></em></h1>
-        <p class="muted hero-sub" data-i18n="spy.tagline"></p>
-      </div>
-      <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
+      <div class="gp-hero g-spy">
+        <div class="gp-copy">
+          <p class="gp-tag"><span class="gp-tag-ico" data-ico="spy"></span><span data-i18n="spy.eyebrow"></span></p>
+          <h1><span data-i18n="spy.heroA"></span> <em data-i18n="spy.heroB"></em></h1>
+          <p class="gp-sub" data-i18n="spy.tagline"></p>
+          <dl class="gp-facts"><div class="gp-fact"><dt data-i18n="gp.fact.players">Players</dt><dd data-i18n="gp.spy.fact.players">3–12</dd></div><div class="gp-fact"><dt data-i18n="gp.fact.round">A round</dt><dd data-i18n="gp.spy.fact.round">About 8 min</dd></div><div class="gp-fact"><dt data-i18n="gp.fact.join">To join</dt><dd data-i18n="gp.spy.fact.join">Just a name</dd></div></dl>
+          <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
       <form id="authCard" class="card home-card hidden" autocomplete="on">
         <div class="tabs auth-tabs" role="tablist">
           <button type="button" data-auth-mode="login" data-i18n="auth.login"></button>
@@ -80,15 +81,26 @@
           <button id="watchBtn" class="ghost" data-i18n="ui.watch"></button>
         </div>
       </div>
-      <!-- for visitors who aren't logged in, and for search engines -->
-      <article class="seo-about card">
-        <h2 data-i18n="seo.spy.h">Find the spy: a party game online</h2>
-        <p data-i18n="seo.spy.intro">Everyone knows the secret location except one player: the spy. Ask each other sly questions to find out who doesn&#x27;t belong, while the spy tries to work out where you are.</p>
-        <ol class="seo-steps"><li data-i18n="seo.spy.s0">Start a room for 3–12 players and share the link.</li><li data-i18n="seo.spy.s1">Everyone sees the location and a role on their own screen; the spy sees only &quot;Spy&quot;.</li><li data-i18n="seo.spy.s2">Ask questions in turn, then vote. The spy wins by naming the location or by not getting caught.</li></ol>
-        <div class="seo-faq"><details><summary data-i18n="seo.spy.q0">Is it free?</summary><p data-i18n="seo.spy.a0">Yes, free and right in the browser.</p></details><details><summary data-i18n="seo.spy.q1">How long is a round?</summary><p data-i18n="seo.spy.a1">About 8 minutes. The host can change the timer and the set of locations.</p></details><details><summary data-i18n="seo.spy.q2">Can we play over a video call?</summary><p data-i18n="seo.spy.a2">Yes, or talk in the built-in voice chat.</p></details></div>
-        <p class="seo-more muted small-text"><a href="/mafia/" data-i18n="site.mafia">Mafia</a> · <a href="/poker/" data-i18n="site.poker">Poker</a> · <a href="/tycoon/" data-i18n="site.monopoly">Tycoon</a> · <a href="/kingdoms/" data-i18n="site.citadels">Kingdoms</a></p>
-      </article>
-      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Find the spy", "url": "https://bluepeau.club/spy/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "Everyone knows the secret location except one player: the spy. Ask each other sly questions to find out who doesn't belong, while the spy tries to work out where you are."}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, free and right in the browser."}}, {"@type": "Question", "name": "How long is a round?", "acceptedAnswer": {"@type": "Answer", "text": "About 8 minutes. The host can change the timer and the set of locations."}}, {"@type": "Question", "name": "Can we play over a video call?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, or talk in the built-in voice chat."}}]}]</script>
+        </div>
+        <div class="gp-art gp-art-spy" aria-hidden="true"><div class="art-card"><span class="art-card-k">Location</span><b>Airport</b><span>Pilot</span></div>
+          <div class="art-card spy"><span class="art-card-k">Location</span><b>?</b><span>Spy</span></div></div>
+      </div>
+      <!-- what the game is, for visitors and search engines (hidden once signed in) -->
+      <section class="gp-section gp-about">
+        <h2 class="gp-h2" data-i18n="seo.spy.h">Find the spy: a party game online</h2>
+        <p class="gp-intro" data-i18n="seo.spy.intro">Everyone knows the secret location except one player: the spy. Ask each other sly questions to find out who doesn&#x27;t belong, while the spy tries to work out where you are.</p>
+        <h3 class="gp-h3" data-i18n="gp.how">How a game goes</h3>
+        <ol class="gp-grid gp-steps"><li class="gp-card"><span class="gp-n">01</span><span data-i18n="seo.spy.s0">Start a room for 3–12 players and share the link.</span></li><li class="gp-card"><span class="gp-n">02</span><span data-i18n="seo.spy.s1">Everyone sees the location and a role on their own screen; the spy sees only &quot;Spy&quot;.</span></li><li class="gp-card"><span class="gp-n">03</span><span data-i18n="seo.spy.s2">Ask questions in turn, then vote. The spy wins by naming the location or by not getting caught.</span></li></ol>
+      </section>
+      <section class="gp-section gp-about">
+        <h2 class="gp-h2" data-i18n="gp.spy.made">Made for parties</h2>
+        <div class="gp-grid"><div class="gp-card"><b data-i18n="gp.spy.f0t">Pick your locations</b><span data-i18n="gp.spy.f0">Choose the location sets and how many are in play.</span></div><div class="gp-card"><b data-i18n="gp.spy.f1t">A clock for every round</b><span data-i18n="gp.spy.f1">Rounds keep moving: the host sets the length.</span></div><div class="gp-card"><b data-i18n="gp.spy.f2t">Together or apart</b><span data-i18n="gp.spy.f2">Everyone plays from their own phone, in one room or over the built-in voice chat.</span></div><div class="gp-card"><b data-i18n="gp.spy.f3t">Points across rounds</b><span data-i18n="gp.spy.f3">Play several rounds; the points decide the winner.</span></div></div>
+      </section>
+      <section class="gp-section gp-about gp-two">
+        <div class="gp-faq"><h2 class="gp-h2" data-i18n="gp.faq">Questions</h2><details><summary data-i18n="seo.spy.q0">Is it free?</summary><p data-i18n="seo.spy.a0">Yes, free and right in the browser.</p></details><details><summary data-i18n="seo.spy.q1">How long is a round?</summary><p data-i18n="seo.spy.a1">About 8 minutes. The host can change the timer and the set of locations.</p></details><details><summary data-i18n="seo.spy.q2">Can we play over a video call?</summary><p data-i18n="seo.spy.a2">Yes, or talk in the built-in voice chat.</p></details></div>
+        <div class="gp-others"><h2 class="gp-h2" data-i18n="gp.other">Other games</h2><a class="gp-other g-mafia" href="/mafia/"><i></i><b data-i18n="site.mafia">Mafia</b><span data-players="4–12">4–12</span></a><a class="gp-other g-poker" href="/poker/"><i></i><b data-i18n="site.poker">Poker</b><span data-players="2–9">2–9</span></a><a class="gp-other g-tycoon" href="/tycoon/"><i></i><b data-i18n="site.monopoly">Tycoon</b><span data-players="2–8">2–8</span></a><a class="gp-other g-kingdoms" href="/kingdoms/"><i></i><b data-i18n="site.citadels">Kingdoms</b><span data-players="3–8">3–8</span></a></div>
+      </section>
+      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Find the spy", "url": "https://bluepeau.club/spy/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "Everyone knows the secret location except one player: the spy. Ask each other sly questions to find out who doesn't belong, while the spy tries to work out where you are.", "isPartOf": {"@type": "WebSite", "name": "Anytable", "url": "https://bluepeau.club/"}}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, free and right in the browser."}}, {"@type": "Question", "name": "How long is a round?", "acceptedAnswer": {"@type": "Answer", "text": "About 8 minutes. The host can change the timer and the set of locations."}}, {"@type": "Question", "name": "Can we play over a video call?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, or talk in the built-in voice chat."}}]}]</script>
     </section>
 
     <!-- lobby -->

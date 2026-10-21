@@ -1799,6 +1799,7 @@ langSelect.onchange = () => {
   renderAuthMode();
   renderAlertsBtn();
   renderFooter();
+  renderDecor();
   renderAccount();
   if (!$('#profile').classList.contains('hidden')) renderProfile();
   if (!$('#admin').classList.contains('hidden')) renderAdmin();
@@ -1872,6 +1873,12 @@ function renderFooter() {
   }
 }
 renderFooter();
+// drawn icons and player counts in the page's own markup (game pages, the home page)
+function renderDecor() {
+  for (const el of document.querySelectorAll('[data-ico]')) el.innerHTML = ico(el.dataset.ico);
+  for (const el of document.querySelectorAll('[data-players]')) el.textContent = t('hub.players', { n: el.dataset.players });
+}
+renderDecor();
 // remember a table link through logging in / registering
 try { if (qs.get('table')) sessionStorage.setItem(PENDING_TABLE_KEY, qs.get('table')); } catch {}
 
