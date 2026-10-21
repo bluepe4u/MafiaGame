@@ -79,6 +79,7 @@ function attachSpyfall({ io, app, users, api, currentUser, dataDir, codeTaken, o
     const me = () => {
       const user = users.users[socket.data.userId];
       if (!user) throw new GameError('err.loginRequired');
+      if (users.banned(user.id)) throw new GameError('err.debt.banned');
       return user;
     };
     const attach = (room, member) => {
@@ -120,6 +121,7 @@ function attachSpyfall({ io, app, users, api, currentUser, dataDir, codeTaken, o
       const room = rooms.get(String(code || '').toUpperCase());
       const member = room?.byToken(token);
       if (!member) throw new GameError('err.sessionExpired');
+      if (member.userId && users.banned(member.userId)) throw new GameError('err.debt.banned');
       attach(room, member);
     });
     voice.attach(socket, ctx, { allowed: voiceAllowed });

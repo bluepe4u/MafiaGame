@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const { GameError } = require('./game');
 const { ITEMS, EQUIP_SLOTS } = require('./items');
+const { ACHIEVEMENTS, dailyBonus } = require('./achievements');
 
 const USERNAME_RE = /^[\p{L}\p{N} _.-]{2,20}$/u;
 const MIN_PASSWORD = 4;
@@ -22,6 +23,12 @@ const MAX_BADGES = 12;
 const THEMES = ['ocean', 'violet', 'sunset', 'forest', 'rose', 'mono'];
 // "MM-DD" of today, in the server's time zone
 const todayMD = () => { const d = new Date(); return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+// "YYYY-MM-DD" of a day, in the server's time zone
+const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const CHIP_LOG_KEEP = 60;
+// USDT addresses by network: TRON (TRC-20) or an EVM chain (ERC-20, BEP-20)
+const USDT_NETWORKS = { trc20: /^T[1-9A-HJ-NP-Za-km-z]{33}$/, erc20: /^0x[0-9a-fA-F]{40}$/, bep20: /^0x[0-9a-fA-F]{40}$/ };
 
 const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -56,6 +63,10 @@ const emptyCitStats = () => ({
   games: 0, wins: 0, placeSum: 0, scoreSum: 0, bestScore: 0, built: 0, destroyed: 0, lost: 0, stolen: 0, swaps: 0, kills: 0,
   firstComplete: 0, completed: 0, rounds: 0, chars: {}, charWins: {}, streak: 0, bestStreak: 0, recent: [],
 });
+const emptyPokerStats = () => ({
+  games: 0, wins: 0, placeSum: 0, net: 0, hands: 0, vpip: 0, pfr: 0, handsWon: 0, showdowns: 0, sdWon: 0,
+  allIns: 0, allInsWon: 0, biggestPot: 0, rebuys: 0, bestHand: null, streak: 0, bestStreak: 0, recent: [],
+});
 const emptyStats = () => ({
   games: 0, wins: 0, survived: 0, mafiaGames: 0, mafiaWins: 0, townGames: 0, townWins: 0, roles: {}, roleWins: {},
   // detailed numbers, recorded since the player page was added (detailedGames counts those games)
@@ -67,6 +78,9 @@ const emptyStats = () => ({
 
 class UserStore {
   constructor(dir) {
+    // set by the server: unpaid USDT debts ({ level }: 1 = no USDT tables, marked; 2 = banned)
+    this.debtOf = () => ({ level: 0 });
+    this.banned = () => false;
     this.file = path.join(dir, 'users.json');
     this.avatarDir = path.join(dir, 'avatars');
     this.users = {}; // id -> { id, username, salt, hash, avatar, likes, dislikes, createdAt }
@@ -407,6 +421,7 @@ class UserStore {
         s.mafiaVotedOut += r.mafiaVotedOut || 0;
       }
       s.recent = [{ at: r.at || Date.now(), role: r.role, won: r.won, survived: r.survived, players: r.players }, ...s.recent].slice(0, RECENT_KEEP);
+      if (r.won) this.award(u, 'mafia.win');
     }
     this.save();
   }
@@ -429,6 +444,7 @@ class UserStore {
       s.streak = r.won ? s.streak + 1 : 0;
       s.bestStreak = Math.max(s.bestStreak, s.streak);
       s.recent = [{ at: r.at || Date.now(), won: r.won, place: r.place, players: r.players, netWorth: r.netWorth }, ...s.recent].slice(0, RECENT_KEEP);
+      if (r.won) this.award(u, 'mono.win');
     }
     this.save();
   }
@@ -445,6 +461,7 @@ class UserStore {
       s.streak = r.won ? s.streak + 1 : 0;
       s.bestStreak = Math.max(s.bestStreak, s.streak);
       s.recent = [{ at: r.at || Date.now(), won: r.won, points: r.points, players: r.players }, ...s.recent].slice(0, RECENT_KEEP);
+      if (r.won) this.award(u, 'spy.win');
     }
     this.save();
   }
@@ -468,8 +485,117 @@ class UserStore {
       s.streak = r.won ? s.streak + 1 : 0;
       s.bestStreak = Math.max(s.bestStreak, s.streak);
       s.recent = [{ at: r.at || Date.now(), won: r.won, place: r.place, players: r.players, score: r.score }, ...s.recent].slice(0, RECENT_KEEP);
+      if (r.won) this.award(u, 'cit.win');
     }
     this.save();
+  }
+
+  // One finished poker session: results from PokerRoom.onGameEnd.
+  recordPokerGame(results) {
+    for (const r of results) {
+      const u = this.users[r.userId];
+      if (!u) continue;
+      const s = (u.pokerStats = { ...emptyPokerStats(), ...u.pokerStats });
+      s.games += 1;
+      s.wins += r.won ? 1 : 0;
+      s.placeSum += r.place;
+      s.net += r.net;
+      for (const k of ['hands', 'vpip', 'pfr', 'handsWon', 'showdowns', 'sdWon', 'allIns', 'allInsWon']) s[k] += r[k] || 0;
+      s.rebuys += Math.max(0, (r.buyins || 1) - 1);
+      s.biggestPot = Math.max(s.biggestPot, r.biggestPot || 0);
+      if (r.best && (!s.bestHand || r.best.score > s.bestHand.score)) s.bestHand = r.best;
+      s.streak = r.won ? s.streak + 1 : 0;
+      s.bestStreak = Math.max(s.bestStreak, s.streak);
+      s.recent = [{ at: r.at || Date.now(), won: r.won, place: r.place, players: r.players, net: r.net }, ...s.recent].slice(0, RECENT_KEEP);
+      s.allInsWon = s.allInsWon || 0;
+      const award = id => this.award(u, id);
+      award('pk.first');
+      if (r.won) award('pk.win');
+      if (s.hands >= 100) award('pk.hands100');
+      if (s.hands >= 1000) award('pk.hands1000');
+      if (s.allInsWon >= 10) award('pk.allIns10');
+      const cat = r.best ? Math.floor(r.best.score / 1048576) : -1;
+      if (cat >= 7) award('pk.quads');
+      if (cat >= 8) award('pk.straightFlush');
+      if (r.best && r.best.name && r.best.name.key === 'pk.h.royal') award('pk.royal');
+      if (r.won72) award('pk.72');
+      if (r.runnerRunner) award('pk.runnerRunner');
+    }
+    this.save();
+  }
+
+  // ---------- site chips: a wallet that lives across games and tables ----------
+  // Chips come from the welcome gift, the daily bonus and achievements, and from poker sessions
+  // played for site chips. They never turn into money and money never turns into them.
+  wallet(user) {
+    if (typeof user.chips !== 'number') {
+      user.chips = 0;
+      user.chipLog = [];
+      user.achievements = user.achievements || [];
+      this.award(user, 'welcome');
+    }
+    return user;
+  }
+
+  addChips(user, n, reason, extra = {}) {
+    this.wallet(user);
+    user.chips += n;
+    user.chipLog = [{ at: Date.now(), n, reason, ...extra }, ...(user.chipLog || [])].slice(0, CHIP_LOG_KEEP);
+    this.save();
+  }
+
+  // false when there aren't enough
+  takeChips(user, n, reason, extra = {}) {
+    this.wallet(user);
+    if (user.chips < n) return false;
+    this.addChips(user, -n, reason, extra);
+    return true;
+  }
+
+  // once per achievement; returns the reward (0 if already had)
+  award(user, id) {
+    const a = ACHIEVEMENTS[id];
+    user.achievements = user.achievements || [];
+    if (!a || user.achievements.some(x => x.id === id)) return 0;
+    user.achievements.push({ id, at: Date.now() });
+    if (typeof user.chips !== 'number') { user.chips = 0; user.chipLog = []; }
+    this.addChips(user, a.reward, 'ach', { id });
+    return a.reward;
+  }
+
+  // the first visit of the day pays the daily bonus; returns { n, streak } or null
+  claimDaily(user) {
+    this.wallet(user);
+    const today = dayKey();
+    const d = user.daily || {};
+    if (d.last === today) return null;
+    const yesterday = dayKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
+    const streak = d.last === yesterday ? (d.streak || 0) + 1 : 1;
+    user.daily = { last: today, streak };
+    const n = dailyBonus(streak);
+    this.addChips(user, n, 'daily', { streak });
+    if (streak >= 7) this.award(user, 'streak7');
+    return { n, streak };
+  }
+
+  setUsdt(user, { network, address }) {
+    address = String(address || '').trim();
+    if (!address) { delete user.usdt; this.save(); return; }
+    if (!USDT_NETWORKS[network] || !USDT_NETWORKS[network].test(address)) throw new GameError('err.usdt.address');
+    user.usdt = { network, address };
+    this.save();
+  }
+
+  // the owner's own view of the wallet
+  walletView(user) {
+    this.wallet(user);
+    return {
+      chips: user.chips,
+      log: user.chipLog || [],
+      achievements: Object.entries(ACHIEVEMENTS).map(([id, a]) => ({ id, reward: a.reward, game: a.game || null, at: (user.achievements.find(x => x.id === id) || {}).at || null })),
+      daily: user.daily || null,
+      usdt: user.usdt || null,
+    };
   }
 
   // What other players (and the user) get to see.
@@ -489,6 +615,10 @@ class UserStore {
       monoStats: { ...emptyMonoStats(), ...user.monoStats },
       spyStats: { ...emptySpyStats(), ...user.spyStats },
       citStats: { ...emptyCitStats(), ...user.citStats },
+      pokerStats: { ...emptyPokerStats(), ...user.pokerStats },
+      chips: typeof user.chips === 'number' ? user.chips : null,
+      usdtSet: !!user.usdt,
+      debtor: this.debtOf(user.id).level >= 1,
       admin: !!user.admin,
       hasRecovery: !!user.recovery,
       inventory,

@@ -136,6 +136,48 @@ house rules sheet: Witch, Thief, Magician, King, Abbot, Merchant, Architect, Dip
   `test/citadels.test.js`, including random games played to the end) and its namespace; rooms are
   saved to `citadels-rooms.json`.
 
+## Покер (Texas hold'em)
+
+`/poker/` — no-limit hold'em for 2–9 players, for chips only (no money, no deposits).
+
+- Everyone starts with 500 chips, blinds 5/10 (the lobby changes the stack, blinds, ante, blinds
+  going up every N hands, the turn clock, rebuys, late seats, equity in all-ins, the rabbit hunt).
+- Proper betting: the button and blinds (heads up the button is the small blind), the big blind's
+  option, raises of at least the last raise, short all-ins that don't reopen the betting, uncalled
+  bets returned, side pots, odd chips left of the button.
+- The table highlights the combination itself (a pair is two cards, no kickers) and names it; the
+  winner's at the showdown. No odds or hints during the hand — reading them is the game. A hand-ranks
+  cheat sheet sits in the side panel (first tab for new players).
+- The table is built once and changed in place, so cards are dealt one by one, flip in 3D, the
+  flop spreads out, chips slide to the bets, the pot and the winner, and stacks count.
+- All-in: the hands turn over and the board is dealt slowly (equity on the table only if the host
+  turns it on); the river comes as a squeeze. Each hand's equity street by street is still worked
+  out for the hand history and the story of the hand: the deciding card glows, suckout, saved by
+  the river, runner-runner, bad beat, cooler, split pot. Hands that ended early can show what the
+  board would have been; anyone may show their cards.
+- Playing for (a table setting): **site chips** — the fun part: every account has a wallet of site
+  chips (500 to start, a daily bonus for coming by that grows with the streak, achievements in poker
+  and the other games); the buy-in comes from the wallet and the stack goes back to it. Or
+  **USDT**: everyone agrees to the buy-in by pressing Ready and needs a USDT address (TRC-20,
+  ERC-20 or BEP-20) in their wallet; after the session the site works out the fewest transfers that
+  settle it, to the cent, and "Settlements" shows each payer the receiver's address; the payer pays
+  wallet to wallet and pastes the transaction hash (linked to the explorer), the receiver confirms.
+  The site never holds money, and site chips and USDT never convert into each other
+  (`src/pledges.js`, `src/achievements.js`).
+- Unpaid USDT debts: a debt the payer hasn't even marked paid (or that the receiver says didn't
+  arrive — then it counts from the original date) closes the USDT tables to the debtor after
+  `DEBT_LIMIT_DAYS` (3) and shows everyone a "Debtor" mark (at the table, in the lobby, in the
+  profile); after `DEBT_BAN_DAYS` (14) the debtor can't create, join or return to a room in any
+  game, but can still log in and pay. Marking it paid lifts the limits at once. The debtor sees a
+  banner on every page with the amount and the dates.
+- GGPoker-style controls: presets (2.5/3/4 BB, ⅓ ½ ¾ pot, pot, max), a slider, pre-actions
+  (check/fold, call, call any), F/C/R keys, amounts in chips or big blinds, a four-colour deck,
+  drawn poker stickers instead of emoji, the hand history with each street's equity.
+- The host pauses or ends the session; places go by chips won. Stats (VPIP, PFR, showdowns, biggest
+  pot, best hand) in the profile, a leaderboard, the archive. `src/poker/hand.js` is the hand
+  evaluator and equity calculator, shared with the browser; `src/poker/game.js` the engine (no I/O,
+  tested in `test/poker.test.js`, including random sessions where the chips must add up).
+
 ## Rules as implemented
 
 **Roles:** Citizen, Mafia, Cop, Doctor, Hooker (Cop/Doctor/Hooker are on the town side).

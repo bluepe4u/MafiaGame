@@ -34,6 +34,7 @@ const COMMON_ICONS = {
   list: svgIcon('<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
   spy: svgIcon('<circle cx="7" cy="15" r="3.5"/><circle cx="17" cy="15" r="3.5"/><path d="M10.5 15h3M3 11l3.5-5h11L21 11"/>'),
   castle: svgIcon('<path d="M4 21V11l3 2V8l3 2V5l2-2 2 2v5l3-2v5l3-2v10z"/><path d="M10 21v-4a2 2 0 0 1 4 0v4"/>'),
+  chip: svgIcon('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 3v4.5M12 16.5V21M3 12h4.5M16.5 12H21M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M18.4 5.6l-3.2 3.2M8.8 15.2l-3.2 3.2"/>'),
 };
 const ico = (name, cls = '') => `<span class="ui-ico ${cls}">${COMMON_ICONS[name]}</span>`;
 // drawn icons instead of emoji in the site's chrome (trophy buttons, the game switcher)
@@ -41,12 +42,12 @@ for (const el of document.querySelectorAll('.trophy')) el.outerHTML = ico('troph
 for (const a of document.querySelectorAll('#siteMenu a')) {
   const i = a.querySelector('.site-ico');
   const href = a.getAttribute('href');
-  if (i) i.outerHTML = ico(href.includes('monopoly') ? 'dice' : href.includes('spyfall') ? 'spy' : href.includes('citadels') ? 'castle' : 'hat', 'site-ico');
+  if (i) i.outerHTML = ico(href.includes('monopoly') ? 'dice' : href.includes('spyfall') ? 'spy' : href.includes('citadels') ? 'castle' : href.includes('poker') ? 'chip' : 'hat', 'site-ico');
 }
 
 // The page's settings and hooks (filled in by Site.init)
 const Site = {
-  game: 'mafia', // or 'mono', 'spy', 'cit'
+  game: 'mafia', // or 'mono', 'spy', 'cit', 'poker'
   socket: null,
   baseTitle: document.title,
   home: false,
@@ -59,7 +60,7 @@ const Site = {
   },
 };
 // the games: page, icon and name in one place
-const GAME_INFO = { mafia: { path: '/', icon: 'hat', name: 'site.mafia' }, mono: { path: '/monopoly/', icon: 'dice', name: 'site.monopoly' }, spy: { path: '/spyfall/', icon: 'spy', name: 'site.spyfall' }, cit: { path: '/citadels/', icon: 'castle', name: 'site.citadels' } };
+const GAME_INFO = { mafia: { path: '/', icon: 'hat', name: 'site.mafia' }, mono: { path: '/monopoly/', icon: 'dice', name: 'site.monopoly' }, spy: { path: '/spyfall/', icon: 'spy', name: 'site.spyfall' }, cit: { path: '/citadels/', icon: 'castle', name: 'site.citadels' }, poker: { path: '/poker/', icon: 'chip', name: 'site.poker' } };
 const gameInfoOf = game => GAME_INFO[game] || GAME_INFO.mafia;
 const gameTitle = game => t(gameInfoOf(game).name);
 const gameUrl = (game, code) => `${gameInfoOf(game).path}?room=${code}&join=1`;
@@ -353,7 +354,7 @@ addPasswordToggles();
 // ---------- rules reference ----------
 document.body.insertAdjacentHTML('beforeend', `<div id="rules" class="overlay hidden" role="dialog" aria-modal="true">
   <div class="sheet player-sheet"><div class="sheet-head"><h2 data-i18n="rules.title"></h2><button id="rulesClose" class="ghost small" data-i18n="ui.close"></button></div>
-  <div class="sheet-body"><div class="tabs" role="tablist"><button data-rules="mafia" data-i18n="site.mafia"></button><button data-rules="mono" data-i18n="site.monopoly"></button><button data-rules="spy" data-i18n="site.spyfall"></button><button data-rules="cit" data-i18n="site.citadels"></button></div>
+  <div class="sheet-body"><div class="tabs" role="tablist"><button data-rules="mafia" data-i18n="site.mafia"></button><button data-rules="mono" data-i18n="site.monopoly"></button><button data-rules="spy" data-i18n="site.spyfall"></button><button data-rules="cit" data-i18n="site.citadels"></button><button data-rules="poker" data-i18n="site.poker"></button></div>
   <div id="rulesBody" class="rules-body"></div></div></div></div>`);
 let rulesTab = null;
 function openRules(game) {
@@ -471,9 +472,34 @@ async function refreshHome() {
   await renderActive();
 }
 
+// an unpaid USDT debt: everyone sees the mark once it's overdue
+const debtorTag = () => `<span class="tag debtor-tag" title="${esc(t('debt.mark.hint'))}">${esc(t('debt.mark'))}</span>`;
+// the debtor's own banner on every page: how much, and when the limits come
+function renderDebtBanner(debt) {
+  let el = document.getElementById('debtBanner');
+  if (!debt || !debt.count) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('a');
+    el.id = 'debtBanner';
+    el.className = 'debt-banner';
+    el.href = '/poker/?pay=1';
+    document.querySelector('.topbar').after(el);
+  }
+  const days = at => Math.max(0, Math.ceil((at - Date.now()) / 86400000));
+  const amount = `${(debt.cents / 100).toFixed(2)} USDT`;
+  el.classList.toggle('lvl1', debt.level === 1);
+  el.classList.toggle('lvl2', debt.level >= 2);
+  el.textContent = debt.level >= 2 ? t('debt.banner.banned', { amount })
+    : debt.level === 1 ? t('debt.banner.limited', { amount, ban: days(debt.banAt) })
+    : t('debt.banner.due', { amount, limit: days(debt.limitAt), ban: days(debt.banAt) });
+}
+
 async function refreshAccount() {
   const res = await api('me');
   if (res.ok) { account = res.user; renderAccount(); }
+  // the first visit of the day: the site-chips bonus
+  if (res.ok && res.daily) setTimeout(() => toast(t('chips.daily', res.daily), 'info'), 800);
+  if (res.ok) renderDebtBanner(res.debt);
   return res;
 }
 
@@ -568,7 +594,7 @@ function renderProfile() {
       <div class="profile-name ${nameCls(u.equipped)}">${esc(u.username)}</div>
       ${titleTag(u.title)}
       ${u.birthdayToday ? `<span class="bday-pill">🎂 ${esc(t('profile.birthdayToday'))}</span>` : ''}
-      ${statusPill(u.score)}
+      ${statusPill(u.score)}${u.debtor ? debtorTag() : ''}
       <div class="karma"><span class="karma-up">${COMMON_ICONS.up}${esc(t('profile.likes', { n: u.likes }))}</span><span class="karma-down">${COMMON_ICONS.down}${esc(t('profile.dislikes', { n: u.dislikes }))}</span></div>
     </div>`;
   $('#profileTop').insertAdjacentHTML('afterend', '');
@@ -577,11 +603,11 @@ function renderProfile() {
   if (!badgeRow) { $('#profileTop').insertAdjacentHTML('afterend', '<div id="profileBadges" class="badge-row"></div>'); badgeRow = $('#profileBadges'); }
   badgeRow.innerHTML = badges;
   badgeRow.classList.toggle('hidden', !badges);
-  const tabs = ['mafia', 'mono', 'spy', 'cit', ...(self ? ['wardrobe', 'account'] : [])];
+  const tabs = ['mafia', 'mono', 'spy', 'cit', 'poker', ...(self ? ['wardrobe', 'account'] : [])];
   if (!tabs.includes(profileTab)) profileTab = Site.game;
   $('#profileTabs').innerHTML = tabs.map(k => `<button class="${k === profileTab ? 'active' : ''}" data-ptab="${k}">${esc(t('profile.tab.' + k))}</button>`).join('');
   for (const b of $$('#profileTabs [data-ptab]')) b.onclick = () => { profileTab = b.dataset.ptab; renderProfile(); };
-  $('#profileBody').innerHTML = { mafia: mafiaStatsHtml, mono: monoStatsHtml, spy: spyStatsHtml, cit: citStatsHtml, wardrobe: wardrobeHtml, account: accountHtml }[profileTab](u);
+  $('#profileBody').innerHTML = { mafia: mafiaStatsHtml, mono: monoStatsHtml, spy: spyStatsHtml, cit: citStatsHtml, poker: pokerStatsHtml, wardrobe: wardrobeHtml, account: accountHtml }[profileTab](u);
   if (self) bindProfileControls();
 }
 
@@ -835,6 +861,45 @@ function citStatsHtml(u) {
     <section class="player-section"><h3>${esc(t('cit.player.recent'))}</h3>
       <div class="recent-games">${c.recent.map(r => `<span class="recent ${r.won ? 'won' : 'lost'}"><b>${r.place}</b><span>${esc(t('cit.place', { n: r.place }))} / ${r.players}</span><span class="muted">${esc(t('cit.points', { n: r.score }))}</span></span>`).join('')}</div>
     </section>`;
+}
+
+// Poker: the usual tracker numbers (VPIP, PFR, showdowns) and the best hand ever shown
+function pokerStatsHtml(u) {
+  const c = u.pokerStats || {};
+  if (!c.games) return `<p class="muted">${esc(t('player.noGames'))}</p>`;
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) + '%' : '—');
+  const chips = n => `${n > 0 ? '+' : ''}${n}`;
+  const best = c.bestHand;
+  const suit = { s: '♠', h: '♥', d: '♦', c: '♣' };
+  const cards = best ? best.cards.map(x => `<span class="mini-card s-${x[1]}">${x[0] === 'T' ? '10' : x[0]}${suit[x[1]]}</span>`).join('') : '';
+  return `
+    <div class="stat-grid four">
+      ${statTile(c.games, t('player.games'))}${statTile(pctOf(c.wins, c.games) + '%', t('player.winRate'))}
+      ${statTile(chips(c.net), t('pk.player.net'))}${statTile(c.biggestPot, t('pk.player.biggestPot'))}
+    </div>
+    <section class="player-section"><h3>${esc(t('pk.player.style'))}</h3>
+      <div class="stat-grid four">
+        ${statTile(c.hands, t('pk.player.hands'))}${statTile(pct(c.vpip, c.hands), 'VPIP')}
+        ${statTile(pct(c.pfr, c.hands), 'PFR')}${statTile(pct(c.handsWon, c.hands), t('pk.player.handsWon'))}
+        ${statTile(pct(c.showdowns, c.hands), t('pk.player.wtsd'))}${statTile(pct(c.sdWon, c.showdowns), t('pk.player.wsd'))}
+        ${statTile(`${c.allInsWon}/${c.allIns}`, t('pk.player.allIns'))}${statTile(c.rebuys, t('pk.player.rebuys'))}
+      </div>
+      <p class="muted small-text">${esc(t('pk.player.styleHint'))}</p>
+      ${best ? `<div class="highlight-line"><span class="muted small-text">${esc(t('pk.player.bestHand'))}:</span> <span class="tag">${esc(t(best.name.key, pkNameParams(best.name.params)))}</span> <span class="mini-cards">${cards}</span></div>` : ''}
+    </section>
+    <section class="player-section"><h3>${esc(t('cit.player.recent'))}</h3>
+      <div class="recent-games">${c.recent.map(r => `<span class="recent ${r.won ? 'won' : 'lost'}"><b>${r.place}</b><span>${esc(t('cit.place', { n: r.place }))} / ${r.players}</span><span class="muted">${chips(r.net)}</span></span>`).join('')}</div>
+    </section>`;
+}
+// a hand's name: ranks as words in the current language ("K" -> "Kings" / "короли")
+function pkNameParams(p = {}) {
+  const out = {};
+  for (const [k, v] of Object.entries(p)) {
+    out[k] = t('pk.r.' + v);
+    out[k + 's'] = t('pk.rs.' + v);
+    out[k + 'g'] = t('pk.rg.' + v);
+  }
+  return out;
 }
 
 function itemPreview(id) {
@@ -1378,6 +1443,12 @@ function gameHtml(g) {
       <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)}</span></div>
       <ol class="arch-standings">${ranked}</ol><ol class="arch-timeline">${rounds}</ol></div>`;
   }
+  if (g.game === 'poker') {
+    const ranked = g.players.map((p, i) => `<li><span class="board-rank">${['🥇', '🥈', '🥉'][i] || i + 1}</span><b>${esc(p.name)}</b><span class="spacer"></span><span>${p.net > 0 ? '+' : ''}${p.net}</span></li>`).join('');
+    return `<div class="arch-game"><div class="arch-head">${ico('chip')}<b>${esc(t('site.poker'))}</b>${g.winner ? `<span class="tag town">${esc(t('archive.winner', { name: g.winner }))}</span>` : ''}
+      <span class="muted small-text">${fmtTime(g.startedAt || g.endedAt)} · ${esc(length)} · ${esc(t('pk.handsN', { n: g.hands }))}</span></div>
+      <ol class="arch-standings">${ranked}</ol></div>`;
+  }
   if (g.game === 'cit') {
     const ranked = g.players.map((p, i) => `<li><span class="board-rank">${['🥇', '🥈', '🥉'][i] || i + 1}</span><b>${esc(p.name)}</b><span class="spacer"></span><span>${esc(t('cit.points', { n: p.points }))}</span></li>`).join('');
     return `<div class="arch-game"><div class="arch-head">${ico('castle')}<b>${esc(t('site.citadels'))}</b>${g.winner ? `<span class="tag town">${esc(t('archive.winner', { name: g.winner }))}</span>` : ''}
@@ -1395,7 +1466,7 @@ function nightSummaryText(night) {
   for (const [ico_, label, value] of nightFacts(night)) lines.push(`${ico_} ${label}: ${value}`);
   for (const g of night.games) lines.push(g.game === 'mafia'
     ? `🎩 ${t('site.mafia')}: ${g.winner === 'mafia' ? t('archive.mafiaWon') : t('archive.townWon')}`
-    : `${{ spy: '🕵️', cit: '🏰' }[g.game] || '🎲'} ${gameTitle(g.game)}: ${t('archive.winner', { name: g.winner || '—' })}`);
+    : `${{ spy: '🕵️', cit: '🏰', poker: '♠️' }[g.game] || '🎲'} ${gameTitle(g.game)}: ${t('archive.winner', { name: g.winner || '—' })}`);
   return lines.join('\n');
 }
 
@@ -1475,8 +1546,12 @@ Site.init = function init({ game, socket, urlRoom, hooks }) {
   (async () => {
     if (store.get(AUTH_KEY)) {
       const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${store.get(AUTH_KEY)}` } }).then(r => r.json()).catch(() => null);
-      if (res && res.ok) account = res.user;
-      else if (res) store.set(AUTH_KEY, null); // expired or logged out elsewhere
+      if (res && res.ok) {
+        account = res.user;
+        // the first visit of the day pays the site-chips bonus; an unpaid debt shows its banner
+        if (res.daily) setTimeout(() => toast(t('chips.daily', res.daily), 'info'), 800);
+        renderDebtBanner(res.debt);
+      } else if (res) store.set(AUTH_KEY, null); // expired or logged out elsewhere
     }
     if (!account && qs.get('table')) toast(t('table.loginFirst'), 'info');
     Site.ready = true;

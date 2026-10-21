@@ -236,3 +236,23 @@ test('site features: defaults (family off), changed by the admin, saved', () => 
   store.saveNow();
   assert.deepStrictEqual(new UserStore(dir).features, { family: true, voice: false, transcripts: true });
 });
+
+test('site chips: the welcome gift, the daily bonus with its streak, achievements paid once, USDT addresses', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chips-'));
+  const store = new UserStore(dir);
+  reg(store, 'Ann', 'secret');
+  const u = store.byName('Ann');
+  assert.strictEqual(store.wallet(u).chips, 500);
+  const d = store.claimDaily(u);
+  assert.deepStrictEqual(d, { n: 100, streak: 1 });
+  assert.strictEqual(store.claimDaily(u), null); // once a day
+  assert.strictEqual(store.award(u, 'pk.first'), 200);
+  assert.strictEqual(store.award(u, 'pk.first'), 0);
+  assert.ok(!store.takeChips(u, 100000, 'test'));
+  assert.ok(store.takeChips(u, 100, 'test'));
+  assert.strictEqual(u.chips, 700);
+  assert.throws(() => store.setUsdt(u, { network: 'trc20', address: '0x123' }), /usdt.address/);
+  store.setUsdt(u, { network: 'trc20', address: 'TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE' });
+  assert.ok(store.publicProfile(u).usdtSet);
+  assert.strictEqual(store.publicProfile(u).usdt, undefined); // the address itself stays private
+});

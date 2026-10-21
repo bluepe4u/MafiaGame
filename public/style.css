@@ -965,7 +965,7 @@ button.brand:hover:not(:disabled) { background: var(--surface-2); border: 0; }
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, transparent), var(--surface-2)); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
   animation: msg-pop .35s ease both; }
 .active-game:hover { border-color: var(--accent); }
-.active-game.g-mono { --accent: #22c55e; } .active-game.g-mafia { --accent: #e5484d; } .active-game.g-cit { --accent: #d4a24c; }
+.active-game.g-mono { --accent: #22c55e; } .active-game.g-mafia { --accent: #e5484d; } .active-game.g-cit { --accent: #d4a24c; } .active-game.g-poker { --accent: #e0464e; }
 .ag-ico { font-size: 1.5rem; }
 .ag-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .ag-text .small-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1024,7 +1024,7 @@ button.brand:hover:not(:disabled) { background: var(--surface-2); border: 0; }
 .invite-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .invite-form .field { flex: 1; min-width: 140px; }
 .invite-row.used { opacity: .55; }
-.tc-now.g-mono { --accent: #22c55e; } .tc-now.g-mafia { --accent: #e5484d; } .tc-now.g-cit { --accent: #d4a24c; }
+.tc-now.g-mono { --accent: #22c55e; } .tc-now.g-mafia { --accent: #e5484d; } .tc-now.g-cit { --accent: #d4a24c; } .tc-now.g-poker { --accent: #e0464e; }
 .back-home { align-self: flex-start; margin-bottom: 12px; }
 #lobby { display: flex; flex-direction: column; } #lobby.hidden { display: none; }
 
@@ -1189,3 +1189,17 @@ body.streamer .room-pill .code { letter-spacing: .2em; }
 .s-targets button { text-align: left; }
 .s-chat { list-style: none; margin: 0 0 8px; padding: 0; max-height: 220px; overflow-y: auto; font-size: .88rem; line-height: 1.5; display: flex; flex-direction: column; gap: 2px; }
 .secret-root form input { flex: 1; min-width: 0; }
+
+/* poker: the best hand in a profile, as small cards */
+.mini-cards { display: inline-flex; gap: 3px; vertical-align: middle; }
+.mini-card { display: inline-grid; place-items: center; min-width: 26px; height: 34px; padding: 0 3px; border-radius: 5px; background: #f8fafc; color: #111827;
+  font: 700 .8rem 'Geist Mono', monospace; box-shadow: 0 1px 2px rgba(0, 0, 0, .35); }
+.mini-card.s-h { color: #dc2626; } .mini-card.s-d { color: #2563eb; } .mini-card.s-c { color: #15803d; }
+
+/* unpaid USDT debts */
+.tag.debtor-tag { background: rgba(220, 38, 38, .18); color: #fca5a5; border: 1px solid rgba(220, 38, 38, .5); font-weight: 700; }
+.debt-banner { display: block; position: relative; z-index: 5; padding: 9px 18px; text-align: center; font-size: .88rem; font-weight: 600; text-decoration: none;
+  background: rgba(234, 179, 8, .14); color: #fde68a; border-bottom: 1px solid rgba(234, 179, 8, .35); }
+.debt-banner.lvl1 { background: rgba(249, 115, 22, .16); color: #fed7aa; border-color: rgba(249, 115, 22, .45); }
+.debt-banner.lvl2 { background: rgba(220, 38, 38, .2); color: #fecaca; border-color: rgba(220, 38, 38, .55); }
+.debt-banner:hover { filter: brightness(1.15); }

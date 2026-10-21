@@ -427,6 +427,25 @@ const DICT = {
     'site.spyfall': 'Find the spy',
     'site.citadels': 'Citadels',
     'profile.tab.cit': 'Citadels',
+    'site.poker': 'Poker',
+    'debt.mark': 'Debtor', 'debt.mark.hint': 'Owes USDT from a poker session for too long',
+    'debt.banner.due': p => `You owe ${p.amount} from a poker session. Pay it: in ${p.limit} day(s) the USDT tables close and everyone sees you as a debtor, in ${p.ban} — a ban from the games. Open settlements →`,
+    'debt.banner.limited': p => `Overdue: ${p.amount}. USDT tables are closed and everyone sees the debtor mark; in ${p.ban} day(s) — a ban from the games. Pay now →`,
+    'debt.banner.banned': p => `Banned from the games for an unpaid debt of ${p.amount}. Pay it and mark it paid — the ban lifts at once →`,
+    'err.debt.banned': 'Banned from the games for an unpaid USDT debt: pay it under Poker → Settlements',
+    'chips.daily': p => `+${p.n} site chips for coming by${p.streak > 1 ? ` · ${p.streak} days in a row` : ''}`,
+    'profile.tab.poker': 'Poker',
+    'pk.r.A': 'Ace', 'pk.r.K': 'King', 'pk.r.Q': 'Queen', 'pk.r.J': 'Jack', 'pk.r.T': 'Ten', 'pk.r.9': 'Nine', 'pk.r.8': 'Eight', 'pk.r.7': 'Seven', 'pk.r.6': 'Six', 'pk.r.5': 'Five', 'pk.r.4': 'Four', 'pk.r.3': 'Three', 'pk.r.2': 'Two',
+    'pk.rs.A': 'Aces', 'pk.rs.K': 'Kings', 'pk.rs.Q': 'Queens', 'pk.rs.J': 'Jacks', 'pk.rs.T': 'Tens', 'pk.rs.9': 'Nines', 'pk.rs.8': 'Eights', 'pk.rs.7': 'Sevens', 'pk.rs.6': 'Sixes', 'pk.rs.5': 'Fives', 'pk.rs.4': 'Fours', 'pk.rs.3': 'Threes', 'pk.rs.2': 'Twos',
+    'pk.rg.A': 'Ace', 'pk.rg.K': 'King', 'pk.rg.Q': 'Queen', 'pk.rg.J': 'Jack', 'pk.rg.T': 'Ten', 'pk.rg.9': 'Nine', 'pk.rg.8': 'Eight', 'pk.rg.7': 'Seven', 'pk.rg.6': 'Six', 'pk.rg.5': 'Five', 'pk.rg.4': 'Four', 'pk.rg.3': 'Three', 'pk.rg.2': 'Two',
+    'pk.h.high': '{a} high', 'pk.h.pair': 'Pair of {as}', 'pk.h.twoPair': 'Two pair, {as} and {bs}', 'pk.h.trips': 'Three of a kind, {as}',
+    'pk.h.straight': 'Straight, {a} high', 'pk.h.flush': 'Flush, {a} high', 'pk.h.full': 'Full house, {as} full of {bs}',
+    'pk.h.quads': 'Four of a kind, {as}', 'pk.h.straightFlush': 'Straight flush, {a} high', 'pk.h.royal': 'Royal flush',
+    'pk.handsN': p => `${p.n} hand${p.n === 1 ? '' : 's'}`,
+    'pk.player.net': 'Chips won', 'pk.player.biggestPot': 'Biggest pot', 'pk.player.style': 'How you play', 'pk.player.hands': 'Hands',
+    'pk.player.handsWon': 'Hands won', 'pk.player.wtsd': 'Went to showdown', 'pk.player.wsd': 'Won at showdown', 'pk.player.allIns': 'All-ins won',
+    'pk.player.rebuys': 'Rebuys', 'pk.player.bestHand': 'Best hand shown',
+    'pk.player.styleHint': 'VPIP: how often you put chips in before the flop on your own (not the blinds). PFR: how often you raised before the flop. Loose and aggressive players have both high; tight ones keep them around 15–25%.',
     'char.witch': 'Witch', 'char.assassin': 'Assassin', 'char.thief': 'Thief', 'char.magician': 'Magician', 'char.king': 'King',
     'char.abbot': 'Abbot', 'char.bishop': 'Bishop', 'char.merchant': 'Merchant', 'char.architect': 'Architect',
     'char.diplomat': 'Diplomat', 'char.warlord': 'Warlord', 'char.queen': 'Queen',
@@ -571,6 +590,32 @@ Everyone gets 4 district cards and 2 gold. A random player gets the crown.
 
 ## The end
 When a city reaches 7 districts, the round is finished. Score: the cost of all your districts, +3 for all five colours, +4 for the first completed city (+2 for the others), plus the purple districts’ bonuses. On a tie, the higher character in the last round wins.`,
+    'rules.poker': `## In short
+Texas hold'em, no limit, for chips (no money). Everyone gets two cards of their own; five shared cards go on the table. The best five-card hand out of your two and the five on the table wins the pot — or bet so that everyone else folds.
+
+## A hand
+- The button moves one seat to the left each hand. The two players after it post the blinds: the small and the big one (heads up, the button is the small blind).
+- Preflop: two cards each, betting from the player after the big blind.
+- Flop: three cards on the table, betting from the first player after the button. Then the turn (a fourth card) and the river (the fifth), each with a round of betting.
+- Showdown: the hands still in are shown; the best five cards win. A hand can use both, one or none of its own cards.
+
+## Betting
+- Fold — give up the hand. Check — pass when there's nothing to call. Call — match the bet. Bet / raise — put in more.
+- A raise is at least as big as the last bet or raise in this round. All-in is always possible; an all-in smaller than a full raise doesn't let those who've already acted raise again.
+- A bet nobody calls comes back. A player who's all-in can only win as much from each opponent as they put in themselves: the rest makes side pots.
+- When nobody can bet any more (all-in), the hands are turned over and the board is dealt out.
+
+## The hands, best first
+- Royal flush: A K Q J 10 of one suit. Straight flush: five in a row of one suit.
+- Four of a kind. Full house: three of a kind and a pair. Flush: five of one suit.
+- Straight: five in a row (A-2-3-4-5 is the lowest, 10-J-Q-K-A the highest). Three of a kind. Two pair. A pair. High card.
+- Equal hands split the pot; the suits never matter.
+
+## At this table
+- Everyone starts with 500 chips (the host can change it), blinds 5/10; they can go up every N hands.
+- The turn clock: a player who runs out of time checks or folds and sits out until they come back.
+- Rebuys for the starting stack when you're out (if allowed). The host ends the session; places go by chips won.
+- After a hand that ended early anyone can see what the board would have been ("rabbit hunt"); after any hand you may show your cards.`,
     'rules.spy': `## The goal
 Everyone except the spy gets the same location and a role there. The town wants to unmask the spy; the spy wants to work out the location — or simply not be caught.
 
@@ -1564,6 +1609,25 @@ Space — roll / end turn / pay. B — buy. A — auction. P — pay bail. 1–3
     'site.spyfall': 'Шпион',
     'site.citadels': 'Цитадели',
     'profile.tab.cit': 'Цитадели',
+    'site.poker': 'Покер',
+    'debt.mark': 'Должник', 'debt.mark.hint': 'Слишком долго не платит долг в USDT по итогам покера',
+    'debt.banner.due': p => `Ваш долг по покеру: ${p.amount}. Оплатите: через ${p.limit} дн. закроются столы на USDT и все увидят отметку «Должник», через ${p.ban} дн. — бан в играх. Открыть расчёты →`,
+    'debt.banner.limited': p => `Просрочен долг: ${p.amount}. Столы на USDT закрыты, у вас отметка «Должник»; через ${p.ban} дн. — бан в играх. Оплатить →`,
+    'debt.banner.banned': p => `Бан в играх за неоплаченный долг ${p.amount}. Оплатите и отметьте оплату — бан снимется сразу →`,
+    'err.debt.banned': 'Бан в играх за неоплаченный долг в USDT: оплатите его в Покер → Расчёты',
+    'chips.daily': p => `+${p.n} фишек сайта за заход${p.streak > 1 ? ` · ${p.streak} ${ruPlural(p.streak, 'день', 'дня', 'дней')} подряд` : ''}`,
+    'profile.tab.poker': 'Покер',
+    'pk.r.A': 'туз', 'pk.r.K': 'король', 'pk.r.Q': 'дама', 'pk.r.J': 'валет', 'pk.r.T': 'десятка', 'pk.r.9': 'девятка', 'pk.r.8': 'восьмёрка', 'pk.r.7': 'семёрка', 'pk.r.6': 'шестёрка', 'pk.r.5': 'пятёрка', 'pk.r.4': 'четвёрка', 'pk.r.3': 'тройка', 'pk.r.2': 'двойка',
+    'pk.rs.A': 'тузы', 'pk.rs.K': 'короли', 'pk.rs.Q': 'дамы', 'pk.rs.J': 'валеты', 'pk.rs.T': 'десятки', 'pk.rs.9': 'девятки', 'pk.rs.8': 'восьмёрки', 'pk.rs.7': 'семёрки', 'pk.rs.6': 'шестёрки', 'pk.rs.5': 'пятёрки', 'pk.rs.4': 'четвёрки', 'pk.rs.3': 'тройки', 'pk.rs.2': 'двойки',
+    'pk.rg.A': 'туза', 'pk.rg.K': 'короля', 'pk.rg.Q': 'дамы', 'pk.rg.J': 'валета', 'pk.rg.T': 'десятки', 'pk.rg.9': 'девятки', 'pk.rg.8': 'восьмёрки', 'pk.rg.7': 'семёрки', 'pk.rg.6': 'шестёрки', 'pk.rg.5': 'пятёрки', 'pk.rg.4': 'четвёрки', 'pk.rg.3': 'тройки', 'pk.rg.2': 'двойки',
+    'pk.h.high': 'Старшая карта: {a}', 'pk.h.pair': 'Пара: {as}', 'pk.h.twoPair': 'Две пары: {as} и {bs}', 'pk.h.trips': 'Тройка: {as}',
+    'pk.h.straight': 'Стрит до {ag}', 'pk.h.flush': 'Флеш до {ag}', 'pk.h.full': 'Фулл-хаус: {as} и {bs}',
+    'pk.h.quads': 'Каре: {as}', 'pk.h.straightFlush': 'Стрит-флеш до {ag}', 'pk.h.royal': 'Роял-флеш',
+    'pk.handsN': p => `${p.n} ${ruPlural(p.n, 'раздача', 'раздачи', 'раздач')}`,
+    'pk.player.net': 'Выигрыш в фишках', 'pk.player.biggestPot': 'Самый большой банк', 'pk.player.style': 'Как вы играете', 'pk.player.hands': 'Раздачи',
+    'pk.player.handsWon': 'Выиграно раздач', 'pk.player.wtsd': 'Доходил до вскрытия', 'pk.player.wsd': 'Выиграл на вскрытии', 'pk.player.allIns': 'Олл-инов выиграно',
+    'pk.player.rebuys': 'Докупок', 'pk.player.bestHand': 'Лучшая показанная рука',
+    'pk.player.styleHint': 'VPIP — как часто вы сами вкладываете фишки до флопа (блайнды не считаются). PFR — как часто рейзите до флопа. У лузово-агрессивных оба числа высокие, у тайтовых — около 15–25%.',
     'char.witch': 'Ведьма', 'char.assassin': 'Убийца', 'char.thief': 'Вор', 'char.magician': 'Чародей', 'char.king': 'Король',
     'char.abbot': 'Аббат', 'char.bishop': 'Епископ', 'char.merchant': 'Купец', 'char.architect': 'Зодчий',
     'char.diplomat': 'Дипломат', 'char.warlord': 'Кондотьер', 'char.queen': 'Королева',
@@ -1708,6 +1772,32 @@ Space — roll / end turn / pay. B — buy. A — auction. P — pay bail. 1–3
 
 ## Как закончить и посчитать очки
 Как только у кого-то построено 7 кварталов, доигрывается текущий раунд. Каждый складывает стоимость всех своих кварталов, +3 за все пять цветов, +4 первому, кто завершил город (остальным завершившим +2), и бонусы фиолетовых карт. При равенстве побеждает тот, кто в последнем раунде открыл героя с более высоким номером.`,
+    'rules.poker': `## В двух словах
+Техасский холдем без лимита, на фишки (без денег). Каждый получает две свои карты, на стол выкладываются пять общих. Побеждает лучшая комбинация из пяти карт — из двух своих и пяти общих, — или ставка, после которой все остальные сбросили карты.
+
+## Раздача
+- Баттон (дилер) каждую раздачу сдвигается на одно место влево. Двое после него ставят блайнды: малый и большой (вдвоём баттон — малый блайнд).
+- Префлоп: каждому по две карты, торговля начинается с игрока после большого блайнда.
+- Флоп: на стол три карты, торговля с первого игрока после баттона. Потом тёрн (четвёртая карта) и ривер (пятая), после каждой — круг ставок.
+- Вскрытие: оставшиеся в игре показывают карты, выигрывают лучшие пять. Можно использовать обе свои карты, одну или ни одной.
+
+## Ставки
+- Фолд — сбросить карты. Чек — пропустить, если ставить не нужно. Колл — уравнять ставку. Бет / рейз — поставить больше.
+- Рейз — не меньше последней ставки или рейза в этом круге. Олл-ин можно всегда; олл-ин меньше полного рейза не даёт уже походившим рейзить снова.
+- Ставка, которую никто не уравнял, возвращается. Игрок в олл-ине может выиграть у каждого соперника не больше, чем поставил сам: остальное — побочные банки.
+- Когда ставить больше некому (олл-ин), карты открываются и доска докладывается до конца.
+
+## Комбинации, от старшей
+- Роял-флеш: A K Q J 10 одной масти. Стрит-флеш: пять подряд одной масти.
+- Каре: четыре одинаковых. Фулл-хаус: тройка и пара. Флеш: пять одной масти.
+- Стрит: пять подряд (A-2-3-4-5 — младший, 10-J-Q-K-A — старший). Тройка. Две пары. Пара. Старшая карта.
+- Одинаковые комбинации делят банк; масти не старше друг друга.
+
+## За этим столом
+- У всех на старте 500 фишек (хост может поменять), блайнды 5/10; могут расти каждые N раздач.
+- Часы хода: у кого кончилось время, тот чекает или сбрасывает и садится «отдохнуть», пока не вернётся.
+- Докупка стартового стека, когда фишки кончились (если разрешено). Сессию заканчивает хост; места — по выигранным фишкам.
+- После раздачи, закончившейся раньше ривера, любой может посмотреть, какой была бы доска; после любой раздачи можно показать свои карты.`,
     'rules.spy': `## Цель
 У всех, кроме шпиона, одна и та же локация и роль в ней. Мирные хотят разоблачить шпиона, шпион — догадаться, где все находятся, или просто не попасться.
 

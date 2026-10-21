@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08090d">
+  <title>Покер</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23e0464e'/%3E%3Cpath d='M16 6c3 4 8 7 8 11a4 4 0 0 1-7 2.5L18 25h-4l1-5.5A4 4 0 0 1 8 17c0-4 5-7 8-11z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..800&family=Geist+Mono:wght@500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/poker/poker.css">
+</head>
+<body class="poker" data-phase="home">
+  <div class="backdrop" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="grain"></div></div>
+
+  <header class="topbar">
+    <div class="brand-switch">
+      <button id="brandBtn" class="brand" type="button" aria-haspopup="true">
+        <svg class="brand-mark pk-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9"/><path d="M16 6c3 4 8 7 8 11a4 4 0 0 1-7 2.5L18 25h-4l1-5.5A4 4 0 0 1 8 17c0-4 5-7 8-11z"/></svg>
+        <span data-i18n="site.poker"></span>
+        <svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <nav id="siteMenu" class="site-menu hidden">
+        <a href="/"><span class="site-ico"></span><span data-i18n="site.mafia"></span></a>
+        <a href="/monopoly/"><span class="site-ico"></span><span data-i18n="site.monopoly"></span></a>
+        <a href="/spyfall/"><span class="site-ico"></span><span data-i18n="site.spyfall"></span></a>
+        <a href="/citadels/"><span class="site-ico"></span><span data-i18n="site.citadels"></span></a>
+        <a href="/poker/" class="current"><span class="site-ico"></span><span data-i18n="site.poker"></span></a>
+      </nav>
+    </div>
+    <button id="topRoom" class="room-pill hidden" type="button"><span data-i18n="ui.room"></span> <span id="topCode" class="code"></span></button>
+    <div id="topRound" class="phase-chip"></div>
+    <div class="spacer"></div>
+    <button id="rulesBtn" class="icon-btn" type="button"></button>
+    <button id="boardBtn" class="icon-btn hidden" type="button"><span class="trophy"></span></button>
+    <button id="alertsBtn" class="icon-btn" type="button" aria-pressed="true"></button>
+    <select id="langSelect" class="lang-select" aria-label="Language"></select>
+    <button id="leaveBtn" class="ghost small hidden" data-i18n="ui.leaveRoom"></button>
+    <button id="profileBtn" class="profile-btn hidden" type="button"></button>
+  </header>
+
+  <div id="offline" class="offline-banner hidden" role="status"><span class="spinner"></span><span data-i18n="ui.reconnecting"></span></div>
+
+  <main id="app">
+    <!-- home -->
+    <section id="home" class="screen hidden">
+      <div class="hero">
+        <p class="eyebrow" data-i18n="pk.eyebrow"></p>
+        <h1><span data-i18n="pk.heroA"></span> <em data-i18n="pk.heroB"></em></h1>
+        <p class="muted hero-sub" data-i18n="pk.tagline"></p>
+      </div>
+      <div id="bootLoader" class="boot-loader" role="status"><span class="spinner"></span></div>
+      <form id="authCard" class="card home-card hidden" autocomplete="on">
+        <div class="tabs auth-tabs" role="tablist">
+          <button type="button" data-auth-mode="login" data-i18n="auth.login"></button>
+          <button type="button" data-auth-mode="register" data-i18n="auth.register"></button>
+        </div>
+        <label class="field"><span data-i18n="auth.username"></span> <input id="authUser" name="username" maxlength="20" autocomplete="username" spellcheck="false"></label>
+        <label class="field"><span data-i18n="auth.password"></span> <input id="authPass" name="password" type="password" autocomplete="current-password"></label>
+        <label id="inviteField" class="field hidden"><span data-i18n="auth.invite"></span> <input id="authInvite" name="invite" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+        <button id="authSubmit" type="submit" class="primary big-btn"></button>
+        <p class="muted small-text auth-hint" data-i18n="auth.hint"></p>
+      </form>
+      <div id="playCard" class="card home-card hidden">
+        <button id="homeProfile" class="me-row" type="button"></button>
+        <button id="homeWallet" class="pk-home-wallet" type="button"></button>
+        <button id="createBtn" class="primary big-btn" data-i18n="pk.createRoom"></button>
+        <div class="row home-links">
+          <button id="homeBoard" class="ghost"><span class="trophy"></span> <span data-i18n="board.title"></span></button>
+          <button id="homeRules" class="ghost" data-i18n="pk.cheat.title"></button>
+        </div>
+        <div class="row home-links">
+          <button id="homePledges" class="ghost"><span data-i18n="pk.pl.title"></span> <span id="pledgeCount" class="count-pill hidden"></span></button>
+        </div>
+        <div class="divider"><span data-i18n="ui.orJoin"></span></div>
+        <div class="row join-row">
+          <input id="joinCode" class="code-input" data-i18n-placeholder="ui.roomCode" maxlength="4" autocapitalize="characters" spellcheck="false">
+          <button id="joinBtn" data-i18n="ui.join"></button>
+          <button id="watchBtn" class="ghost" data-i18n="ui.watch"></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- lobby -->
+    <section id="lobby" class="screen hidden">
+      <button id="homeBtn" class="ghost small back-home" type="button" data-i18n="ui.toHome"></button>
+      <div class="lobby-grid">
+        <div class="lobby-col">
+          <div class="card">
+            <div class="card-head"><h2 data-i18n="pk.players"></h2><span id="lobbyCount" class="count-pill"></span></div>
+            <ul id="lobbyPlayers" class="list"></ul>
+            <div class="row lobby-me">
+              <button id="readyBtn" class="ready-btn"></button>
+              <button id="watchToggle" class="ghost small"></button>
+              <span id="readyCount" class="count-pill"></span>
+            </div>
+            <div id="spectatorBox" class="spectator-box hidden">
+              <h3 data-i18n="ui.spectators"></h3>
+              <div id="spectatorList" class="spectator-list"></div>
+            </div>
+            <div class="invite">
+              <img id="inviteQr" class="qr" alt="" width="104" height="104">
+              <div class="invite-body">
+                <p id="shareCode" class="share muted"></p>
+                <p class="muted small-text" data-i18n="ui.scanToJoin"></p>
+                <div class="row"><button id="copyLink" class="small" data-i18n="ui.copyLink"></button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2 data-i18n="pk.setup"></h2><button id="resetRules" class="ghost small hidden" data-i18n="pk.set.reset"></button></div>
+          <div id="settingsBox" class="settings-box"></div>
+          <button id="startBtn" class="primary big-btn hidden" data-i18n="pk.start"></button>
+          <p id="waitHost" class="wait muted hidden"><span class="dots"><i></i><i></i><i></i></span> <span data-i18n="ui.waitHost"></span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- the table -->
+    <section id="game" class="screen hidden">
+      <div class="pk-layout">
+        <div class="pk-stage">
+          <div class="pk-table-wrap">
+            <div id="pkTable" class="pk-table">
+              <div class="pk-rail"><div class="pk-felt"><span class="pk-logo" data-i18n="site.poker"></span></div></div>
+              <div id="pkCenter" class="pk-center"></div>
+              <div id="pkSeats" class="pk-seats"></div>
+              <div id="pkFx" class="pk-fx"></div>
+            </div>
+          </div>
+          <div id="pkDock" class="pk-dock"></div>
+        </div>
+        <aside class="pk-side">
+          <div id="hostBox" class="row pk-host hidden"></div>
+          <div class="card pk-side-card">
+            <div class="tabs pk-tabs" role="tablist">
+              <button data-tab="hands" data-i18n="pk.tab.hands"></button>
+              <button data-tab="cheat" data-i18n="pk.tab.cheat"></button>
+              <button data-tab="table" data-i18n="pk.tab.table"></button>
+            </div>
+            <div id="pkSide" class="pk-side-body"></div>
+          </div>
+          <div class="pk-side-foot">
+            <button id="stickerBtn" class="ghost pk-sticker-btn" type="button"></button>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <!-- the sticker palette -->
+  <div id="stickerPop" class="pk-sticker-pop hidden" role="dialog"></div>
+
+  <!-- one hand from the history -->
+  <div id="handSheet" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet pk-hand-sheet">
+      <div class="sheet-head"><h2 id="handTitle"></h2><button id="handClose" class="ghost small" data-i18n="ui.close"></button></div>
+      <div id="handBody" class="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- the hands, for the home screen -->
+  <div id="cheatSheet" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet pk-cheat-sheet">
+      <div class="sheet-head"><h2 data-i18n="pk.cheat.title"></h2><button id="cheatClose" class="ghost small" data-i18n="ui.close"></button></div>
+      <div id="cheatBody" class="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- the wallet -->
+  <div id="walletSheet" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet">
+      <div class="sheet-head"><h2 data-i18n="pk.chips.wallet"></h2><button id="walletClose" class="ghost small" data-i18n="ui.close"></button></div>
+      <div id="walletBody" class="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- stakes: who owes whom -->
+  <div id="pledgeSheet" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet">
+      <div class="sheet-head"><h2 data-i18n="pk.pl.title"></h2><button id="pledgeClose" class="ghost small" data-i18n="ui.close"></button></div>
+      <div id="pledgeBody" class="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- results -->
+  <div id="results" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet results-sheet">
+      <div class="sheet-head"><h2 data-i18n="pk.results"></h2><button id="resultsClose" class="ghost small" data-i18n="ui.close"></button></div>
+      <div id="resultsBody" class="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- leaderboard -->
+  <div id="boardSheet" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="sheet board-sheet">
+      <div class="sheet-head">
+        <h2><span class="trophy"></span> <span data-i18n="pk.board.title"></span></h2>
+        <button id="boardClose" class="ghost small" data-i18n="ui.close"></button>
+      </div>
+      <div class="sheet-body">
+        <div class="tabs board-tabs" role="tablist">
+          <button data-board="chips" data-i18n="pk.board.tab.chips"></button>
+          <button data-board="net" data-i18n="pk.board.tab.net"></button>
+          <button data-board="wins" data-i18n="pk.board.tab.wins"></button>
+          <button data-board="pot" data-i18n="pk.board.tab.pot"></button>
+          <button data-board="hands" data-i18n="pk.board.tab.hands"></button>
+        </div>
+        <ol id="boardList" class="board-list"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/i18n.js"></script>
+  <script src="/poker/poker-i18n.js"></script>
+  <script src="/common.js"></script>
+  <script src="/voice.js"></script>
+  <script src="/poker/hand.js"></script>
+  <script src="/poker/stickers.js"></script>
+  <script src="/poker/poker.js"></script>
+</body>
+</html>
