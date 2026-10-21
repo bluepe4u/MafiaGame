@@ -430,45 +430,85 @@ function setAccount(user, token) {
   renderAccount();
 }
 
+// login | register | forgot (a reset link by email) | recover (the old recovery code) | reset (from the link)
+const resetToken = new URLSearchParams(location.search).get('reset') || '';
+if (/^[0-9a-f]{48}$/.test(resetToken)) authMode = 'reset';
 function renderAuthMode() {
-  for (const b of $$('[data-auth-mode]')) b.classList.toggle('active', b.dataset.authMode === authMode);
-  $('#authSubmit').textContent = t({ login: 'auth.login', register: 'auth.register', recover: 'auth.recoverSubmit' }[authMode]);
-  $('#authPass').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
-  $('#authPassLabel').textContent = t(authMode === 'recover' ? 'auth.newPassword' : 'auth.password');
-  $('#inviteField').classList.toggle('hidden', authMode !== 'register');
-  $('#recoverField').classList.toggle('hidden', authMode !== 'recover');
-  $('#forgotBtn').textContent = t(authMode === 'recover' ? 'auth.backToLogin' : 'auth.forgot');
-  $('#forgotBtn').classList.toggle('hidden', authMode === 'register');
+  const m = authMode;
+  for (const b of $$('[data-auth-mode]')) b.classList.toggle('active', b.dataset.authMode === m);
+  $('.auth-tabs').classList.toggle('hidden', m === 'reset');
+  $('#authSubmit').textContent = t({ login: 'auth.login', register: 'auth.register', recover: 'auth.recoverSubmit', forgot: 'auth.sendLink', reset: 'auth.recoverSubmit' }[m]);
+  $('#authPass').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+  $('#authPassLabel').textContent = t(m === 'recover' || m === 'reset' ? 'auth.newPassword' : 'auth.password');
+  $('#authUserLabel').textContent = t(m === 'login' ? 'auth.userOrEmail' : 'auth.username');
+  $('#authUser').closest('label').classList.toggle('hidden', m === 'forgot' || m === 'reset');
+  $('#authPass').closest('label').classList.toggle('hidden', m === 'forgot');
+  $('#emailField').classList.toggle('hidden', m !== 'register' && m !== 'forgot');
+  $('#authEmail').required = m === 'register' || m === 'forgot';
+  $('#inviteField').classList.toggle('hidden', m !== 'register');
+  $('#recoverField').classList.toggle('hidden', m !== 'recover');
+  $('#forgotBtn').textContent = t(m === 'login' ? 'auth.forgot' : 'auth.backToLogin');
+  $('#forgotBtn').classList.toggle('hidden', m === 'register');
+  $('#codeBtn').classList.toggle('hidden', m !== 'forgot');
   const legal = document.getElementById('authLegal');
-  if (legal) legal.classList.toggle('hidden', authMode !== 'register');
+  if (legal) legal.classList.toggle('hidden', m !== 'register');
+  const hint = document.querySelector('#authCard .auth-hint');
+  if (hint) hint.textContent = t(m === 'forgot' ? 'auth.forgotHint' : m === 'reset' ? 'auth.resetHint' : 'auth.hint');
 }
 // the password label, the recovery-code field and "Forgot password?" join the login form
-$('#authPass').closest('label').querySelector('span').id = 'authPassLabel';
+// these labels change with the mode, so the page's static translation pass must leave them alone
+for (const [el, id] of [[$('#authPass').closest('label').querySelector('span'), 'authPassLabel'], [$('#authUser').closest('label').querySelector('span'), 'authUserLabel'], [$('#authCard .auth-hint'), null]]) {
+  if (!el) continue;
+  if (id) el.id = id;
+  el.removeAttribute('data-i18n');
+}
+$('#authUser').closest('label').insertAdjacentHTML('afterend', `<label id="emailField" class="field hidden"><span data-i18n="auth.email"></span>
+  <input id="authEmail" name="email" type="email" maxlength="254" autocomplete="email" spellcheck="false"></label>
+  <input id="authWebsite" name="website" tabindex="-1" autocomplete="off" class="hp-field" aria-hidden="true">`);
 $('#inviteField').insertAdjacentHTML('afterend', `<label id="recoverField" class="field hidden"><span data-i18n="auth.recoveryCode"></span>
   <input id="authRecovery" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX"></label>`);
-$('#authSubmit').insertAdjacentHTML('afterend', '<button type="button" id="forgotBtn" class="link-btn"></button>');
-$('#forgotBtn').onclick = () => { authMode = authMode === 'recover' ? 'login' : 'recover'; renderAuthMode(); };
+$('#authSubmit').insertAdjacentHTML('afterend', '<button type="button" id="forgotBtn" class="link-btn"></button><button type="button" id="codeBtn" class="link-btn hidden" data-i18n="auth.haveCode"></button>');
+$('#forgotBtn').onclick = () => { authMode = authMode === 'login' ? 'forgot' : 'login'; renderAuthMode(); };
+$('#codeBtn').onclick = () => { authMode = 'recover'; renderAuthMode(); };
 for (const b of $$('[data-auth-mode]')) b.onclick = () => { authMode = b.dataset.authMode; renderAuthMode(); };
 $('#authCard').addEventListener('submit', async e => {
   e.preventDefault();
-  const res = await api(authMode, { username: $('#authUser').value, password: $('#authPass').value, invite: $('#authInvite').value, code: $('#authRecovery').value });
+  const mode = authMode;
+  const body = { username: $('#authUser').value, email: $('#authEmail').value, password: $('#authPass').value, invite: $('#authInvite').value, code: $('#authRecovery').value, website: $('#authWebsite').value, lang };
+  if (mode === 'reset') body.token = resetToken;
+  const res = await api(mode, body);
   if (!res.ok) return;
+  if (mode === 'forgot') {
+    await askConfirm({ title: t('auth.linkSentTitle'), text: t('auth.linkSent'), alert: true });
+    authMode = 'login';
+    return renderAuthMode();
+  }
   $('#authPass').value = '';
   $('#authRecovery').value = '';
+  if (mode === 'reset') history.replaceState(null, '', location.pathname);
+  if (mode === 'recover' || mode === 'reset') { authMode = 'login'; renderAuthMode(); }
   setAccount(res.user, res.token);
-  toast(t('toast.welcome', { name: res.user.username }), 'info');
-  if (res.recoveryCode) showRecoveryCode(res.recoveryCode, authMode === 'register' ? 'recovery.afterRegister' : 'recovery.afterReset');
-  if (authMode === 'recover') { authMode = 'login'; renderAuthMode(); }
+  toast(t(mode === 'reset' ? 'toast.passwordChanged' : 'toast.welcome', { name: res.user.username }), 'info');
+  if (res.recoveryCode) showRecoveryCode(res.recoveryCode, mode === 'register' ? 'recovery.afterRegister' : 'recovery.afterReset');
+  if (mode === 'register' && res.user.email) setTimeout(() => toast(t('auth.checkEmail', { email: res.user.email }), 'info'), 3800);
   joinPendingTable();
 });
+// back from the confirmation link
+if (qs0().get('verified')) {
+  setTimeout(() => toast(t(qs0().get('verified') === '1' ? 'auth.verified' : 'auth.verifyFailed'), qs0().get('verified') === '1' ? 'info' : ''), 600);
+  history.replaceState(null, '', location.pathname);
+}
+function qs0() { return new URLSearchParams(location.search); }
 
 function renderAccount() {
-  $('#authCard').classList.toggle('hidden', !!account || !Site.ready);
-  $('#playCard').classList.toggle('hidden', !account || !Site.ready);
+  // a reset link shows its form even to someone logged in on this device
+  $('#authCard').classList.toggle('hidden', (!!account && authMode !== 'reset') || !Site.ready);
+  $('#playCard').classList.toggle('hidden', !account || !Site.ready || authMode === 'reset');
   $('#bootLoader').classList.toggle('hidden', Site.ready);
   $('#profileBtn').classList.toggle('hidden', !account);
   $('#boardBtn').classList.toggle('hidden', !account);
   document.body.dataset.theme = (account && account.theme) || '';
+  document.body.classList.toggle('signed-in', !!account);
   if (account) {
     $('#profileBtn').innerHTML = avatar(account.username, account.avatar, account.equipped);
     $('#profileBtn').title = t('profile.open');
@@ -487,34 +527,11 @@ async function refreshHome() {
   await renderActive();
 }
 
-// an unpaid USDT debt: everyone sees the mark once it's overdue
-const debtorTag = () => `<span class="tag debtor-tag" title="${esc(t('debt.mark.hint'))}">${esc(t('debt.mark'))}</span>`;
-// the debtor's own banner on every page: how much, and when the limits come
-function renderDebtBanner(debt) {
-  let el = document.getElementById('debtBanner');
-  if (!debt || !debt.count) { if (el) el.remove(); return; }
-  if (!el) {
-    el = document.createElement('a');
-    el.id = 'debtBanner';
-    el.className = 'debt-banner';
-    el.href = '/poker/?pay=1';
-    document.querySelector('.topbar').after(el);
-  }
-  const days = at => Math.max(0, Math.ceil((at - Date.now()) / 86400000));
-  const amount = `${(debt.cents / 100).toFixed(2)} USDT`;
-  el.classList.toggle('lvl1', debt.level === 1);
-  el.classList.toggle('lvl2', debt.level >= 2);
-  el.textContent = debt.level >= 2 ? t('debt.banner.banned', { amount })
-    : debt.level === 1 ? t('debt.banner.limited', { amount, ban: days(debt.banAt) })
-    : t('debt.banner.due', { amount, limit: days(debt.limitAt), ban: days(debt.banAt) });
-}
-
 async function refreshAccount() {
   const res = await api('me');
   if (res.ok) { account = res.user; renderAccount(); }
   // the first visit of the day: the site-chips bonus
   if (res.ok && res.daily) setTimeout(() => toast(t('chips.daily', res.daily), 'info'), 800);
-  if (res.ok) renderDebtBanner(res.debt);
   return res;
 }
 
@@ -609,7 +626,7 @@ function renderProfile() {
       <div class="profile-name ${nameCls(u.equipped)}">${esc(u.username)}</div>
       ${titleTag(u.title)}
       ${u.birthdayToday ? `<span class="bday-pill">🎂 ${esc(t('profile.birthdayToday'))}</span>` : ''}
-      ${statusPill(u.score)}${u.debtor ? debtorTag() : ''}
+      ${statusPill(u.score)}
       <div class="karma"><span class="karma-up">${COMMON_ICONS.up}${esc(t('profile.likes', { n: u.likes }))}</span><span class="karma-down">${COMMON_ICONS.down}${esc(t('profile.dislikes', { n: u.dislikes }))}</span></div>
     </div>`;
   $('#profileTop').insertAdjacentHTML('afterend', '');
@@ -663,6 +680,16 @@ function bindProfileControls() {
       setAccount(null, null);
     };
     $('#adminBtn').onclick = () => { closeOverlay('profile'); openAdmin(); };
+    const saveEmail = async email => {
+      const r = await api('email', { email, password: $('#emailPass').value, lang });
+      if (!r.ok) return;
+      account = r.user;
+      renderProfile();
+      toast(t(email ? 'email.saved' : 'email.removed', { email }), 'info');
+    };
+    $('#emailForm').addEventListener('submit', e => { e.preventDefault(); saveEmail($('#emailNew').value.trim()); });
+    if ($('#emailRemove')) $('#emailRemove').onclick = () => { if (!$('#emailPass').value) return toast(t('email.passwordFirst')); saveEmail(''); };
+    if ($('#emailResend')) $('#emailResend').onclick = async () => { const r = await api('email/resend', { lang }); if (r.ok) toast(t('auth.checkEmail', { email: account.email }), 'info'); };
     const savePersonal = async body => {
       const r = await api('profile', body);
       if (r.ok) { account = r.user; renderAccount(); renderProfile(); }
@@ -962,6 +989,18 @@ function accountHtml() {
       </div>
     </section>
     <button id="myArchiveBtn" class="small" type="button">${ico('book')} ${esc(t('archive.mine'))}</button>
+    <form id="emailForm" class="password-form" autocomplete="on">
+      <h3>${esc(t('email.title'))}</h3>
+      <p class="muted small-text">${account.email
+        ? `${esc(account.email)} · ${account.emailVerified ? `<span class="pos">${esc(t('email.verified'))}</span>` : `<span class="warn-text">${esc(t('email.unverified'))}</span> <button type="button" id="emailResend" class="link-btn">${esc(t('email.resend'))}</button>`}`
+        : esc(t('email.none'))}</p>
+      <div class="row">
+        <input id="emailNew" type="email" autocomplete="email" maxlength="254" placeholder="${esc(t(account.email ? 'email.change' : 'email.add'))}">
+        <input id="emailPass" type="password" autocomplete="current-password" placeholder="${esc(t('email.password'))}">
+        <button type="submit">${esc(t('profile.save'))}</button>
+      </div>
+      ${account.email ? `<button type="button" id="emailRemove" class="link-btn">${esc(t('email.remove'))}</button>` : ''}
+    </form>
     <form id="passwordForm" class="password-form" autocomplete="on">
       <h3>${esc(t('profile.changePassword'))}</h3>
       <input type="text" name="username" autocomplete="username" value="${esc(account.username)}" hidden>
@@ -1173,7 +1212,7 @@ async function renderAdminFeatures() {
   const f = res.features;
   const body = $('#adminBody');
   body.innerHTML = `<p class="muted small-text">${esc(t('features.hint'))}</p>
-    <div class="checks feature-list">${['voice', 'transcripts', 'family'].map(k => `
+    <div class="checks feature-list">${['signup', 'voice', 'transcripts', 'family'].map(k => `
       <label class="check"><input type="checkbox" class="switch" data-feature="${k}" ${f[k] ? 'checked' : ''} ${k === 'transcripts' && !f.voice ? 'disabled' : ''}>
         <span>${esc(t('features.' + k))}</span><small class="hint">${esc(t('features.' + k + '.hint'))}</small></label>`).join('')}</div>`;
   for (const input of body.querySelectorAll('[data-feature]')) {
@@ -1216,6 +1255,7 @@ async function renderAdminInvites() {
 
 // ---------- tables: a permanent space for the group, with the next-game picker ----------
 let myTables = [];
+let publicTables = [];
 let tableMenu = null; // the table whose settings are open
 let tablesTimer = null;
 const tableUrl = id => `${location.origin}/?table=${id}`;
@@ -1225,6 +1265,8 @@ async function loadTables() {
   if (!account) { myTables = []; renderTables(); return; }
   const res = await fetch('/api/tables', { headers: { Authorization: `Bearer ${store.get(AUTH_KEY)}` } }).then(r => r.json()).catch(() => null);
   if (res && res.ok) myTables = res.tables;
+  const pub = await fetch('/api/tables/public', { headers: { Authorization: `Bearer ${store.get(AUTH_KEY)}` } }).then(r => r.json()).catch(() => null);
+  if (pub && pub.ok) publicTables = pub.tables;
   renderTables();
   // keep "who's online" fresh while the home screen is open
   if (Site.home) tablesTimer = setTimeout(() => { if (!document.hidden) loadTables(); else tablesTimer = setTimeout(loadTables, 20000); }, 20000);
@@ -1247,7 +1289,7 @@ function renderTables() {
       const cur = tb.current && tb.current.phase !== 'ended' ? tb.current : null;
       const open = tableMenu === tb.id;
       return `<div class="table-card">
-        <div class="tc-head"><span class="tc-ico">${ico('table')}</span><span class="tc-title"><b>${esc(tb.name)}</b>
+        <div class="tc-head"><span class="tc-ico">${ico('table')}</span><span class="tc-title"><b>${esc(tb.name)}</b>${tb.public ? ` <span class="tag tc-public">${esc(t('table.publicTag'))}</span>` : ''}
           <span class="muted small-text">${esc(t('table.online', { n: online, total: tb.members.length }))}</span></span>
           ${tb.games ? `<button class="ghost small" data-tarchive="${tb.id}" title="${esc(t('archive.title'))}">${ico('book')} ${esc(t('archive.short'))}</button>` : ''}
           <button class="ghost small icon-only" data-tmenu="${tb.id}" aria-label="${esc(t('table.settings'))}" title="${esc(t('table.settings'))}">⋯</button></div>
@@ -1262,12 +1304,21 @@ function renderTables() {
           <div class="row"><button class="small" data-tcopy="${tb.id}">${esc(t('table.copyLink'))}</button>
             ${account.admin ? `<button class="small" data-tinvite="${tb.id}">${esc(t('table.inviteNew'))}</button>` : ''}</div>
           <p class="muted small-text">${esc(t(account.admin ? 'table.linkHintAdmin' : 'table.linkHint'))}</p>
+          ${tb.isOwner || account.admin ? `<div class="checks tc-vis"><label class="check"><input type="checkbox" class="switch" data-tpublic="${tb.id}" ${tb.public ? 'checked' : ''}>
+            <span>${esc(t('table.public'))}</span><small class="hint">${esc(t('table.publicHint'))}</small></label></div>` : ''}
           ${tb.isOwner || account.admin ? `<form class="row" data-trename="${tb.id}"><input value="${esc(tb.name)}" maxlength="40"><button class="small" type="submit">${esc(t('table.rename'))}</button></form>
             <div class="tc-kick">${tb.members.filter(m => m.id !== tb.ownerId).map(m => `<span class="tc-kick-item">${esc(m.username)}<button class="ghost small" data-tkick="${tb.id}:${m.id}" aria-label="×">×</button></span>`).join('')}</div>` : ''}
           <div class="row"><button class="ghost small" id="tableNew">＋ ${esc(t('table.another'))}</button><button class="danger small" data-tleave="${tb.id}">${esc(t('table.leave'))}</button></div>
         </div>` : ''}
       </div>`;
     }).join('') + createForm;
+  }
+  // public tables of other people, to join with one tap
+  if (publicTables.length) {
+    box.insertAdjacentHTML('beforeend', `<div class="public-tables"><h3>${esc(t('table.browse'))}</h3>${publicTables.map(pt => `<div class="pt-row">
+      <span class="tc-ico">${pt.live ? gameIcon(pt.live.game) : ico('table')}</span>
+      <span class="tc-title"><b>${esc(pt.name)}</b><span class="muted small-text">${esc(t('table.online', { n: pt.online, total: pt.members }))}${pt.live ? ` · ${esc(t('table.now', { game: gameTitle(pt.live.game) }))}` : ''}</span></span>
+      <button class="small" data-tjoin="${pt.id}">${esc(t('table.joinPublic'))}</button></div>`).join('')}</div>`);
   }
   const after = r => { if (r.ok) loadTables(); };
   const newBtn = $('#tableNew');
@@ -1296,6 +1347,13 @@ function renderTables() {
     };
   }
   for (const b of box.querySelectorAll('[data-tcopy]')) b.onclick = () => copyText(tableUrl(b.dataset.tcopy));
+  for (const b of box.querySelectorAll('[data-tpublic]')) b.onchange = () => api('tables/visibility', { id: b.dataset.tpublic, public: b.checked }).then(after);
+  for (const b of box.querySelectorAll('[data-tjoin]')) {
+    b.onclick = async () => {
+      const r = await api('tables/join', { id: b.dataset.tjoin });
+      if (r.ok) { toast(t('table.joined', { name: r.table.name }), 'info'); loadTables(); }
+    };
+  }
   for (const b of box.querySelectorAll('[data-tarchive]')) b.onclick = () => openArchive(b.dataset.tarchive);
   for (const b of box.querySelectorAll('[data-tinvite]')) {
     b.onclick = async () => {
@@ -1587,9 +1645,8 @@ Site.init = function init({ game, socket, urlRoom, hooks }) {
       const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${store.get(AUTH_KEY)}` } }).then(r => r.json()).catch(() => null);
       if (res && res.ok) {
         account = res.user;
-        // the first visit of the day pays the site-chips bonus; an unpaid debt shows its banner
+        // the first visit of the day pays the site-chips bonus
         if (res.daily) setTimeout(() => toast(t('chips.daily', res.daily), 'info'), 800);
-        renderDebtBanner(res.debt);
       } else if (res) store.set(AUTH_KEY, null); // expired or logged out elsewhere
     }
     if (!account && qs.get('table')) toast(t('table.loginFirst'), 'info');

@@ -5,38 +5,27 @@
 // owes marks it sent, the one owed confirms it arrived (or lets it go). Saved to pledges.json.
 
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const { GameError } = require('./game');
+const { Saved } = require('./db');
 
 const KEEP_DONE_MS = 90 * 24 * 60 * 60 * 1000; // settled pledges are kept for three months
 const DAY = 24 * 60 * 60 * 1000;
-// an unpaid USDT debt: after this many days no USDT tables (and the debtor mark), after this many a ban
-const LIMIT_DAYS = Number(process.env.DEBT_LIMIT_DAYS) || 3;
-const BAN_DAYS = Number(process.env.DEBT_BAN_DAYS) || 14;
 
 class Pledges {
   constructor(dir) {
-    this.file = path.join(dir, 'pledges.json');
+    this.store = new Saved(dir, 'pledges', { pledges: 'list' }, 'pledges.json');
     // { id, kind: lot | usdt, from, to, title | cents + network + address, game, code, at,
     //   status: owed | sent | received | forgiven, tx (the payer's transaction hash), doneAt }
     this.list = [];
     this.saveTimer = null;
-    try {
-      this.list = JSON.parse(fs.readFileSync(this.file, 'utf8')).pledges || [];
-    } catch (e) {
-      if (e.code !== 'ENOENT') console.error('Could not read the pledges:', e.message);
-    }
+    this.list = this.store.load().pledges || [];
   }
 
   saveNow() {
     clearTimeout(this.saveTimer);
     this.saveTimer = null;
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      const tmp = `${this.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ pledges: this.list }));
-      fs.renameSync(tmp, this.file);
+      this.store.save({ pledges: this.list });
     } catch (e) {
       console.error('Saving the pledges failed:', e.message);
     }
@@ -56,23 +45,6 @@ class Pledges {
 
   mine(userId) { return this.list.filter(p => p.from === userId || p.to === userId).sort((a, b) => b.at - a.at); }
   open(userId) { return this.list.filter(p => (p.from === userId || p.to === userId) && (p.status === 'owed' || p.status === 'sent')).length; }
-
-  // What a user owes in USDT and hasn't even marked paid. level 1: past LIMIT_DAYS (no USDT
-  // tables, marked a debtor); level 2: past BAN_DAYS (banned from the games until it's paid).
-  debtOf(userId, now = Date.now()) {
-    const owed = this.list.filter(p => p.kind === 'usdt' && p.from === userId && p.status === 'owed');
-    if (!owed.length) return { level: 0, count: 0, cents: 0 };
-    const oldest = Math.min(...owed.map(p => p.at));
-    const age = now - oldest;
-    return {
-      level: age >= BAN_DAYS * DAY ? 2 : age >= LIMIT_DAYS * DAY ? 1 : 0,
-      count: owed.length,
-      cents: owed.reduce((a, p) => a + p.cents, 0),
-      oldest,
-      limitAt: oldest + LIMIT_DAYS * DAY,
-      banAt: oldest + BAN_DAYS * DAY,
-    };
-  }
 
   // sent: by the one who owes (for USDT with the transaction hash); received / forgiven: by the one owed
   mark(id, userId, status, tx = '') {
@@ -101,4 +73,4 @@ class Pledges {
   }
 }
 
-module.exports = { Pledges, LIMIT_DAYS, BAN_DAYS };
+module.exports = { Pledges };

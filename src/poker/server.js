@@ -9,17 +9,18 @@ const { PokerRoom } = require('./game');
 const fair = require('./fair');
 const { GameError } = require('../game');
 const { limitSocket } = require('../ratelimit');
+const { roomStore } = require('../db');
 const { createVoiceHub } = require('../voice');
 
 const ROOM_IDLE_MS = 60 * 60 * 1000;
 const STICKERS = ['nh', 'gg', 'ship', 'fish', 'tilt', 'bluff', 'snap', 'cry', 'lucky', 'think', 'allin', 'cooler'];
 
-function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onArchive = () => {}, onStart = () => {}, onSettle = () => {}, wallet, usdtOk, debtor }) {
+function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onArchive = () => {}, onStart = () => {}, onSettle = () => {}, wallet, usdtOk }) {
   const voiceAllowed = room => users.features.voice && room.settings.voice !== false;
   const nsp = io.of('/poker');
   const voice = createVoiceHub(nsp);
   const rooms = new Map(); // code -> PokerRoom
-  const stateFile = path.join(dataDir, 'poker-rooms.json');
+  const saved = roomStore(dataDir, 'poker', 'poker-rooms.json');
   let saveTimer = null;
   let shuttingDown = false;
 
@@ -27,10 +28,7 @@ function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onA
     clearTimeout(saveTimer);
     saveTimer = null;
     try {
-      fs.mkdirSync(dataDir, { recursive: true });
-      const tmp = `${stateFile}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify([...rooms.values()]));
-      fs.renameSync(tmp, stateFile);
+      saved.save([...rooms.values()]);
     } catch (e) {
       console.error('Saving poker rooms failed:', e.message);
     }
@@ -53,7 +51,6 @@ function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onA
     onSettle,
     wallet,
     usdtOk,
-    debtor,
     features: () => users.features,
     fair,
   });
@@ -67,7 +64,7 @@ function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onA
   }
 
   try {
-    for (const data of JSON.parse(fs.readFileSync(stateFile, 'utf8'))) {
+    for (const data of saved.load()) {
       try { rooms.set(data.code, PokerRoom.restore(data, roomOptions())); } catch (e) { console.error(`Could not restore poker room ${data.code}:`, e.message); }
     }
     console.log(`Restored ${rooms.size} poker room(s)`);
@@ -85,7 +82,6 @@ function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onA
     const me = () => {
       const user = users.users[socket.data.userId];
       if (!user) throw new GameError('err.loginRequired');
-      if (users.banned(user.id)) throw new GameError('err.debt.banned');
       return user;
     };
     const attach = (room, member) => {
@@ -127,7 +123,6 @@ function attachPoker({ io, app, users, api, currentUser, dataDir, codeTaken, onA
       const room = rooms.get(String(code || '').toUpperCase());
       const member = room?.byToken(token);
       if (!member) throw new GameError('err.sessionExpired');
-      if (member.userId && users.banned(member.userId)) throw new GameError('err.debt.banned');
       attach(room, member);
     });
     voice.attach(socket, ctx, { allowed: voiceAllowed });

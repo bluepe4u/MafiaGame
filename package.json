@@ -18,8 +18,11 @@
   },
   "homepage": "https://github.com/bluepe4u/MafiaGame#readme",
   "dependencies": {
+    "@socket.io/redis-adapter": "^8.3.0",
     "express": "^5.2.1",
+    "nodemailer": "^6.10.1",
     "qrcode": "^1.5.4",
+    "redis": "^4.7.1",
     "socket.io": "^4.8.4"
   },
   "private": true,

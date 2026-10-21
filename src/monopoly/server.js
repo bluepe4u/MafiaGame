@@ -8,6 +8,7 @@ const path = require('path');
 const { MonoRoom } = require('./game');
 const { GameError } = require('../game');
 const { limitSocket } = require('../ratelimit');
+const { roomStore } = require('../db');
 const { createVoiceHub } = require('../voice');
 
 const ROOM_IDLE_MS = 60 * 60 * 1000;
@@ -17,7 +18,7 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
   const nsp = io.of('/monopoly');
   const voice = createVoiceHub(nsp);
   const rooms = new Map(); // code -> MonoRoom
-  const stateFile = path.join(dataDir, 'monopoly-rooms.json');
+  const saved = roomStore(dataDir, 'mono', 'monopoly-rooms.json');
   let saveTimer = null;
   let shuttingDown = false;
 
@@ -25,10 +26,7 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
     clearTimeout(saveTimer);
     saveTimer = null;
     try {
-      fs.mkdirSync(dataDir, { recursive: true });
-      const tmp = `${stateFile}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify([...rooms.values()]));
-      fs.renameSync(tmp, stateFile);
+      saved.save([...rooms.values()]);
     } catch (e) {
       console.error('Saving Monopoly rooms failed:', e.message);
     }
@@ -60,7 +58,7 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
   }
 
   try {
-    for (const data of JSON.parse(fs.readFileSync(stateFile, 'utf8'))) {
+    for (const data of saved.load()) {
       try { rooms.set(data.code, MonoRoom.restore(data, roomOptions())); } catch (e) { console.error(`Could not restore Monopoly room ${data.code}:`, e.message); }
     }
     console.log(`Restored ${rooms.size} Monopoly room(s)`);
@@ -78,7 +76,6 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
     const me = () => {
       const user = users.users[socket.data.userId];
       if (!user) throw new GameError('err.loginRequired');
-      if (users.banned(user.id)) throw new GameError('err.debt.banned');
       return user;
     };
     const attach = (room, member) => {
@@ -120,7 +117,6 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
       const room = rooms.get(String(code || '').toUpperCase());
       const member = room?.byToken(token);
       if (!member) throw new GameError('err.sessionExpired');
-      if (member.userId && users.banned(member.userId)) throw new GameError('err.debt.banned');
       attach(room, member);
     });
     voice.attach(socket, ctx, { allowed: voiceAllowed });

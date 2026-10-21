@@ -21,9 +21,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23e0464e'/%3E%3Cpath d='M16 6c3 4 8 7 8 11a4 4 0 0 1-7 2.5L18 25h-4l1-5.5A4 4 0 0 1 8 17c0-4 5-7 8-11z' fill='%23fff'/%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..800&family=Geist+Mono:wght@500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/geist-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/poker/poker.css">
 </head>
@@ -96,6 +96,15 @@
           <button id="watchBtn" class="ghost" data-i18n="ui.watch"></button>
         </div>
       </div>
+      <!-- for visitors who aren't logged in, and for search engines -->
+      <article class="seo-about card">
+        <h2 data-i18n="seo.poker.h">Free Texas hold&#x27;em with your friends</h2>
+        <p data-i18n="seo.poker.intro">A private no-limit hold&#x27;em table for your group, right in the browser: invite friends with a link, play for free site chips, and see the stories of the big hands. Every deck is provably fair, so anyone can check after the session that nobody stacked the deck.</p>
+        <ol class="seo-steps"><li data-i18n="seo.poker.s0">Create a table and share the link: 2–9 players.</li><li data-i18n="seo.poker.s1">Set the stack, blinds and the turn clock, then deal.</li><li data-i18n="seo.poker.s2">After the session, check every deal and compare stats in the leaderboard.</li></ol>
+        <div class="seo-faq"><details><summary data-i18n="seo.poker.q0">Is it real money?</summary><p data-i18n="seo.poker.a0">No. You play for free site chips with no money value: everyone gets 500 to start and more every day.</p></details><details><summary data-i18n="seo.poker.q1">What does &quot;provably fair&quot; mean?</summary><p data-i18n="seo.poker.a1">Before each hand the server commits to a secret seed, each browser adds its own, and after the session the seeds are revealed so anyone can recompute every deck.</p></details><details><summary data-i18n="seo.poker.q2">Do I need to install anything?</summary><p data-i18n="seo.poker.a2">No, it runs in any modern browser on phone or desktop.</p></details></div>
+        <p class="seo-more muted small-text"><a href="/" data-i18n="site.mafia">Mafia online</a> · <a href="/tycoon/" data-i18n="site.monopoly">Tycoon</a> · <a href="/spy/" data-i18n="site.spyfall">Find the spy</a> · <a href="/kingdoms/" data-i18n="site.citadels">Kingdoms</a></p>
+      </article>
+      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Poker with friends", "url": "https://bluepeau.club/poker/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "A private no-limit hold'em table for your group, right in the browser: invite friends with a link, play for free site chips, and see the stories of the big hands. Every deck is provably fair, so anyone can check after the session that nobody stacked the deck."}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it real money?", "acceptedAnswer": {"@type": "Answer", "text": "No. You play for free site chips with no money value: everyone gets 500 to start and more every day."}}, {"@type": "Question", "name": "What does \"provably fair\" mean?", "acceptedAnswer": {"@type": "Answer", "text": "Before each hand the server commits to a secret seed, each browser adds its own, and after the session the seeds are revealed so anyone can recompute every deck."}}, {"@type": "Question", "name": "Do I need to install anything?", "acceptedAnswer": {"@type": "Answer", "text": "No, it runs in any modern browser on phone or desktop."}}]}]</script>
     </section>
 
     <!-- lobby -->

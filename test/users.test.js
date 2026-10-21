@@ -7,8 +7,10 @@ const os = require('os');
 const path = require('path');
 const { UserStore, imageType } = require('../src/users');
 
-// every registration needs an invite: make a fresh single-use one
-const reg = (store, username, password) => store.register(username, password, store.createInvite(null));
+// a new account: a username, a password and an email made from the name
+let mailN = 0;
+const mail = () => `player${++mailN}@example.com`;
+const reg = (store, username, password) => store.register(username, password, null, { email: mail() });
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mafia-users-'));
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(20)]);
 
@@ -168,10 +170,11 @@ test('admin fixes: rename (unique names) and a temporary password that logs out 
   assert.ok(store.login('дима к', temp).token);
 });
 
-test('invites: required, single or multi use, admin bootstrap only on an empty site', () => {
+test('invites: optional while sign-up is open, single or multi use, admin bootstrap only on an empty site', () => {
   const dir = tmp();
   const store = new UserStore(dir);
-  assert.throws(() => store.register('Ann', 'pass'), /err\.inviteRequired/);
+  store.setFeatures({ signup: false });
+  assert.throws(() => store.register('Ann', 'pass', null, { email: mail() }), /err\.inviteRequired/);
   assert.throws(() => store.register('Ann', 'pass', 'NOPE'), /err\.inviteInvalid/);
   const boot = store.bootstrapInvite(dir);
   assert.strictEqual(fs.readFileSync(boot.file, 'utf8').trim(), boot.code);
@@ -180,11 +183,11 @@ test('invites: required, single or multi use, admin bootstrap only on an empty s
   assert.throws(() => store.register('Bob', 'pass', boot.code), /err\.inviteInvalid/);
   assert.strictEqual(store.bootstrapInvite(dir), null);
   const code = store.createInvite(admin.id, { maxUses: 2, tableId: 'T1' });
-  const r = store.register('Bob', 'pass', code);
+  const r = store.register('Bob', 'pass', code, { email: mail() });
   assert.strictEqual(r.invite.tableId, 'T1');
   assert.ok(!r.user.admin);
-  store.register('Cid', 'pass', code);
-  assert.throws(() => store.register('Dan', 'pass', code), /err\.inviteInvalid/);
+  store.register('Cid', 'pass', code, { email: mail() });
+  assert.throws(() => store.register('Dan', 'pass', code, { email: mail() }), /err\.inviteInvalid/);
   assert.deepStrictEqual(store.inviteList().find(i => i.code === code).usedBy, ['Bob', 'Cid']);
   store.saveNow();
   assert.ok(new UserStore(dir).invites[code]);
@@ -231,10 +234,10 @@ test('personal touches: admin titles and badges, your own birthday (birthday hat
 test('site features: defaults (family off), changed by the admin, saved', () => {
   const dir = tmp();
   const store = new UserStore(dir);
-  assert.deepStrictEqual(store.features, { family: false, voice: true, transcripts: true });
+  assert.deepStrictEqual(store.features, { family: false, voice: true, transcripts: true, signup: true });
   store.setFeatures({ family: true, voice: false, bogus: true });
   store.saveNow();
-  assert.deepStrictEqual(new UserStore(dir).features, { family: true, voice: false, transcripts: true });
+  assert.deepStrictEqual(new UserStore(dir).features, { family: true, voice: false, transcripts: true, signup: true });
 });
 
 test('site chips: the welcome gift, the daily bonus with its streak, achievements paid once, USDT addresses', () => {
@@ -255,4 +258,56 @@ test('site chips: the welcome gift, the daily bonus with its streak, achievement
   store.setUsdt(u, { network: 'trc20', address: 'TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE' });
   assert.ok(store.publicProfile(u).usdtSet);
   assert.strictEqual(store.publicProfile(u).usdt, undefined); // the address itself stays private
+});
+
+test('email: required for new accounts, unique, login by email, optional for older accounts', () => {
+  const dir = tmp();
+  const store = new UserStore(dir);
+  assert.throws(() => store.register('Ann', 'pass', null, {}), /err\.emailInvalid/);
+  assert.throws(() => store.register('Ann', 'pass', null, { email: 'not-an-email' }), /err\.emailInvalid/);
+  const { user: ann } = store.register('Ann', 'pass', null, { email: '  Ann@Example.COM ' });
+  assert.strictEqual(ann.email, 'ann@example.com');
+  assert.strictEqual(ann.emailVerified, false);
+  assert.throws(() => store.register('Bob', 'pass', null, { email: 'ANN@example.com' }), /err\.emailTaken/);
+  assert.strictEqual(store.login('ann@example.com', 'pass').user.id, ann.id);
+  // the public profile never shows it; the owner's own view does
+  assert.ok(!('email' in store.publicProfile(ann)));
+  assert.strictEqual(store.selfProfile(ann).email, 'ann@example.com');
+  // confirming only works for the address the link was sent to
+  assert.strictEqual(store.confirmEmail(ann.id, 'old@example.com'), null);
+  assert.ok(store.confirmEmail(ann.id, 'ann@example.com').emailVerified);
+  // an account from before emails: adds one later with its password, can remove it again
+  const { user: old } = store.register('Old', 'pass', null, { email: 'tmp@example.com' });
+  delete old.email;
+  delete old.emailVerified;
+  assert.throws(() => store.setEmail(old, 'old@example.com', 'wrong'), /err\.badPassword/);
+  store.setEmail(old, 'old@example.com', 'pass');
+  assert.strictEqual(old.email, 'old@example.com');
+  assert.strictEqual(old.emailVerified, false);
+  store.setEmail(old, '', 'pass');
+  assert.ok(!old.email);
+  // a reset by email: a new password, the old sessions gone, the email proven
+  const { token } = store.login('Ann', 'pass');
+  const r = store.resetByEmail(ann.id, 'newpass');
+  assert.strictEqual(store.byToken(token), null);
+  assert.ok(store.byToken(r.token));
+  assert.ok(store.login('Ann', 'newpass').token);
+  store.saveNow();
+  assert.strictEqual(new UserStore(dir).byEmail('ANN@example.com').id, ann.id);
+});
+
+test('database: the old users.json is imported once, as it was', () => {
+  const dir = tmp();
+  const legacy = { users: { u1: { id: 'u1', username: 'Вася', salt: 's', hash: 'h', likes: 3, dislikes: 1, createdAt: 1 } }, sessions: { abc: 'u1' }, invites: {}, ratingLog: [{ from: 'u1', to: 'u1', value: 1, at: 1 }], features: { family: true } };
+  fs.writeFileSync(path.join(dir, 'users.json'), JSON.stringify(legacy));
+  const store = new UserStore(dir);
+  assert.deepStrictEqual(store.users, legacy.users);
+  assert.deepStrictEqual(store.sessions, legacy.sessions);
+  assert.strictEqual(store.features.family, true);
+  assert.strictEqual(store.features.signup, true);
+  assert.ok(!fs.existsSync(path.join(dir, 'users.json')));
+  assert.ok(fs.existsSync(path.join(dir, 'users.json.migrated')));
+  store.users.u1.likes = 4;
+  store.saveNow();
+  assert.strictEqual(new UserStore(dir).users.u1.likes, 4);
 });

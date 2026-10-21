@@ -1,7 +1,7 @@
 'use strict';
 
-// Accounts for a small group of friends: username + password, no email.
-// Everything lives in one JSON file; avatars are image files next to it.
+// Accounts: username + password, and an email (optional for older accounts) for password resets.
+// Saved in the site database (src/db.js); avatars are image files next to it.
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -9,6 +9,7 @@ const path = require('path');
 const { GameError } = require('./game');
 const { ITEMS, EQUIP_SLOTS } = require('./items');
 const { ACHIEVEMENTS, dailyBonus } = require('./achievements');
+const { Saved } = require('./db');
 
 const USERNAME_RE = /^[\p{L}\p{N} _.-]{2,20}$/u;
 const MIN_PASSWORD = 4;
@@ -17,7 +18,10 @@ const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
 const RATING_LOG_KEEP = 5000;
 const LOWEST_SCORE = -10; // the bottom decency status starts here
-const DEFAULT_FEATURES = { family: false, voice: true, transcripts: true };
+// signup: anyone may create an account (off: only with an invite from the admin)
+const DEFAULT_FEATURES = { family: false, voice: true, transcripts: true, signup: true };
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+const normEmail = e => String(e || '').trim().toLowerCase();
 const MAX_TITLE = 32;
 const MAX_BADGES = 12;
 const THEMES = ['ocean', 'violet', 'sunset', 'forest', 'rose', 'mono'];
@@ -78,10 +82,7 @@ const emptyStats = () => ({
 
 class UserStore {
   constructor(dir) {
-    // set by the server: unpaid USDT debts ({ level }: 1 = no USDT tables, marked; 2 = banned)
-    this.debtOf = () => ({ level: 0 });
-    this.banned = () => false;
-    this.file = path.join(dir, 'users.json');
+    this.store = new Saved(dir, 'users', { users: 'map', sessions: 'map', invites: 'map', ratingLog: 'value', features: 'value' }, 'users.json');
     this.avatarDir = path.join(dir, 'avatars');
     this.users = {}; // id -> { id, username, salt, hash, avatar, likes, dislikes, createdAt }
     this.sessions = {}; // sha256(token) -> userId
@@ -91,26 +92,19 @@ class UserStore {
     this.features = { ...DEFAULT_FEATURES };
     this.failures = new Map(); // username (lowercase) -> [timestamps]
     this.saveTimer = null;
-    try {
-      const data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-      this.users = data.users || {};
-      this.sessions = data.sessions || {};
-      this.ratingLog = data.ratingLog || [];
-      this.invites = data.invites || {};
-      this.features = { ...DEFAULT_FEATURES, ...data.features };
-    } catch (e) {
-      if (e.code !== 'ENOENT') console.error('Could not read users:', e.message);
-    }
+    const data = this.store.load();
+    this.users = data.users || {};
+    this.sessions = data.sessions || {};
+    this.ratingLog = data.ratingLog || [];
+    this.invites = data.invites || {};
+    this.features = { ...DEFAULT_FEATURES, ...data.features };
   }
 
   saveNow() {
     clearTimeout(this.saveTimer);
     this.saveTimer = null;
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      const tmp = `${this.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ users: this.users, sessions: this.sessions, ratingLog: this.ratingLog, invites: this.invites, features: this.features }));
-      fs.renameSync(tmp, this.file);
+      this.store.save({ users: this.users, sessions: this.sessions, ratingLog: this.ratingLog, invites: this.invites, features: this.features });
     } catch (e) {
       console.error('Saving users failed:', e.message);
     }
@@ -132,24 +126,77 @@ class UserStore {
     return token;
   }
 
-  // Registration needs an invite code (from the admin); it may also seat the newcomer at a table.
-  register(username, password, inviteCode) {
+  byEmail(email) {
+    const e = normEmail(email);
+    return e ? Object.values(this.users).find(u => u.email === e) : undefined;
+  }
+
+  cleanEmail(email, user = null) {
+    const e = normEmail(email);
+    if (!EMAIL_RE.test(e)) throw new GameError('err.emailInvalid');
+    const other = this.byEmail(e);
+    if (other && other !== user) throw new GameError('err.emailTaken');
+    return e;
+  }
+
+  // A new account: username, email and password. An invite is optional while sign-up is open (it
+  // may seat the newcomer at a table, or make the first admin); with sign-up closed it's required.
+  // Accounts made before emails existed keep working without one.
+  register(username, password, inviteCode, { email } = {}) {
     username = String(username || '').trim().replace(/\s+/g, ' ');
     password = String(password || '');
     const code = String(inviteCode || '').trim().toUpperCase();
-    const invite = this.invites[code];
-    if (!code) throw new GameError('err.inviteRequired');
-    if (!invite || invite.uses >= invite.maxUses) throw new GameError('err.inviteInvalid');
+    const invite = code ? this.invites[code] : null;
+    if (code && (!invite || invite.uses >= invite.maxUses)) throw new GameError('err.inviteInvalid');
+    if (!invite && !this.features.signup) throw new GameError('err.inviteRequired');
     if (!USERNAME_RE.test(username)) throw new GameError('err.usernameInvalid', { min: 2, max: 20 });
+    // the first admin (the invite from the data dir) may skip the email
+    const mail = invite?.admin && !email ? null : this.cleanEmail(email);
     if (password.length < MIN_PASSWORD) throw new GameError('err.passwordShort', { min: MIN_PASSWORD });
     if (this.byName(username)) throw new GameError('err.usernameTaken');
-    const user = { id: crypto.randomBytes(8).toString('hex'), username, ...hashPassword(password), avatar: null, likes: 0, dislikes: 0, createdAt: Date.now() };
-    if (invite.admin) user.admin = true;
+    const user = { id: crypto.randomBytes(8).toString('hex'), username, email: mail, emailVerified: false, ...hashPassword(password), avatar: null, likes: 0, dislikes: 0, createdAt: Date.now() };
+    if (invite?.admin) user.admin = true;
     this.users[user.id] = user;
-    invite.uses += 1;
-    invite.usedBy.push(user.id);
+    if (invite) {
+      invite.uses += 1;
+      invite.usedBy.push(user.id);
+    }
     const recoveryCode = this.newRecoveryCode(user);
     return { user, token: this.newSession(user), invite, recoveryCode };
+  }
+
+  // ---------- email: optional for older accounts, needs the password to change ----------
+  setEmail(user, email, password) {
+    if (!passwordMatches(String(password || ''), user)) throw new GameError('err.badPassword');
+    if (!String(email || '').trim()) {
+      delete user.email;
+      delete user.emailVerified;
+    } else {
+      const e = this.cleanEmail(email, user);
+      if (e !== user.email) { user.email = e; user.emailVerified = false; }
+    }
+    this.save();
+  }
+
+  // the link from the confirmation email (only for the address it was sent to)
+  confirmEmail(userId, email) {
+    const user = this.users[userId];
+    if (!user || !user.email || user.email !== email) return null;
+    user.emailVerified = true;
+    this.save();
+    return user;
+  }
+
+  // the link from the reset email: a new password, every device logged out, the email proven
+  resetByEmail(userId, newPassword) {
+    const user = this.users[userId];
+    if (!user) throw new GameError('err.badResetLink');
+    if (String(newPassword || '').length < MIN_PASSWORD) throw new GameError('err.passwordShort', { min: MIN_PASSWORD });
+    Object.assign(user, hashPassword(String(newPassword)));
+    if (user.email) user.emailVerified = true;
+    for (const [h, id] of Object.entries(this.sessions)) if (id === user.id) delete this.sessions[h];
+    this.failures.delete(user.username.toLowerCase());
+    return { user, token: this.newSession(user) };
   }
 
   // ---------- self-service password reset (no email): a recovery code shown once ----------
@@ -221,7 +268,8 @@ class UserStore {
     const now = Date.now();
     const recent = (this.failures.get(key) || []).filter(t => now - t < LOGIN_WINDOW_MS);
     if (recent.length >= LOGIN_MAX_FAILURES) throw new GameError('err.tooManyLogins');
-    const user = this.byName(key);
+    // the username or the email
+    const user = this.byName(key) || this.byEmail(key);
     if (!user || !passwordMatches(String(password || ''), user)) {
       this.failures.set(key, [...recent, now]);
       throw new GameError('err.badLogin');
@@ -347,6 +395,7 @@ class UserStore {
   adminView(user) {
     return {
       ...this.publicProfile(user),
+      email: user.email || null, emailVerified: !!user.emailVerified,
       rawLikes: user.likes, rawDislikes: user.dislikes,
       bonus: user.bonus || 0, dislikeShield: !!user.dislikeShield, admin: !!user.admin,
       dislikedBy: this.dislikedBy(user.id),
@@ -598,6 +647,12 @@ class UserStore {
     };
   }
 
+  // The user's own view: the public profile and the email (never shown to anyone else).
+  selfProfile(user) {
+    if (!user) return null;
+    return { ...this.publicProfile(user), email: user.email || null, emailVerified: !!user.emailVerified };
+  }
+
   // What other players (and the user) get to see.
   publicProfile(user) {
     if (!user) return null;
@@ -618,7 +673,6 @@ class UserStore {
       pokerStats: { ...emptyPokerStats(), ...user.pokerStats },
       chips: typeof user.chips === 'number' ? user.chips : null,
       usdtSet: !!user.usdt,
-      debtor: this.debtOf(user.id).level >= 1,
       admin: !!user.admin,
       hasRecovery: !!user.recovery,
       inventory,

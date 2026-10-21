@@ -1,35 +1,27 @@
 'use strict';
 
 // The game night archive: every finished game (both games), grouped into "nights" — games at
-// the same table with less than a few hours between them. Saved to archive.json.
+// the same table with less than a few hours between them. Saved in the site database.
 
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+const { Saved } = require('./db');
 
 const KEEP = 5000; // games; the oldest drop off
 const NIGHT_GAP_MS = 5 * 60 * 60 * 1000; // a longer break starts a new night
 
 class Archive {
   constructor(dir) {
-    this.file = path.join(dir, 'archive.json');
+    this.store = new Saved(dir, 'archive', { games: 'list' }, 'archive.json');
     this.games = []; // oldest first
     this.saveTimer = null;
-    try {
-      this.games = JSON.parse(fs.readFileSync(this.file, 'utf8')).games || [];
-    } catch (e) {
-      if (e.code !== 'ENOENT') console.error('Could not read the archive:', e.message);
-    }
+    this.games = this.store.load().games || [];
   }
 
   saveNow() {
     clearTimeout(this.saveTimer);
     this.saveTimer = null;
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      const tmp = `${this.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ games: this.games }));
-      fs.renameSync(tmp, this.file);
+      this.store.save({ games: this.games });
     } catch (e) {
       console.error('Saving the archive failed:', e.message);
     }

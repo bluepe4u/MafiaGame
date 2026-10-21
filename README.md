@@ -31,7 +31,7 @@ The script installs Node.js 22 (if needed), copies the app to `/opt/mafia`, runs
 **Update:** `git pull && sudo ./deploy/install.sh <same args>`.
 **Logs:** `journalctl -u mafia -f` · **Restart:** `sudo systemctl restart mafia`
 
-Rooms are saved to disk (`/var/lib/mafia`, or `DATA_DIR`) about once a second and on shutdown, so a restart or update doesn't end games in progress: players' pages reconnect on their own and the game picks up where it was. Run a single instance — the app can't be load-balanced across processes.
+Rooms are saved in the database (`/var/lib/mafia`, or `DATA_DIR`) about once a second and on shutdown, so a restart or update doesn't end games in progress: players' pages reconnect on their own and the game picks up where it was. Run a single instance — the app can't be load-balanced across processes.
 
 **Backups:** the installer schedules a nightly backup (04:00) of `/var/lib/mafia` — accounts,
 photos and saved rooms — as dated archives in `/var/backups/mafia`, kept 14 days. To also keep them
@@ -52,15 +52,41 @@ daily-salted hash and IPs are never stored.
 
 Old game addresses (`/monopoly/`, `/citadels/`, `/spyfall/`) redirect to the new ones.
 
+**Fonts** are served from the site itself (`public/fonts`, SIL Open Font License), each with Latin
+and Cyrillic: Geist and Geist Mono for text, Oranienbaum for headings (Cormorant for their italics),
+Rubik Wet Paint for the Halloween theme. Nothing loads from Google.
+
 Back up now: `sudo /opt/mafia/deploy/backup.sh` · list / restore: `sudo /opt/mafia/deploy/restore.sh [latest | <file>]`
 (the current data is moved aside, not deleted).
 
-**Accounts are by invite.** On a fresh install (no accounts yet) the server writes a one-time
-admin invite code to `/var/lib/mafia/admin-invite.txt`; register with it to become the admin, then
-create invites for everyone else in the admin panel (Приглашения / Invites) — each is a link that
-opens registration with the code filled in, optionally seating the newcomer at a table.
+**Accounts:** username, email and password. Anyone can sign up while "Open sign-up" is on in the
+admin panel (Функции / Features); turned off, registration needs an invite again. Accounts made
+before emails existed keep working without one and can add it in the profile. On a fresh install
+(no accounts yet) the server writes a one-time admin invite code to `/var/lib/mafia/admin-invite.txt`;
+register with it to become the admin (the email is optional for that one). Invites still work as
+links that seat a newcomer at a table.
 
-**Tables:** a group's permanent place (one link that never changes). Whoever starts the next game
+**Email** (confirming addresses, password reset links): add an SMTP account from any provider to
+`/etc/mafia.env`, then `systemctl restart mafia`:
+
+```sh
+SMTP_URL=smtps://user:password@smtp.example.com:465
+MAIL_FROM=bluepeau.club <hello@bluepeau.club>
+```
+
+Without `SMTP_URL` the messages are printed to the log instead (`journalctl -u mafia`). Reset links
+work once, for 30 minutes; `PUBLIC_URL` (set by the installer) is the address the links point to.
+Signing up, logging in and reset requests are rate-limited per address. Old recovery codes keep working.
+
+**Storage:** everything lives in one SQLite database, `/var/lib/mafia/site.db` (Node's built-in
+`node:sqlite`, `src/db.js`): each record is one row, and saving writes only what changed. On the
+first start after the update the old JSON files are imported once and renamed to `*.json.migrated`.
+**Redis** (installed by the script, localhost only, `REDIS_URL`) keeps rate limits and the one-time
+email links, and backs the Socket.IO adapter; without it the app keeps them in memory. Games in
+progress still live in the single app process.
+
+**Tables:** a group's permanent place (one link that never changes). Private by default (only people
+with the link); the owner can make a table public, and then it's listed for everyone to find and join. Whoever starts the next game
 from the table — in any of the games — takes everyone at the table into the new room.
 
 **Voice chat:** push-to-talk (or an open mic) straight between the browsers in a room (WebRTC).
@@ -105,8 +131,7 @@ accounts, photos and decency status with Mafia, and keeps its own stats and lead
 - Lobby settings: starting cash, turn timer (idle turns play themselves), double salary on GO,
   auctions, Free Parking jackpot, no rent in jail.
 - `src/monopoly/` holds the board, the rules engine (no I/O, tested in `test/monopoly.test.js`,
-  including a random-play test) and its Socket.IO namespace; rooms are saved to
-  `monopoly-rooms.json` in the data directory.
+  including a random-play test) and its Socket.IO namespace; rooms are saved in the database.
 
 ## Шпион (Find the spy)
 
@@ -144,7 +169,7 @@ house rules sheet: Witch, Thief, Magician, King, Abbot, Merchant, Architect, Dip
 - Same accounts, tables, voice chat, stats (profile tab), leaderboard, archive and admin tools as
   the other games; `src/citadels/` holds the cards, the engine (no I/O, tested in
   `test/citadels.test.js`, including random games played to the end) and its namespace; rooms are
-  saved to `citadels-rooms.json`.
+  saved in the database.
 
 ## Покер (Texas hold'em)
 
@@ -174,12 +199,7 @@ house rules sheet: Witch, Thief, Magician, King, Abbot, Merchant, Architect, Dip
   wallet to wallet and pastes the transaction hash (linked to the explorer), the receiver confirms.
   The site never holds money, and site chips and USDT never convert into each other
   (`src/pledges.js`, `src/achievements.js`).
-- Unpaid USDT debts: a debt the payer hasn't even marked paid (or that the receiver says didn't
-  arrive — then it counts from the original date) closes the USDT tables to the debtor after
-  `DEBT_LIMIT_DAYS` (3) and shows everyone a "Debtor" mark (at the table, in the lobby, in the
-  profile); after `DEBT_BAN_DAYS` (14) the debtor can't create, join or return to a room in any
-  game, but can still log in and pay. Marking it paid lifts the limits at once. The debtor sees a
-  banner on every page with the amount and the dates.
+- Nothing about USDT is enforced: the site only shows who owes whom and lets players mark payments.
 - GGPoker-style controls: presets (2.5/3/4 BB, ⅓ ½ ¾ pot, pot, max), a slider, pre-actions
   (check/fold, call, call any), F/C/R keys, amounts in chips or big blinds, a four-colour deck,
   drawn poker stickers instead of emoji, the hand history with each street's equity.

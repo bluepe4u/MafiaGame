@@ -53,14 +53,13 @@ class PokerRoom {
   constructor({
     code, rng = Math.random, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout,
     profileOf = () => null, onGameEnd = () => {}, onStart = () => {}, onArchive = () => {}, onSettle = () => {}, tableId = null,
-    wallet = OPEN_WALLET, usdtOk = () => true, debtor = () => false, fair = null,
+    wallet = OPEN_WALLET, usdtOk = () => true, fair = null,
     features = () => ({ family: true, voice: true, transcripts: true }),
   } = {}) {
     this.onSettle = onSettle;
     this.fair = fair; // provably fair decks (src/poker/fair.js); without it the deck comes from rng
     this.wallet = wallet; // site chips: { balance(userId), take(userId, n, reason, extra) -> bool, give(userId, n, reason, extra) }
     this.usdtOk = usdtOk; // userId -> has a USDT address to be paid at
-    this.debtor = debtor; // userId -> owes USDT for too long: no USDT tables
     this.code = code;
     this.rng = rng;
     this.onChange = onChange;
@@ -320,8 +319,6 @@ class PokerRoom {
       this.assert(!short.length, 'err.pk.noChips', { names: names(short), n: this.settings.startStack });
     } else {
       // real money: everyone agrees to the buy-in (ready) and has an address to be paid at
-      const debtors = this.players.filter(p => p.userId && this.debtor(p.userId));
-      this.assert(!debtors.length, 'err.pk.debtors', { names: names(debtors) });
       const noAddr = this.players.filter(p => !p.userId || !this.usdtOk(p.userId));
       this.assert(!noAddr.length, 'err.pk.usdtNoAddress', { names: names(noAddr) });
       const notReady = this.players.filter(p => !p.ready);
@@ -1038,7 +1035,7 @@ class PokerRoom {
       return {
         id: p.id, userId: p.userId, name: p.name, connected: p.connected, ready: !!p.ready,
         avatar: profile?.avatar || null, score: profile ? profile.score : null, cos: profile?.equipped || {}, title: profile?.title || null,
-        chips: profile ? profile.chips : null, usdtSet: !!profile?.usdtSet, debtor: !!profile?.debtor,
+        chips: profile ? profile.chips : null, usdtSet: !!profile?.usdtSet,
       };
     };
     const view = {

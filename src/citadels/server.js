@@ -9,6 +9,7 @@ const { CitRoom } = require('./game');
 const { CHARACTERS, RANK_CHOICES, DISTRICTS } = require('./cards');
 const { GameError } = require('../game');
 const { limitSocket } = require('../ratelimit');
+const { roomStore } = require('../db');
 const { createVoiceHub } = require('../voice');
 
 const ROOM_IDLE_MS = 60 * 60 * 1000;
@@ -18,7 +19,7 @@ function attachCitadels({ io, app, users, api, currentUser, dataDir, codeTaken, 
   const nsp = io.of('/citadels');
   const voice = createVoiceHub(nsp);
   const rooms = new Map(); // code -> CitRoom
-  const stateFile = path.join(dataDir, 'citadels-rooms.json');
+  const saved = roomStore(dataDir, 'cit', 'citadels-rooms.json');
   let saveTimer = null;
   let shuttingDown = false;
 
@@ -26,10 +27,7 @@ function attachCitadels({ io, app, users, api, currentUser, dataDir, codeTaken, 
     clearTimeout(saveTimer);
     saveTimer = null;
     try {
-      fs.mkdirSync(dataDir, { recursive: true });
-      const tmp = `${stateFile}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify([...rooms.values()]));
-      fs.renameSync(tmp, stateFile);
+      saved.save([...rooms.values()]);
     } catch (e) {
       console.error('Saving Citadels rooms failed:', e.message);
     }
@@ -61,7 +59,7 @@ function attachCitadels({ io, app, users, api, currentUser, dataDir, codeTaken, 
   }
 
   try {
-    for (const data of JSON.parse(fs.readFileSync(stateFile, 'utf8'))) {
+    for (const data of saved.load()) {
       try { rooms.set(data.code, CitRoom.restore(data, roomOptions())); } catch (e) { console.error(`Could not restore Citadels room ${data.code}:`, e.message); }
     }
     console.log(`Restored ${rooms.size} Citadels room(s)`);
@@ -79,7 +77,6 @@ function attachCitadels({ io, app, users, api, currentUser, dataDir, codeTaken, 
     const me = () => {
       const user = users.users[socket.data.userId];
       if (!user) throw new GameError('err.loginRequired');
-      if (users.banned(user.id)) throw new GameError('err.debt.banned');
       return user;
     };
     const attach = (room, member) => {
@@ -121,7 +118,6 @@ function attachCitadels({ io, app, users, api, currentUser, dataDir, codeTaken, 
       const room = rooms.get(String(code || '').toUpperCase());
       const member = room?.byToken(token);
       if (!member) throw new GameError('err.sessionExpired');
-      if (member.userId && users.banned(member.userId)) throw new GameError('err.debt.banned');
       attach(room, member);
     });
     voice.attach(socket, ctx, { allowed: voiceAllowed });

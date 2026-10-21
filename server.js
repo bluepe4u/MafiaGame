@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -16,18 +17,20 @@ const { attachPoker } = require('./src/poker/server');
 const { limitSocket } = require('./src/ratelimit');
 const { TableStore } = require('./src/tables');
 const { Archive } = require('./src/archive');
-const { Pledges, LIMIT_DAYS: DEBT_LIMIT_DAYS, BAN_DAYS: DEBT_BAN_DAYS } = require('./src/pledges');
+const { Pledges } = require('./src/pledges');
 const { createVoiceHub, iceServers } = require('./src/voice');
 const insights = require('./src/insights');
 const { SttQueue } = require('./src/stt');
 const { Stats } = require('./src/stats');
+const { roomStore } = require('./src/db');
+const { createKv, MemoryKv, limit } = require('./src/kv');
+const { createMailer } = require('./src/mail');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const ROOM_IDLE_MS = 60 * 60 * 1000;
 // rooms are saved here so a restart or update doesn't end games in progress
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
-const STATE_FILE = path.join(DATA_DIR, 'rooms.json');
 
 const users = new UserStore(DATA_DIR);
 const tables = new TableStore(DATA_DIR);
@@ -36,9 +39,11 @@ const archive = new Archive(DATA_DIR);
 archive.prune(Object.keys(users.users));
 const pledges = new Pledges(DATA_DIR);
 const stats = new Stats(DATA_DIR);
-// unpaid USDT debts: a debtor first loses the USDT tables (and everyone sees the mark), then the site
-users.debtOf = id => pledges.debtOf(id);
-users.banned = id => pledges.debtOf(id).level >= 2;
+// rate limits and one-time email links: Redis when REDIS_URL is set (connected at start), else memory
+let kv = new MemoryKv();
+const mailer = createMailer();
+const RESET_TTL = 30 * 60; // seconds
+const VERIFY_TTL = 3 * 24 * 60 * 60;
 // a fresh site: the first account is created with a one-time admin invite left in the data dir
 const boot = users.bootstrapInvite(DATA_DIR);
 if (boot) console.log(`No accounts yet. Admin invite code is in ${boot.file}`);
@@ -56,8 +61,8 @@ app.use((req, res, next) => {
     'Content-Security-Policy': [
       "default-src 'self'",
       "script-src 'self'",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      'font-src https://fonts.gstatic.com',
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self'",
       "img-src 'self' data: blob:",
       `connect-src 'self'${host ? ` wss://${host} ws://${host}` : ''}`,
       "frame-ancestors 'none'",
@@ -92,21 +97,35 @@ app.get(/^\/(monopoly|citadels|spyfall)(\/.*)?$/, (req, res) => {
 });
 // browsers re-check the page's files on every load (cheap: unchanged files answer 304), so
 // nobody keeps running an old version after an update
+// fonts never change under the same name: cached for a month
+app.use('/fonts', express.static(path.join(__dirname, 'public', 'fonts'), { maxAge: '30d' }));
 app.use(express.static(path.join(__dirname, 'public'), { setHeaders: res => res.setHeader('Cache-Control', 'no-cache') }));
 app.use('/avatars', express.static(users.avatarDir, { maxAge: '30d', immutable: true, index: false }));
 app.get('/health', (_req, res) => res.send('ok'));
 
 // ---------- accounts API ----------
 // Handlers throw GameError for anything the user should see; the client translates the key.
-const api = fn => (req, res) => {
+const api = fn => async (req, res) => {
   try {
-    res.json({ ok: true, ...fn(req) });
+    res.json({ ok: true, ...(await fn(req)) });
   } catch (e) {
     if (!(e instanceof GameError)) console.error(e);
     const error = e instanceof GameError ? { key: e.key, params: e.params } : { key: 'err.server', params: {} };
     res.status(e instanceof GameError ? 400 : 500).json({ ok: false, error });
   }
 };
+// links in emails point here (PUBLIC_URL on the server, so a forged Host header can't redirect them)
+const siteUrl = req => process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+const langOf = req => (req.body?.lang === 'ru' ? 'ru' : 'en');
+const throttle = async (key, max, windowSec) => { if (!(await limit(kv, key, max, windowSec))) throw new GameError('err.slowDown'); };
+// a confirmation link for the user's current email
+async function sendVerify(req, user) {
+  if (!user.email) return;
+  const token = crypto.randomBytes(24).toString('hex');
+  await kv.set(`verify:${token}`, JSON.stringify({ id: user.id, email: user.email }), VERIFY_TTL);
+  await mailer.send('verify', user.email, langOf(req), { name: user.username, link: `${siteUrl(req)}/verify?token=${token}` })
+    .catch(e => console.error('Sending the confirmation email failed:', e.message));
+}
 const bearer = req => (req.get('authorization') || '').replace(/^Bearer /, '');
 const currentUser = req => {
   const user = users.byToken(bearer(req));
@@ -128,29 +147,82 @@ app.post('/api/err', (req, res) => {
   console.warn(`client error on ${e.page}: ${e.msg} (${e.src}:${e.line})`);
   res.status(204).end();
 });
-app.post('/api/register', api(req => {
-  const { user, token, invite, recoveryCode } = users.register(req.body.username, req.body.password, req.body.invite);
-  if (invite.tableId) { try { tables.join(invite.tableId, user); } catch {} }
-  if (invite.admin) fs.rm(path.join(DATA_DIR, 'admin-invite.txt'), { force: true }, () => {});
-  return { token, user: users.publicProfile(user), recoveryCode };
+app.post('/api/register', api(async req => {
+  // a hidden field people never fill in: bots do
+  if (req.body.website) throw new GameError('err.slowDown');
+  await throttle(`register:${req.ip}`, 5, 3600);
+  const { user, token, invite, recoveryCode } = users.register(req.body.username, req.body.password, req.body.invite, { email: req.body.email });
+  if (invite?.tableId) { try { tables.join(invite.tableId, user); } catch {} }
+  if (invite?.admin) fs.rm(path.join(DATA_DIR, 'admin-invite.txt'), { force: true }, () => {});
+  users.saveNow();
+  await sendVerify(req, user);
+  return { token, user: users.selfProfile(user), recoveryCode };
+}));
+// the link from the confirmation email
+app.get('/verify', async (req, res) => {
+  const raw = /^[0-9a-f]{48}$/.test(String(req.query.token || '')) ? await kv.take(`verify:${req.query.token}`) : null;
+  const data = raw ? JSON.parse(raw) : null;
+  const ok = !!(data && users.confirmEmail(data.id, data.email));
+  if (ok) refreshUser(data.id);
+  res.redirect(302, `/?verified=${ok ? 1 : 0}`);
+});
+// add, change or remove the email (needs the password); a new address gets a confirmation link
+app.post('/api/email', api(async req => {
+  const user = currentUser(req);
+  await throttle(`email:${user.id}`, 10, 3600);
+  const before = user.email;
+  users.setEmail(user, req.body.email, req.body.password);
+  if (user.email && user.email !== before) await sendVerify(req, user);
+  return { user: users.selfProfile(user) };
+}));
+app.post('/api/email/resend', api(async req => {
+  const user = currentUser(req);
+  if (!user.email || user.emailVerified) throw new GameError('err.invalidTarget');
+  await throttle(`resend:${user.id}`, 3, 3600);
+  await sendVerify(req, user);
+  return {};
+}));
+// forgot the password: a one-time link to the account's email. The answer is the same whether or
+// not such an account exists, so nobody can find out who has an account here.
+app.post('/api/forgot', api(async req => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  await throttle(`forgot:${req.ip}`, 5, 3600);
+  await throttle(`forgot:${email}`, 3, 3600);
+  const user = users.byEmail(email) || users.byName(email);
+  if (user && user.email) {
+    const token = crypto.randomBytes(24).toString('hex');
+    await kv.set(`reset:${token}`, user.id, RESET_TTL);
+    await mailer.send('reset', user.email, langOf(req), { name: user.username, link: `${siteUrl(req)}/?reset=${token}` })
+      .catch(e => console.error('Sending the reset email failed:', e.message));
+  }
+  return { sent: true };
+}));
+app.post('/api/reset', api(async req => {
+  const tokenIn = String(req.body.token || '');
+  await throttle(`reset:${req.ip}`, 10, 3600);
+  const userId = /^[0-9a-f]{48}$/.test(tokenIn) ? await kv.get(`reset:${tokenIn}`) : null;
+  if (!userId) throw new GameError('err.badResetLink');
+  const { user, token } = users.resetByEmail(userId, req.body.password);
+  await kv.del(`reset:${tokenIn}`);
+  return { token, user: users.selfProfile(user) };
 }));
 // forgot the password: username + recovery code sets a new one (and issues a fresh code)
 app.post('/api/recover', api(req => {
   const { user, token, recoveryCode } = users.recover(req.body.username, req.body.code, req.body.password);
-  return { token, user: users.publicProfile(user), recoveryCode };
+  return { token, user: users.selfProfile(user), recoveryCode };
 }));
 app.post('/api/recovery', api(req => ({ recoveryCode: users.newRecoveryCode(currentUser(req)) })));
-app.post('/api/login', api(req => {
+app.post('/api/login', api(async req => {
+  await throttle(`login:${req.ip}`, 30, 600);
   const { user, token } = users.login(req.body.username, req.body.password);
-  return { token, user: users.publicProfile(user) };
+  return { token, user: users.selfProfile(user) };
 }));
 app.post('/api/logout', api(req => { users.logout(bearer(req)); return {}; }));
 app.get('/api/me', api(req => {
   const user = currentUser(req);
   // coming to the site: the daily bonus in site chips (and the welcome gift on the first visit)
   const daily = users.claimDaily(user);
-  const debt = pledges.debtOf(user.id);
-  return { user: users.publicProfile(user), daily, debt: debt.count ? debt : null };
+  return { user: users.selfProfile(user), daily, mail: mailer.enabled };
 }));
 app.post('/api/password', api(req => {
   const token = users.changePassword(currentUser(req), req.body.oldPassword, req.body.newPassword);
@@ -172,7 +244,7 @@ app.post('/api/equip', api(req => {
   const user = currentUser(req);
   users.equip(user, req.body.slot, req.body.itemId || null);
   refreshUser(user.id);
-  return { user: users.publicProfile(user) };
+  return { user: users.selfProfile(user) };
 }));
 app.post('/api/gifts/seen', api(req => { users.giftsSeen(currentUser(req)); return {}; }));
 // rooms this account is still in, in any game: the "back to my game" button
@@ -319,7 +391,7 @@ app.post('/api/avatar', api(req => {
   if (!m) throw new GameError('err.avatarType');
   users.setAvatar(user, Buffer.from(m[1], 'base64'));
   refreshUser(user.id);
-  return { user: users.publicProfile(user) };
+  return { user: users.selfProfile(user) };
 }));
 
 // ---------- tables: a permanent space for a group, with a game picker ----------
@@ -333,6 +405,7 @@ function tableView(table, user) {
   return {
     id: table.id,
     name: table.name,
+    public: !!table.public,
     isOwner: table.ownerId === user.id,
     ownerId: table.ownerId,
     members: table.members.map(id => users.users[id]).filter(Boolean).map(u => ({
@@ -358,6 +431,19 @@ app.post('/api/tables/join', tableAction((user, b) => tables.join(b.id, user)));
 app.post('/api/tables/leave', tableAction((user, b) => { tables.leave(b.id, user); }));
 app.post('/api/tables/rename', tableAction((user, b) => tables.rename(b.id, user, b.name)));
 app.post('/api/tables/kick', tableAction((user, b) => tables.kick(b.id, user, b.userId)));
+app.post('/api/tables/visibility', tableAction((user, b) => tables.setPublic(b.id, user, b.public)));
+// public tables to find and join: the ones with people online and a game on first
+app.get('/api/tables/public', api(req => {
+  const user = currentUser(req);
+  const online = new Set(allSockets().map(s => s.data.userId));
+  const list = tables.publicList().filter(tb => !tb.members.includes(user.id)).map(tb => {
+    const current = tb.current && gameInfo(tb.current.game, tb.current.code);
+    const live = current && current.phase !== 'ended' ? { game: tb.current.game, phase: current.phase, players: current.players.length } : null;
+    return { id: tb.id, name: tb.name, members: tb.members.length, online: tb.members.filter(m => online.has(m)).length, owner: users.users[tb.ownerId]?.username || null, live };
+  });
+  list.sort((a, b) => (!!b.live - !!a.live) || b.online - a.online || b.members - a.members);
+  return { tables: list.slice(0, 30) };
+}));
 // the next game: a fresh room, and everyone at the table is called into it
 app.post('/api/tables/start', api(req => {
   const user = currentUser(req);
@@ -453,7 +539,7 @@ app.get('/api/voice/ice', api(req => ({ iceServers: iceServers(currentUser(req).
 const pledgeView = p => ({ ...p, kind: p.kind || 'lot', address: p.address || users.users[p.to]?.usdt?.address || null, network: p.network || users.users[p.to]?.usdt?.network || null, fromName: users.users[p.from]?.username || '?', toName: users.users[p.to]?.username || '?' });
 app.get('/api/pledges', api(req => {
   const user = currentUser(req);
-  return { pledges: pledges.mine(user.id).map(pledgeView), limitDays: DEBT_LIMIT_DAYS, banDays: DEBT_BAN_DAYS };
+  return { pledges: pledges.mine(user.id).map(pledgeView) };
 }));
 app.post('/api/pledges/mark', api(req => {
   const user = currentUser(req);
@@ -486,7 +572,7 @@ app.post('/api/profile', api(req => {
   const user = currentUser(req);
   users.setPersonal(user, { birthday: req.body.birthday, theme: req.body.theme });
   refreshUser(user.id);
-  return { user: users.publicProfile(user) };
+  return { user: users.selfProfile(user) };
 }));
 app.post('/api/admin/title', api(req => {
   adminUser(req);
@@ -552,7 +638,6 @@ const poker = attachPoker({
     give: (uid, n, reason, extra) => { const u = users.users[uid]; if (u) { users.addChips(u, n, reason, extra); setImmediate(() => refreshUser(uid)); } },
   },
   usdtOk: uid => !!users.users[uid]?.usdt,
-  debtor: uid => pledges.debtOf(uid).level >= 1,
   onStart: room => { stats.game('poker'); if (room.tableId) tables.saveSettings(room.tableId, 'poker', room.settings); },
 });
 const allSockets = () => [...io.sockets.sockets.values(), ...mono.sockets(), ...spy.sockets(), ...cit.sockets(), ...poker.sockets()];
@@ -604,6 +689,7 @@ function broadcast(room) {
 }
 
 // ---------- persistence ----------
+const savedRooms = roomStore(DATA_DIR, 'mafia', 'rooms.json');
 let saveTimer = null;
 let shuttingDown = false;
 
@@ -611,10 +697,7 @@ function saveNow() {
   clearTimeout(saveTimer);
   saveTimer = null;
   try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const tmp = `${STATE_FILE}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify([...rooms.values()]));
-    fs.renameSync(tmp, STATE_FILE);
+    savedRooms.save([...rooms.values()]);
   } catch (e) {
     console.error('Saving rooms failed:', e.message);
   }
@@ -632,9 +715,9 @@ function onRoomChange(room) {
 function loadRooms() {
   let list;
   try {
-    list = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    list = savedRooms.load();
   } catch (e) {
-    if (e.code !== 'ENOENT') console.error('Could not read saved rooms:', e.message);
+    console.error('Could not read saved rooms:', e.message);
     return;
   }
   for (const data of list) {
@@ -664,7 +747,6 @@ io.on('connection', socket => {
   const me = () => {
     const user = users.users[socket.data.userId];
     if (!user) throw new GameError('err.loginRequired');
-    if (users.banned(user.id)) throw new GameError('err.debt.banned');
     return user;
   };
 
@@ -717,7 +799,6 @@ io.on('connection', socket => {
     const room = rooms.get(String(code || '').toUpperCase());
     const player = room?.byToken(token);
     if (!player) throw new GameError('err.sessionExpired');
-    if (player.userId && users.banned(player.userId)) throw new GameError('err.debt.banned');
     attach(room, player);
   });
 
@@ -793,7 +874,22 @@ setInterval(() => {
 }, 5 * 60 * 1000).unref();
 
 loadRooms();
-server.listen(PORT, HOST, () => console.log(`Mafia server listening on http://${HOST}:${PORT}`));
+// Redis first (when configured): rate limits and email links, and the Socket.IO adapter, so events
+// could be shared with more processes later. The rooms themselves still live in this one process.
+(async () => {
+  kv = await createKv();
+  if (kv.kind === 'redis') {
+    const { createAdapter } = require('@socket.io/redis-adapter');
+    const pub = kv.client.duplicate();
+    const sub = pub.duplicate();
+    pub.on('error', e => console.error('Redis (pub):', e.message));
+    sub.on('error', e => console.error('Redis (sub):', e.message));
+    await Promise.all([pub.connect(), sub.connect()]);
+    io.adapter(createAdapter(pub, sub));
+  }
+  if (!mailer.enabled) console.log('No SMTP_URL: emails are printed to the log instead of sent');
+  server.listen(PORT, HOST, () => console.log(`Mafia server listening on http://${HOST}:${PORT}`));
+})();
 
 // Save before closing sockets, so disconnects during shutdown don't change who is host.
 for (const sig of ['SIGTERM', 'SIGINT']) {
@@ -809,6 +905,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     archive.saveNow();
     pledges.saveNow();
     stats.saveNow();
+    kv.close();
     shuttingDown = true;
     io.close();
     server.close(() => process.exit(0));

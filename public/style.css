@@ -20,7 +20,7 @@
   --radius-sm: 11px;
   --shadow: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 24px 60px -24px rgba(0, 0, 0, .7);
   --font: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --serif: 'Instrument Serif', ui-serif, Georgia, serif;
+  --serif: 'Display Serif', ui-serif, Georgia, serif;
   --mono: 'Geist Mono', ui-monospace, Menlo, monospace;
   /* phase mood, swapped via body[data-phase] */
   --glow-a: #e5484d;
@@ -650,7 +650,7 @@ body.halloween {
   --accent-soft: rgba(255, 117, 24, .16);
   --me: #b26bff;
   --glow-a: #ff7518; --glow-b: #7b2cff; --felt-a: #1d1026; --felt-b: #0b0610; --rim: rgba(255, 117, 24, .25);
-  --display: 'Creepster', var(--serif);
+  --display: 'Wet Paint', var(--serif);
 }
 body.halloween[data-phase="night"] { --glow-a: #7b2cff; --glow-b: #39ff88; --felt-a: #120a2a; --felt-b: #060312; --rim: rgba(123, 44, 255, .35); }
 body.halloween[data-phase="speech"] { --glow-a: #ff7518; --glow-b: #7b2cff; --felt-a: #2a1408; --felt-b: #100604; --rim: rgba(255, 117, 24, .35); }
@@ -1233,3 +1233,29 @@ body[data-lang="ru"] .legal section[lang="en"], body[data-lang="en"] .legal sect
 .admin-stat-list, .admin-errors { list-style: none; padding: 0; margin: 0; }
 .admin-stat-list li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px solid var(--border); font-size: .85rem; }
 .admin-errors li { display: flex; flex-direction: column; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: .82rem; word-break: break-word; }
+
+/* sign-up: a field only bots fill in */
+.hp-field { position: absolute !important; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.warn-text { color: var(--warn, #f5a524); }
+
+/* public tables */
+.tag.tc-public { font-size: .65rem; padding: 1px 6px; vertical-align: middle; background: rgba(139, 124, 255, .18); color: #c4bbff; }
+.tc-vis { margin: 4px 0 8px; }
+.tc-vis .check { flex-wrap: wrap; }
+.tc-vis .check .hint { flex-basis: 100%; }
+.public-tables { margin-top: 10px; }
+.public-tables h3 { margin: 6px 0; }
+.pt-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.pt-row .tc-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+/* the about-the-game section on the home screens (for visitors and search engines) */
+.seo-about { width: min(560px, 100%); margin: 18px auto 0; padding: 22px 24px; text-align: left; line-height: 1.55; }
+.seo-about h2 { font-family: var(--serif); font-weight: 400; font-size: 1.7rem; line-height: 1.1; margin: 0 0 10px; }
+.seo-about p { color: var(--text); opacity: .88; margin: 0 0 10px; }
+.seo-steps { padding-left: 20px; margin: 0 0 12px; }
+.seo-steps li { margin: 4px 0; }
+.seo-faq details { border-top: 1px solid var(--border); padding: 8px 0; }
+.seo-faq summary { cursor: pointer; font-weight: 600; }
+.seo-faq details p { margin: 6px 0 0; }
+.seo-more a { color: inherit; }
+body.signed-in .seo-about { display: none; }

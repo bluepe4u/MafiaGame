@@ -1,8 +1,7 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
+const { Saved } = require('./db');
 
 // Visit counts and script errors, kept on our own server: no cookies, nothing sent elsewhere.
 // A visitor is counted once a day by a hash of IP + browser with a salt that changes every day,
@@ -18,20 +17,16 @@ const bump = (obj, key, n = 1) => { obj[key] = (obj[key] || 0) + n; };
 
 class Stats {
   constructor(dir, { now = () => Date.now() } = {}) {
-    this.file = path.join(dir, 'stats.json');
+    this.store = new Saved(dir, 'stats', { days: 'map', errors: 'value', today: 'value' });
     this.now = now;
     this.days = {}; // YYYY-MM-DD -> { views: { path: n }, visitors, refs: { host: n }, games: { game: n } }
     this.errors = []; // { at, msg, src, line, page, ua }, the newest last
     this.today = { day: null, salt: null, seen: [] }; // today's salt and visitor hashes
     this.saveTimer = null;
-    try {
-      const data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-      this.days = data.days || {};
-      this.errors = data.errors || [];
-      if (data.today) this.today = data.today;
-    } catch (e) {
-      if (e.code !== 'ENOENT') console.error('Could not read the stats:', e.message);
-    }
+    const data = this.store.load();
+    this.days = data.days || {};
+    this.errors = data.errors || [];
+    if (data.today) this.today = data.today;
     this.seen = new Set(this.today.seen);
   }
 
@@ -39,10 +34,7 @@ class Stats {
     clearTimeout(this.saveTimer);
     this.saveTimer = null;
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      const tmp = `${this.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ days: this.days, errors: this.errors, today: { ...this.today, seen: [...this.seen] } }));
-      fs.renameSync(tmp, this.file);
+      this.store.save({ days: this.days, errors: this.errors, today: { ...this.today, seen: [...this.seen] } });
     } catch (e) {
       console.error('Saving the stats failed:', e.message);
     }

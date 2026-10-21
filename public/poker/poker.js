@@ -153,7 +153,6 @@ function renderLobby() {
     <li class="${p.connected ? '' : 'offline'} ${p.ready ? 'is-ready' : ''}" data-pid="${p.id}">
       <span class="avatar-wrap clickable" data-open-player="${p.userId || ''}">${avatar(p.name, p.avatar, p.cos)}${p.ready ? '<span class="voted ready-mark">✓</span>' : ''}</span>
       <span class="pname"><b class="${nameCls(p.cos)}">${esc(p.name)}</b>${titleTag(p.title)}${statusPill(p.score)}${p.id === state.hostId ? `<span class="tag host">${esc(t('tag.host'))}</span>` : ''}</span>
-      ${p.debtor ? debtorTag() : ''}
       ${state.settings.bank === 'usdt'
         ? `<span class="tag ${p.usdtSet ? 'town' : 'mafia'}" title="${esc(t(p.usdtSet ? 'pk.usdt.has' : 'pk.usdt.none'))}">${p.usdtSet ? '✓' : '✗'} USDT</span>`
         : `<span class="pk-lot-price ${p.chips !== null && p.chips < state.settings.startStack ? 'short' : ''}" title="${esc(t('pk.chips.balance'))}">${p.chips === null ? '—' : fmtRaw(p.chips)}</span>`}
@@ -274,17 +273,9 @@ function renderHomeWallet() {
 // who owes whom in USDT after the sessions (home screen)
 const EXPLORER = { trc20: 'https://tronscan.org/#/transaction/', erc20: 'https://etherscan.io/tx/', bep20: 'https://bscscan.com/tx/' };
 const usd = cents => `${(cents / 100).toFixed(2)} USDT`;
-// for an unpaid debt: how long until the limits
-let debtDays = { lim: 3, ban: 14 };
-function debtDue(at) {
-  const { lim, ban } = debtDays;
-  const days = d => Math.ceil((at + d * 86400000 - Date.now()) / 86400000);
-  return days(lim) > 0 ? t('pk.pl.dueLimit', { n: days(lim) }) : days(ban) > 0 ? t('pk.pl.dueBan', { n: days(ban) }) : t('pk.pl.dueBanned');
-}
 async function openPledges() {
   const res = await api('pledges');
   if (!res.ok) return;
-  debtDays = { lim: res.limitDays || 3, ban: res.banDays || 14 };
   const me = account && account.id;
   const open = res.pledges.filter(p => p.status === 'owed' || p.status === 'sent');
   const done = res.pledges.filter(p => !open.includes(p)).slice(0, 20);
@@ -301,10 +292,9 @@ async function openPledges() {
     const what = isUsdt ? `<span class="pk-usd">${usd(p.cents)}</span>` : `${esc(p.title)}${p.price ? ` <span class="pk-lot-price">${fmtRaw(p.price)}</span>` : ''}`;
     const pay = isUsdt && owe && p.status === 'owed'
       ? `<div class="pk-addr"><span class="muted small-text">${esc(t('pk.pl.payTo', { net: USDT_NETS[p.network] || p.network || '?' }))}</span><code>${esc(p.address || t('pk.pl.noAddress'))}</code>${p.address ? `<button class="ghost small" data-copy="${esc(p.address)}">${esc(t('pk.pl.copy'))}</button>` : ''}</div>` : '';
-    const due = isUsdt && owe && p.status === 'owed' ? `<span class="pk-due">${esc(debtDue(p.at))}</span>` : '';
     const tx = isUsdt && p.tx ? `<a class="small-text" href="${EXPLORER[p.network] || EXPLORER.trc20}${encodeURIComponent(p.tx)}" target="_blank" rel="noopener">${esc(t('pk.pl.tx'))} ${esc(p.tx.slice(0, 10))}…</a>` : '';
     return `<li class="pk-pl ${owe ? 'owe' : 'owed'} st-${p.status}">
-      <div><b>${what}</b><span class="muted small-text">${esc(t(owe ? 'pk.pl.youOwe' : 'pk.pl.owesYou', { name: owe ? p.toName : p.fromName }))} · ${esc(fmtTime(p.at))}</span>${due}${pay}${tx}</div>
+      <div><b>${what}</b><span class="muted small-text">${esc(t(owe ? 'pk.pl.youOwe' : 'pk.pl.owesYou', { name: owe ? p.toName : p.fromName }))} · ${esc(fmtTime(p.at))}</span>${pay}${tx}</div>
       <span class="tag">${esc(t('pk.pl.st.' + p.status))}</span>${btns.join('')}</li>`;
   };
   $('#pledgeBody').innerHTML = `<p class="muted small-text">${esc(t('pk.pl.hint'))}</p>
@@ -553,8 +543,6 @@ function updateSeat(el, pid, pos, i, { h, newHand, hl, eq, r, paid, winners, hel
     if (p.userId) { ava.classList.add('clickable'); ava.onclick = () => openPlayer(p.userId); }
   }
   const plate = el.querySelector('.pk-plate');
-  plate.classList.toggle('debtor', !!p.debtor);
-  plate.title = p.debtor ? t('debt.mark.hint') : '';
   const name = el.querySelector('.pk-name');
   name.className = `pk-name ${nameCls(p.cos)}`;
   name.textContent = p.name;
@@ -1414,7 +1402,7 @@ function renderBoardSheet() {
     <li class="board-row ${account && u.id === account.id ? 'me' : ''}" data-player="${u.id}">
       <span class="board-rank">${['🥇', '🥈', '🥉'][i] || `<span class="rank">${i + 1}</span>`}</span>
       ${avatar(u.username, u.avatar, u.equipped)}
-      <span class="board-id"><b class="${nameCls(u.equipped)}">${esc(u.username)}</b>${statusPill(u.score)}${u.debtor ? debtorTag() : ''}<span class="muted small-text">${esc(t('board.sub', { g: u.pokerStats.games, w: u.pokerStats.wins }))}</span></span>
+      <span class="board-id"><b class="${nameCls(u.equipped)}">${esc(u.username)}</b>${statusPill(u.score)}<span class="muted small-text">${esc(t('board.sub', { g: u.pokerStats.games, w: u.pokerStats.wins }))}</span></span>
       <span class="board-metric">${m[1]}</span>
     </li>`).join('') : `<p class="muted small-text">${esc(t('board.empty'))}</p>`;
   for (const row of $$('#boardList [data-player]')) row.onclick = () => openPlayer(row.dataset.player);

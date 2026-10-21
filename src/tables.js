@@ -2,12 +2,11 @@
 
 // Tables: a permanent space for a group of friends. One link that never changes; whoever is
 // allowed picks the next game and everyone at the table is called into the new room.
-// Saved to tables.json; the rooms themselves live in each game's own store.
+// Saved in the site database; the rooms themselves live in each game's own store.
 
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const { GameError } = require('./game');
+const { Saved } = require('./db');
 
 const MAX_NAME = 40;
 const MAX_TABLES_PER_USER = 10;
@@ -15,24 +14,17 @@ const HISTORY_KEEP = 50;
 
 class TableStore {
   constructor(dir) {
-    this.file = path.join(dir, 'tables.json');
+    this.store = new Saved(dir, 'tables', { tables: 'map' }, 'tables.json');
     this.tables = {}; // id -> { id, name, ownerId, members: [userId], createdAt, current, history }
     this.saveTimer = null;
-    try {
-      this.tables = JSON.parse(fs.readFileSync(this.file, 'utf8')).tables || {};
-    } catch (e) {
-      if (e.code !== 'ENOENT') console.error('Could not read tables:', e.message);
-    }
+    this.tables = this.store.load().tables || {};
   }
 
   saveNow() {
     clearTimeout(this.saveTimer);
     this.saveTimer = null;
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      const tmp = `${this.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ tables: this.tables }));
-      fs.renameSync(tmp, this.file);
+      this.store.save({ tables: this.tables });
     } catch (e) {
       console.error('Saving tables failed:', e.message);
     }
@@ -108,6 +100,19 @@ class TableStore {
     table.members = table.members.filter(m => m !== targetId);
     this.save();
     return table;
+  }
+
+  // Public tables are listed for everyone to find and join; private ones only by their link.
+  setPublic(id, user, on) {
+    const table = this.get(id);
+    this.requireOwner(table, user);
+    table.public = !!on;
+    this.save();
+    return table;
+  }
+
+  publicList() {
+    return Object.values(this.tables).filter(t => t.public);
   }
 
   // Remember the room the table is playing in now.

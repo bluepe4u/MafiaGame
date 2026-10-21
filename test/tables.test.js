@@ -46,3 +46,19 @@ test('tables: pruning removes deleted accounts and empty tables', () => {
   assert.strictEqual(store.get(t1.id).ownerId, 'b');
   assert.throws(() => store.get(t2.id), /err\.tableNotFound/);
 });
+
+test('tables: private by default, the owner makes one public, saved', () => {
+  const dir = tmp();
+  const store = new TableStore(dir);
+  const tb = store.create(ann, 'Пятничный покер');
+  assert.deepStrictEqual(store.publicList(), []);
+  assert.throws(() => store.setPublic(tb.id, bob, true), /err\.tableOwnerOnly/);
+  store.setPublic(tb.id, ann, true);
+  assert.deepStrictEqual(store.publicList().map(t => t.id), [tb.id]);
+  store.join(tb.id, bob);
+  store.saveNow();
+  const back = new TableStore(dir);
+  assert.strictEqual(back.publicList()[0].members.length, 2);
+  back.setPublic(tb.id, admin, false);
+  assert.deepStrictEqual(back.publicList(), []);
+});

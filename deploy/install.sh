@@ -72,6 +72,19 @@ grep -q '^TURN_SECRET=' "$ENV_FILE" || echo "TURN_SECRET=$(openssl rand -hex 32)
 if [[ -n "$DOMAIN" ]] && ! grep -q '^TURN_HOST=' "$ENV_FILE"; then echo "TURN_HOST=$DOMAIN" >> "$ENV_FILE"; fi
 chmod 600 "$ENV_FILE"
 
+# --- Redis: rate limits and email links (local only) ---------------------------
+log "Installing Redis (localhost only)"
+command -v redis-server >/dev/null || apt-get install -y -qq redis-server >/dev/null
+if [[ -f /etc/redis/redis.conf ]]; then
+  sed -i 's/^#\? *bind .*/bind 127.0.0.1 -::1/; s/^#\? *protected-mode .*/protected-mode yes/' /etc/redis/redis.conf
+  grep -q '^maxmemory ' /etc/redis/redis.conf || printf 'maxmemory 128mb\nmaxmemory-policy volatile-lru\n' >> /etc/redis/redis.conf
+fi
+systemctl enable redis-server >/dev/null 2>&1 || true
+systemctl restart redis-server
+grep -q '^REDIS_URL=' "$ENV_FILE" || echo "REDIS_URL=redis://127.0.0.1:6379" >> "$ENV_FILE"
+# links in emails go to the real address; SMTP_URL / MAIL_FROM are added by hand (see README)
+if [[ -n "$DOMAIN" ]] && ! grep -q '^PUBLIC_URL=' "$ENV_FILE"; then echo "PUBLIC_URL=https://$DOMAIN" >> "$ENV_FILE"; fi
+
 # --- systemd service ---------------------------------------------------------
 # Behind Caddy the app only listens on localhost; without a domain it is exposed directly.
 if [[ -n "$DOMAIN" ]]; then BIND=127.0.0.1; else BIND=0.0.0.0; fi

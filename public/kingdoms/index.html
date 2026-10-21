@@ -21,9 +21,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23d4a24c'/%3E%3Cpath d='M7 25V13l3 2V9l3 2V6l3-2 3 2v5l3-2v6l3-2v12z' fill='%23111827'/%3E%3C/svg%3E">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400..800&family=Geist+Mono:wght@500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/geist-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/kingdoms/cit.css">
 </head>
@@ -92,6 +92,15 @@
           <button id="watchBtn" class="ghost" data-i18n="ui.watch"></button>
         </div>
       </div>
+      <!-- for visitors who aren't logged in, and for search engines -->
+      <article class="seo-about card">
+        <h2 data-i18n="seo.kingdoms.h">Kingdoms: a card game of secret roles and city building</h2>
+        <p data-i18n="seo.kingdoms.intro">Each round every player secretly picks a character, like the King, the Thief or the Architect, and uses its power to build districts, steal gold or ruin a rival. The first to build a full city ends the game; the most valuable city wins.</p>
+        <ol class="seo-steps"><li data-i18n="seo.kingdoms.s0">Create a room for 3–8 players and invite them with a link.</li><li data-i18n="seo.kingdoms.s1">Draft characters in secret, then take actions in their order.</li><li data-i18n="seo.kingdoms.s2">Build districts and score your city when someone completes seven.</li></ol>
+        <div class="seo-faq"><details><summary data-i18n="seo.kingdoms.q0">Is it free?</summary><p data-i18n="seo.kingdoms.a0">Yes, free in the browser.</p></details><details><summary data-i18n="seo.kingdoms.q1">Is it hard to learn?</summary><p data-i18n="seo.kingdoms.a1">It uses a beginner set of nine characters, and the rules are one tap away during the game.</p></details><details><summary data-i18n="seo.kingdoms.q2">How long does a game take?</summary><p data-i18n="seo.kingdoms.a2">Usually 30–60 minutes.</p></details></div>
+        <p class="seo-more muted small-text"><a href="/" data-i18n="site.mafia">Mafia online</a> · <a href="/poker/" data-i18n="site.poker">Poker with friends</a> · <a href="/tycoon/" data-i18n="site.monopoly">Tycoon</a> · <a href="/spy/" data-i18n="site.spyfall">Find the spy</a></p>
+      </article>
+      <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "WebApplication", "name": "Kingdoms", "url": "https://bluepeau.club/kingdoms/", "applicationCategory": "GameApplication", "operatingSystem": "Any (web browser)", "inLanguage": ["en", "ru"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "description": "Each round every player secretly picks a character, like the King, the Thief or the Architect, and uses its power to build districts, steal gold or ruin a rival. The first to build a full city ends the game; the most valuable city wins."}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is it free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, free in the browser."}}, {"@type": "Question", "name": "Is it hard to learn?", "acceptedAnswer": {"@type": "Answer", "text": "It uses a beginner set of nine characters, and the rules are one tap away during the game."}}, {"@type": "Question", "name": "How long does a game take?", "acceptedAnswer": {"@type": "Answer", "text": "Usually 30–60 minutes."}}]}]</script>
     </section>
 
     <!-- lobby -->

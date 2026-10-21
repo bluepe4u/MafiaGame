@@ -23,6 +23,7 @@ systemctl stop "$SERVICE"
 aside="${DATA_DIR}.before-restore-$(date +%F-%H%M%S)"
 [[ -d $DATA_DIR ]] && mv "$DATA_DIR" "$aside" && echo "current data moved to $aside"
 tar -xzf "$file" -C "$(dirname "$DATA_DIR")"
+rm -f "$DATA_DIR"/site.db-wal "$DATA_DIR"/site.db-shm
 chown -R "$SERVICE:$SERVICE" "$DATA_DIR"
 systemctl start "$SERVICE"
 echo "Done."

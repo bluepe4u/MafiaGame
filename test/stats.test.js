@@ -28,7 +28,8 @@ test('stats: views, distinct visitors per day, sources, bots skipped', () => {
   s = st.summary(2);
   assert.strictEqual(s.days[1].visitors, 1);
   st.saveNow();
-  assert.ok(!fs.readFileSync(st.file, 'utf8').includes('1.1.1.1'));
+  const rows = st.store.db.sql.prepare('SELECT data FROM records UNION ALL SELECT value FROM kv').all();
+  assert.ok(!JSON.stringify(rows).includes('1.1.1.1'));
 });
 
 test('stats: errors are clipped, repeats counted, kept across restarts', () => {

@@ -5,10 +5,8 @@
 
 (() => {
   const en = {
-    'pk.pl.dueLimit': 'USDT tables close in {n} day(s)', 'pk.pl.dueBan': 'overdue — a ban in {n} day(s)', 'pk.pl.dueBanned': 'overdue — banned from the games until paid',
     'pk.pl.received': 'Got it', 'pk.pl.forgive': 'Let it go',
     'pk.pl.dispute': 'Didn\'t arrive', 'pk.pl.disputeText': 'The payment is marked unpaid again, counted from the original date.',
-    'err.pk.debtors': 'Unpaid USDT debts — no USDT tables: {names}',
     'pk.set.group.bank': 'Playing for',
     'pk.bank.chips': 'Site chips', 'pk.bank.chips.hint': 'the fun part: the buy-in comes from your wallet and your stack goes back to it',
     'pk.bank.usdt': 'USDT', 'pk.bank.usdt.hint': 'real money: afterwards the site works out who pays whom, you pay wallet to wallet',
@@ -188,10 +186,8 @@
   };
 
   const ru = {
-    'pk.pl.dueLimit': 'через {n} дн. закроются столы на USDT', 'pk.pl.dueBan': 'просрочено — бан через {n} дн.', 'pk.pl.dueBanned': 'просрочено — бан в играх до оплаты',
     'pk.pl.received': 'Получено', 'pk.pl.forgive': 'Простить',
     'pk.pl.dispute': 'Не пришло', 'pk.pl.disputeText': 'Платёж снова станет неоплаченным, срок — с исходной даты.',
-    'err.pk.debtors': 'Просрочен долг в USDT — столы на USDT закрыты: {names}',
     'pk.set.group.bank': 'Играем на',
     'pk.bank.chips': 'Фишки сайта', 'pk.bank.chips.hint': 'фан-раздел: бай-ин списывается из кошелька, стек возвращается туда же',
     'pk.bank.usdt': 'USDT', 'pk.bank.usdt.hint': 'на деньги: после сессии сайт считает, кто кому сколько, вы платите с кошелька на кошелёк',

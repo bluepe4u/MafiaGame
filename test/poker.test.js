@@ -366,15 +366,6 @@ test('site chips: buy-ins come from the wallets and the stacks go back', () => {
   assert.deepStrictEqual(g.final.map(x => x.net), [500, 0, -500]);
 });
 
-test('USDT: a debtor can\'t start a USDT table', () => {
-  const room = new PokerRoom({ code: 'T', setTimer: () => 1, clearTimer: () => {}, debtor: u => u === 'uBob' });
-  const ps = ['Ann', 'Bob'].map(n => room.join(n, { userId: 'u' + n }));
-  room.updateSettings(ps[0].id, { bank: 'usdt' });
-  for (const p of ps) room.setReady(p.id, true);
-  assert.throws(() => room.start(ps[0].id), /debtors/);
-  assert.ok(room.viewFor(ps[0].id).players.every(p => p.debtor === false)); // the mark comes from the profile
-});
-
 test('USDT: everyone ready with an address; the fewest transfers settle it, to the cent', () => {
   const settled = [];
   const room = new PokerRoom({ code: 'T', rng: seeded(5), setTimer: () => 1, clearTimer: () => {}, usdtOk: u => u !== 'uDan', onSettle: x => settled.push(x) });
