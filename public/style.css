@@ -1506,3 +1506,4 @@ body.signed-in .gp-about { display: none; }
 #playCard .tables { border-top: 1px solid var(--border); padding-top: clamp(8px, 1.4vh, 14px); }
 #playCard .tables:empty, #playCard .tables.hidden { display: none; }
 .gp-copy #playCard .table-help { display: none; }
+.hub-thumb.gp-art-spy { display: flex; align-items: center; justify-content: center; gap: 6%; }
