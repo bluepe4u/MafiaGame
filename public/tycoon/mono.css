@@ -205,40 +205,72 @@ body.mono[data-phase="playing"] main, body.mono[data-phase="ended"] main { max-w
 @keyframes dice-hop { 0% { transform: translateY(0); } 25% { transform: translateY(-34px); } 55% { transform: translateY(0); } 72% { transform: translateY(-9px); } 100% { transform: translateY(0); } }
 .dice.doubles .face { box-shadow: 0 0 0 2px #f5c542; }
 
-/* the card just drawn */
-.card-show { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(320px, 82%); padding: 18px 20px; border-radius: 12px; background: #ffe7c2; color: #2b1d00; border: 2px solid #17211b; box-shadow: 0 24px 60px rgba(0, 0, 0, .45); animation: card-pop .5s cubic-bezier(.2, 1.3, .4, 1); z-index: 2; pointer-events: none; }
-.card-show.deck-chest { background: #dff3ff; color: #062033; }
-.card-deck { font-size: .76rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; opacity: .75; margin-bottom: 6px; }
-.card-text { font-size: 1.02rem; font-weight: 600; line-height: 1.35; }
-@keyframes card-pop { from { transform: translate(-50%, -50%) rotateY(90deg) scale(.7); opacity: 0; } }
-
-/* an open deal, visible to everyone at the table */
-.deal-show {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(520px, 92%); z-index: 3;
-  padding: 16px 18px; border-radius: 16px; background: #fff; color: #17211b; border: 2px solid #17211b;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, .5); display: flex; flex-direction: column; gap: 12px;
+/* the card just drawn: drops in at the top of the board, clear of the buttons; it fades by itself */
+.card-show {
+  position: absolute; left: 50%; top: 3%; width: min(330px, 72%); z-index: 5; pointer-events: auto;
+  display: flex; flex-direction: column; gap: 8px; padding: 14px 40px 16px 18px; border-radius: 14px; text-align: left;
+  background: #ffe7c2; color: #2b1d00; border: 2px solid #17211b; box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+  transform: translateX(-50%); opacity: 0;
 }
-.deal-show.pop { animation: deal-in .45s cubic-bezier(.2, 1.3, .4, 1); }
-@keyframes deal-in { from { transform: translate(-50%, -40%) scale(.9); opacity: 0; } }
-.deal-title { font-weight: 800; font-size: 1.05rem; }
-.deal-sides { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: start; }
-.deal-arrow { font-size: 1.6rem; align-self: center; color: #6b7280; }
-.deal-side { display: flex; flex-direction: column; gap: 8px; text-align: left; }
-.deal-who { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+.card-show.in { animation: card-in .55s cubic-bezier(.2, 1.25, .4, 1) forwards; }
+.card-show.out { animation: card-out .25s ease-in forwards; }
+.card-show.deck-chest { background: #dff3ff; color: #062033; }
+.card-deck { display: flex; align-items: center; gap: 8px; font-size: .74rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; opacity: .85; }
+.card-deck .art { height: 22px; width: auto; max-width: 28px; }
+.card-text { font-size: 1rem; font-weight: 650; line-height: 1.35; }
+.card-x { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; padding: 0; border-radius: 50%; font-size: .8rem; line-height: 1; background: rgba(0, 0, 0, .08) !important; color: inherit !important; border: 0 !important; }
+.card-x:hover { background: rgba(0, 0, 0, .16) !important; }
+@keyframes card-in { from { opacity: 0; transform: translateX(-50%) translateY(-24px) rotateX(70deg) scale(.85); } to { opacity: 1; transform: translateX(-50%); } }
+@keyframes card-out { from { opacity: 1; transform: translateX(-50%); } to { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(.96); } }
+
+/* the speed die (turbo) */
+.speed-die {
+  width: clamp(40px, 6.4cqmin, 62px); aspect-ratio: 1; border-radius: 18%; display: grid; place-items: center;
+  background: linear-gradient(145deg, #ef4444, #b91c1c); color: #fff; border: 1px solid #7f1d1d; box-shadow: 0 6px 14px rgba(0, 0, 0, .25);
+  font: 800 clamp(1rem, 2.6cqmin, 1.5rem)/1 var(--mono);
+}
+.speed-die svg { width: 70%; height: 70%; }
+.speed-die.spin { animation: speed-spin .9s cubic-bezier(.2, .9, .25, 1.05); }
+@keyframes speed-spin { 0% { transform: rotate(-540deg) scale(.6); } 60% { transform: rotate(20deg) scale(1.08); } 100% { transform: none; } }
+/* choices on the speed die */
+.choice-title { display: flex; align-items: center; gap: 8px; font-weight: 700; justify-content: center; }
+.choice-title svg { width: 30px; height: 30px; }
+.mr-hint { display: flex; align-items: center; gap: 8px; max-width: 360px; padding: 6px 12px; border-radius: 10px; background: rgba(255, 255, 255, .7); font-size: .84rem; color: #1f2937; }
+.mr-hint svg { width: 24px; height: 24px; flex: none; }
+body.picking .sq { cursor: crosshair; }
+body.picking .sq:hover { background: #fff7d6; box-shadow: inset 0 0 0 3px #f59e0b; }
+body.picking .squares { box-shadow: 0 0 0 4px #f59e0b, 0 40px 100px -30px rgba(0, 0, 0, .95); }
+
+/* open offers: beside the board, for everyone to see */
+.deals-box { display: flex; flex-direction: column; gap: 10px; }
+.deals-head { display: flex; flex-direction: column; gap: 2px; padding: 0 4px; }
+.deals-head h3 { margin: 0; font-size: .95rem; }
+.deal-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: #fff; color: #17211b; border: 1px solid rgba(0, 0, 0, .15); box-shadow: 0 10px 24px rgba(0, 0, 0, .3); }
+.deal-card.for-me { border: 2px solid var(--gold); box-shadow: 0 0 0 4px rgba(245, 197, 66, .25), 0 10px 24px rgba(0, 0, 0, .3); }
+.deal-card.pop { animation: deal-in .45s cubic-bezier(.2, 1.3, .4, 1); }
+@keyframes deal-in { from { transform: translateX(-16px) scale(.96); opacity: 0; } }
+.deal-title { font-weight: 800; font-size: .92rem; }
+.deal-arrow { font-size: 1.1rem; color: #6b7280; text-align: center; line-height: 1; }
+.deal-side { display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.deal-who { display: flex; align-items: center; gap: 8px; font-size: .84rem; }
 .deal-items { display: flex; flex-wrap: wrap; gap: 5px; }
-.deal-prop { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 6px; background: #f6f1e3; border: 1px solid #c9c3b3; font-size: .82rem; font-weight: 600; }
+.deal-prop { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 3px; border-radius: 6px; background: #f6f1e3; border: 1px solid #c9c3b3; font-size: .8rem; font-weight: 600; }
 .deal-prop i { width: 12px; height: 18px; border-radius: 3px; background: var(--gc); }
-.deal-cash { padding: 3px 9px; border-radius: 6px; background: #dcfce7; color: #166534; font-family: var(--mono); font-weight: 700; font-size: .84rem; }
-.deal-show button:not(.primary) { background: #fff; color: #17211b; border-color: rgba(0, 0, 0, .2); }
-.deal-show .muted { color: #4b5563; }
+.deal-cash { padding: 3px 9px; border-radius: 6px; background: #dcfce7; color: #166534; font-family: var(--mono); font-weight: 700; font-size: .82rem; }
+.deal-btns { gap: 8px; }
+.deal-card button:not(.primary) { background: #fff; color: #17211b; border-color: rgba(0, 0, 0, .2); }
+.deal-card .muted { color: #4b5563; }
 
 /* pieces: avatar in a ring of the player's colour */
 .tokens { position: absolute; inset: 0; pointer-events: none; }
 .token {
   position: absolute; left: 0; top: 0; width: clamp(26px, 4.4cqmin, 42px); height: clamp(26px, 4.4cqmin, 42px); border-radius: 50%;
   display: grid; place-items: center; overflow: hidden; border: 3px solid var(--pc); background: var(--pc);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, .45), 0 0 0 1.5px #fff; transition: transform .14s cubic-bezier(.3, 1.4, .5, 1); z-index: 3;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .45), 0 0 0 1.5px #fff; transition: transform .3s cubic-bezier(.3, 1.2, .5, 1); z-index: 3;
 }
+.token.moving { transition: none; z-index: 6; }
+.token.leap { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--pc), 0 18px 30px rgba(0, 0, 0, .45); }
+.token.to-jail { box-shadow: 0 0 0 3px #fff, 0 0 0 6px #dc2626, 0 0 24px 6px rgba(220, 38, 38, .55); }
 .token .avatar { width: 100%; height: 100%; font-size: .66rem; box-shadow: none; }
 .token.active { z-index: 4; box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--pc), 0 6px 16px rgba(0, 0, 0, .5); }
 .token.jailed { filter: grayscale(.5); }
@@ -422,3 +454,79 @@ body.mono[data-phase="playing"] main, body.mono[data-phase="ended"] main { max-w
 .log-list li { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--border); font-size: .88rem; }
 .log-time { font: 500 .74rem 'Geist Mono', monospace; color: var(--muted); flex: none; width: 44px; }
 .pdot.blank { visibility: hidden; }
+
+/* trade window: cash fields and quick amounts */
+.cash-field { position: relative; display: block; }
+.cash-field input { width: 100%; padding-right: 30px; font-family: var(--mono); font-size: 1rem; }
+.cash-unit { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.cash-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 4px 10px; border-radius: 999px; font: 600 .78rem/1.3 var(--mono); }
+.trade-notes { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.trade-notes .warn { color: #fbbf24; }
+.manage-note { margin: 0 !important; padding: 0 !important; font-size: .78rem; color: #92400e; }
+.sq-name { max-width: 100%; }
+.skip-btn { color: #374151 !important; background: rgba(255, 255, 255, .6) !important; }
+/* small boards: a compact card in the top corner of the centre */
+@container (max-height: 760px) {
+  .card-show { top: 1.5%; width: min(280px, 60%); padding: 10px 34px 11px 14px; gap: 4px; }
+  .card-text { font-size: .86rem; }
+}
+/* "offer a deal to…" under the roll button: deals go out before the roll */
+.deal-with { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; font-size: .82rem; color: #374151; }
+.deal-with-btn { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px !important; border-radius: 999px !important; font-size: .8rem; }
+.deal-with-btn .pc-ring { width: 22px; height: 22px; }
+/* the luxury tax ring is a narrow drawing: give it a bit more height than the round icons */
+.sq.left .art-ring, .sq.right .art-ring { height: 76%; max-height: 58px; }
+.sq.top .art-ring, .sq.bottom .art-ring { height: 64%; }
+
+/* ---------- the bank, labelled ---------- */
+.bank-info { flex-wrap: wrap; gap: 6px 14px; font-family: inherit; font-size: .82rem; }
+.bank-label { text-transform: uppercase; letter-spacing: .08em; font-size: .7rem; font-weight: 700; }
+.bank-item span { font-family: var(--mono); }
+
+/* ---------- the turn clock waits while an offer is open ---------- */
+.mini-timer.paused { color: #92400e; background: #fef3c7; }
+
+/* ---------- open offers: the answer clock ---------- */
+.deal-clock { display: flex; align-items: center; gap: 8px; }
+.deal-bar { flex: 1; height: 4px; border-radius: 99px; background: rgba(0, 0, 0, .1); overflow: hidden; }
+.deal-bar i { display: block; height: 100%; width: 100%; background: #f59e0b; border-radius: inherit; transition: width .25s linear; }
+.deal-timer { font: 700 .76rem/1 var(--mono); color: #92400e; white-space: nowrap; }
+.deal-timer.low { color: #b91c1c; }
+.deal-card.for-me .deal-bar i { background: #dc2626; }
+
+/* ---------- build list: every complete set, one click per building ---------- */
+.build-box { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); }
+.bl-head { display: flex; flex-direction: column; gap: 2px; }
+.bl-head h3 { margin: 0; font-size: .95rem; }
+.bl-set { position: relative; display: flex; flex-direction: column; gap: 4px; padding-left: 10px; }
+.bl-strip { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; border-radius: 3px; background: var(--gc); }
+.bl-streets { display: flex; gap: 6px; }
+.bl-street { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px; border-radius: 9px; background: #f6f1e3; color: #17211b; border: 1px solid #c9c3b3; font-size: .72rem; }
+.bl-street:hover:not(:disabled) { background: #fffaf0; border-color: var(--gold); box-shadow: 0 0 0 2px rgba(245, 197, 66, .35); }
+.bl-street:disabled { opacity: .55; }
+.bl-name { font-weight: 700; text-transform: uppercase; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-level { display: flex; gap: 2px; align-items: center; min-height: 12px; }
+.bl-level .house { width: 9px; } .bl-level .hotel { width: 20px; height: 9px; }
+.bl-none { color: #9ca3af; }
+.bl-plus { font-family: var(--mono); font-weight: 700; color: #166534; }
+.bl-note { font-size: .72rem; color: var(--muted); }
+.bl-set.done .bl-note { color: #4ade80; }
+
+/* ---------- phones: an offer for you comes up from the bottom of the screen ---------- */
+.deal-sheet { display: none; }
+@media (max-width: 1100px) {
+  .deal-sheet:not(.hidden) {
+    display: flex; flex-direction: column; gap: 8px; position: fixed; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 70;
+    max-height: 60vh; overflow-y: auto; animation: sheet-up .35s cubic-bezier(.2, 1.1, .4, 1);
+  }
+  .deal-sheet .deal-card { box-shadow: 0 -10px 40px rgba(0, 0, 0, .55); }
+  .deal-sheet .deal-btns button { flex: 1; padding: 11px 14px; font-size: .95rem; }
+  /* the copy in the list below the board would only repeat it */
+  .deals-box .deal-card.for-me { display: none; }
+  .deals-box.has-mine:not(:has(.deal-card:not(.for-me))) { display: none; }
+}
+@keyframes sheet-up { from { transform: translateY(110%); } }
+.mini-timer.paused::before { content: ''; display: inline-block; width: 7px; height: 9px; margin-right: 6px; border-left: 2.5px solid currentColor; border-right: 2.5px solid currentColor; box-sizing: border-box; vertical-align: -1px; }
+/* the dice are only a picture: a tumbling cube must never sit on top of the Roll button */
+.dice, .dice * { pointer-events: none; }

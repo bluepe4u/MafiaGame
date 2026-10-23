@@ -1064,7 +1064,9 @@ button.brand:hover:not(:disabled) { background: var(--surface-2); border: 0; }
 .link-btn { align-self: center; border: 0; background: transparent; color: var(--muted); font-size: .82rem; text-decoration: underline; text-underline-offset: 3px; padding: 4px; }
 .link-btn:hover { color: var(--text); background: transparent; }
 .hint { display: block; flex-basis: 100%; margin-top: 2px; color: var(--muted); font-size: .74rem; line-height: 1.35; font-weight: 400; }
-.check .hint { padding-left: 48px; }
+.check .hint { padding-left: 52px; }
+/* a setting with an explanation: the text goes under its name, not squeezed beside it */
+label.check:has(> .hint) { flex-wrap: wrap; row-gap: 0; }
 .rules-link { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 .rules-body h3 { margin: 18px 0 6px; }
 .rules-body p, .rules-body li { line-height: 1.55; color: var(--text); opacity: .9; }
@@ -1422,15 +1424,6 @@ body.signed-in .gp-about { display: none; }
 /* the drawings beside each game's hero (decoration only) */
 .gp-art { position: relative; width: 100%; aspect-ratio: 1.25; border-radius: 28px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--g) 30%, transparent); }
 .gp-art-mafia { background: radial-gradient(120% 120% at 25% 15%, #222760 0%, #11132b 55%, #0a0b18 100%); }
-.gp-art-mafia .art-moon { position: absolute; right: 12%; top: 12%; width: 18%; aspect-ratio: 1; border-radius: 50%; background: #e8e6ff; box-shadow: 0 0 60px 10px rgba(200, 200, 255, .35); }
-.gp-art-mafia .art-moon::after { content: ''; position: absolute; inset: -6% -6% 6% 22%; border-radius: 50%; background: #171a3a; }
-.art-chip { position: absolute; left: 8%; top: 10%; padding: 5px 12px; border-radius: 99px; background: rgba(129, 140, 248, .2); color: #c7ccff; font-weight: 600; font-size: .85rem; }
-.art-ring { position: absolute; left: 50%; top: 60%; width: 60%; aspect-ratio: 1; transform: translate(-50%, -50%); }
-.art-ring i { position: absolute; left: 50%; top: 50%; width: 15%; aspect-ratio: 1; border-radius: 50%; background: #2b2f63; border: 2px solid #3a3f7a; transform: rotate(calc(var(--n) * 45deg)) translateY(-210%) rotate(calc(var(--n) * -45deg)); margin: -7.5% 0 0 -7.5%; }
-.art-ring i:nth-child(1) { --n: 0; } .art-ring i:nth-child(2) { --n: 1; } .art-ring i:nth-child(3) { --n: 2; } .art-ring i:nth-child(4) { --n: 3; }
-.art-ring i:nth-child(5) { --n: 4; } .art-ring i:nth-child(6) { --n: 5; } .art-ring i:nth-child(7) { --n: 6; } .art-ring i:nth-child(8) { --n: 7; }
-.art-ring i.on { border-color: #818cf8; box-shadow: 0 0 18px rgba(129, 140, 248, .7); }
-.art-ring i.out { opacity: .3; }
 .gp-art-poker { background: radial-gradient(120% 120% at 50% 30%, #10261d 0%, #0a1410 70%); display: grid; place-items: center; }
 .art-felt { position: relative; width: 82%; aspect-ratio: 1.75; border-radius: 999px; background: radial-gradient(80% 90% at 50% 45%, #13704f 0%, #0b4632 70%, #08321f 100%); border: 9px solid #1c1c26; box-shadow: 0 30px 60px -30px rgba(52, 211, 153, .5); }
 .art-board { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); display: flex; gap: 5px; }

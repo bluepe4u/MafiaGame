@@ -152,6 +152,8 @@ function attachMonopoly({ io, app, users, api, currentUser, dataDir, codeTaken, 
     act('roll', 'roll');
     act('buy', 'buy');
     act('decline', 'decline');
+    act('bus', 'busMove', p => [Number(p.choice)]);
+    act('pick', 'pickSquare', p => [Number(p.square)]);
     act('bid', 'bid', p => [p.amount]);
     act('endTurn', 'endTurn');
     act('payBail', 'payBail');

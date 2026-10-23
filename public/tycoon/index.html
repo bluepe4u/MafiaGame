@@ -143,6 +143,7 @@
               <label class="field"><span data-i18n="mono.roundLimit"></span> <input type="number" min="0" max="200" step="5" id="roundLimit"></label>
             </div>
             <div class="checks settings-rest">
+              <label class="check"><input type="checkbox" class="switch" data-rule="turbo"> <span data-i18n="mono.rule.turbo"></span></label>
               <label class="check"><input type="checkbox" class="switch" data-rule="doubleGo"> <span data-i18n="mono.rule.doubleGo"></span></label>
               <label class="check"><input type="checkbox" class="switch" data-rule="auctions"> <span data-i18n="mono.rule.auctions"></span></label>
               <label class="check"><input type="checkbox" class="switch" data-rule="freeParking"> <span data-i18n="mono.rule.freeParking"></span></label>
@@ -163,6 +164,8 @@
       <div class="mono-layout">
         <aside class="players-col">
           <div id="playerList" class="player-list"></div>
+          <div id="dealsBox" class="deals-box hidden" aria-live="polite"></div>
+          <div id="buildBox" class="build-box hidden"></div>
           <p id="bankInfo" class="muted small-text bank-info"></p>
           <div class="row col-actions">
             <button id="restartBtn" class="danger small hidden" data-i18n="mono.backToLobby"></button>
@@ -183,8 +186,7 @@
               <div id="actions" class="actions"></div>
               <ul id="feed" class="feed"></ul>
               <button id="logBtn" class="ghost small log-btn" type="button"></button>
-              <div id="cardShow" class="card-show hidden"></div>
-              <div id="dealShow" class="deal-show hidden"></div>
+              <div id="cardShow" class="card-show hidden" role="status"></div>
             </div>
             <div id="tokens" class="tokens"></div>
           </div>
@@ -242,6 +244,8 @@
     </div>
   </div>
 
+  <!-- on a phone: an offer made to you, pinned to the bottom of the screen -->
+  <div id="dealSheet" class="deal-sheet hidden" role="dialog" aria-live="assertive"></div>
   <div id="toast" class="toast hidden"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/i18n.js"></script>

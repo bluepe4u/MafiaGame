@@ -183,11 +183,15 @@ test('building: needs the set, builds evenly, bank supply, hotels, selling back'
   own(room, 1, by.Ann);
   assert.throws(() => room.buildHouse(by.Ann, 1), /err\.mono\.needSet/);
   own(room, 3, by.Ann);
+  const nextTurn = () => { room.g.turn.built = {}; }; // one building per set per turn
   room.buildHouse(by.Ann, 1);
+  assert.throws(() => room.buildHouse(by.Ann, 3), /err\.mono\.buildLimit/);
+  nextTurn();
   assert.throws(() => room.buildHouse(by.Ann, 1), /err\.mono\.buildEvenly/);
   room.buildHouse(by.Ann, 3);
   assert.strictEqual(room.g.housesLeft, 30);
-  for (let i = 0; i < 3; i++) { room.buildHouse(by.Ann, 1); room.buildHouse(by.Ann, 3); }
+  for (let i = 0; i < 3; i++) { nextTurn(); room.buildHouse(by.Ann, 1); nextTurn(); room.buildHouse(by.Ann, 3); }
+  nextTurn();
   room.buildHouse(by.Ann, 1); // hotel
   assert.strictEqual(room.g.props[1].houses, 5);
   assert.strictEqual(room.g.hotelsLeft, 11);
@@ -291,6 +295,7 @@ test('trades: properties and cash change hands; mortgaged ones cost 10% interest
   assert.strictEqual(gp(room, by.Bob).cash, 1500);
   own(room, 1, by.Cid, 1);
   own(room, 3, by.Cid);
+  room.beginTurn(by.Cid);
   assert.throws(() => room.proposeTrade(by.Cid, { to: by.Ann, give: { props: [3] }, take: { cash: 60 } }), /err\.mono\.sellHousesFirst/);
   assert.throws(() => room.proposeTrade(by.Cid, { to: by.Ann, give: { props: [6] } }), /err\.mono\.tradeInvalid/);
 });
@@ -321,6 +326,7 @@ test('trades: clearly unfair deals are refused', () => {
   room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [39] }, take: { props: [1], cash: 250 } });
   // Bob has Malaya Bronnaya: the Arbat completes his set, so it can't go for less than 400
   own(room, 37, by.Bob);
+  room.beginTurn(by.Ann); // a fresh turn: one offer to each player per turn
   assert.throws(() => room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [39] }, take: { cash: 200 } }), /err\.mono\.cheapMonopoly/);
   room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [39] }, take: { cash: 400 } });
   // a swap where both sides complete a set is fine even if values differ
@@ -418,7 +424,7 @@ test('random play: 60 games never get stuck and keep the bank and cash consisten
     });
     const n = 2 + (game % 5);
     const ps = Array.from({ length: n }, (_, i) => room.join('P' + i, { userId: 'u' + i }));
-    room.updateSettings(ps[0].id, { turnSeconds: 30, freeParking: game % 2 === 0, auctions: game % 3 !== 0, doubleGo: game % 2 === 1 });
+    room.updateSettings(ps[0].id, { turnSeconds: 30, freeParking: game % 2 === 0, auctions: game % 3 !== 0, doubleGo: game % 2 === 1, turbo: game % 4 < 2 });
     room.start(ps[0].id);
     const tryIt = fn => { try { fn(); } catch (e) { if (!e.key) throw e; } };
     for (let step = 0; step < 8000 && room.phase === "playing"; step++) {
@@ -442,9 +448,23 @@ test('random play: 60 games never get stuck and keep the bank and cash consisten
       } else if (g.turn.stage === 'buy') {
         tryIt(() => (rnd() < 0.7 ? room.buy(cur) : room.decline(cur)));
         if (g.turn.stage === 'buy') room.decline(cur);
+      } else if (g.turn.stage === 'bus') {
+        room.busMove(cur, Math.floor(rnd() * 3));
+      } else if (g.turn.stage === 'pick') {
+        room.pickSquare(cur, Math.floor(rnd() * 40));
       } else if (g.turn.stage === 'roll') {
         if (room.gp(cur).inJail && rnd() < 0.3) tryIt(() => room.payBail(cur));
         if (rnd() < 0.2) tryIt(() => room.buildHouse(cur, pick(room.owned(cur).concat([1]))));
+        if (rnd() < 0.15) {
+          const other = pick(room.active().filter(p => p !== cur));
+          const mine = room.owned(cur);
+          if (other) {
+            tryIt(() => {
+              const tr = room.proposeTrade(cur, { to: other, give: { props: mine.slice(0, 1), cash: Math.floor(rnd() * 100) }, take: { props: room.owned(other).slice(0, 1) } });
+              if (rnd() < 0.8) room.respondTrade(other, tr.id, rnd() < 0.6);
+            });
+          }
+        }
         room.roll(cur);
       } else if (g.turn.stage === 'end') {
         const mine = room.owned(cur);
@@ -452,15 +472,8 @@ test('random play: 60 games never get stuck and keep the bank and cash consisten
         if (x < 0.35 && mine.length) tryIt(() => room.buildHouse(cur, pick(mine)));
         else if (x < 0.45 && mine.length) tryIt(() => room.mortgage(cur, pick(mine)));
         else if (x < 0.5 && mine.length) tryIt(() => room.unmortgage(cur, pick(mine)));
-        else if (x < 0.55) {
-          const other = pick(room.active().filter(p => p !== cur));
-          if (other) {
-            tryIt(() => {
-              const tr = room.proposeTrade(cur, { to: other, give: { props: mine.slice(0, 1), cash: Math.floor(rnd() * 100) }, take: { props: room.owned(other).slice(0, 1) } });
-              room.respondTrade(other, tr.id, rnd() < 0.6);
-            });
-          }
-        } else room.endTurn(cur);
+        else if (x < 0.55 && g.trades.length) tryIt(() => room.respondTrade(g.trades[0].to, g.trades[0].id, rnd() < 0.5));
+        else room.endTurn(cur);
       }
       // invariants after every step
       if (room.phase !== 'playing') break;
@@ -471,6 +484,11 @@ test('random play: 60 games never get stuck and keep the bank and cash consisten
       for (const pid of room.g.order) assert.ok(room.gp(pid).cash >= 0, 'no negative cash');
       for (const pr of Object.values(room.g.props)) assert.ok(!room.gp(pr.owner).bankrupt, 'bankrupt players own nothing');
       assert.ok(room.g.turn && !room.gp(room.current()).bankrupt, 'the turn belongs to an active player');
+      // the animated path ends where the token really is
+      const lm = room.g.lastMove;
+      const steps = lm ? lm.segs.filter(sg => sg.kind !== 'draw') : [];
+      if (steps.length && !room.gp(lm.pid).bankrupt) assert.strictEqual(steps.at(-1).to, room.gp(lm.pid).pos, 'move path ends at the token');
+      for (const tr of room.g.trades) assert.strictEqual(tr.from, room.current(), 'open offers belong to the player whose turn it is');
     }
     // a game that hasn't ended must still be moving (random players rarely complete colour sets,
     // so many games stall the way real Monopoly does without trading)
@@ -529,4 +547,161 @@ test('round limit: after N rounds the richest player wins; places by net worth; 
   assert.strictEqual(archived[0].winner, 'Bob');
   assert.deepStrictEqual(archived[0].players.map(p => p.place), [1, 2, 3]);
   assert.throws(() => setup(2, { roundLimit: 3 }), /err\.mono\.roundRange/);
+});
+
+test('trades: only on your own turn before rolling, three offers per opponent per turn, gone when the turn ends', () => {
+  const { room, by, dice } = setup();
+  own(room, 6, by.Ann);
+  own(room, 8, by.Bob);
+  own(room, 9, by.Cid);
+  assert.throws(() => room.proposeTrade(by.Bob, { to: by.Ann, give: { props: [8] }, take: { props: [6] } }), /err\.mono\.tradeOwnTurn/, 'not Bob\'s turn');
+  for (let i = 0; i < 3; i++) {
+    const a = room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } });
+    room.respondTrade(by.Bob, a.id, false);
+  }
+  assert.throws(() => room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } }), /err\.mono\.tradeLimit/, 'three offers to Bob per turn');
+  room.proposeTrade(by.Ann, { to: by.Cid, give: { props: [6] }, take: { props: [9] } }); // a different opponent is fine
+  dice.push([1, 3]); // to the income tax
+  room.roll(by.Ann);
+  assert.throws(() => room.proposeTrade(by.Ann, { to: by.Bob, give: { cash: 10 }, take: { cash: 10 } }), /err\.mono\.tradeOwnTurn/, 'not after rolling');
+  // Cid can still answer while it is Ann's turn...
+  assert.strictEqual(room.g.trades.length, 1);
+  room.endTurn(by.Ann);
+  // ...but the offer is withdrawn when her turn ends
+  assert.strictEqual(room.g.trades.length, 0);
+  assert.ok(room.g.log.some(e => e.key === 'mono.log.tradesExpired'));
+  // a new turn, a new allowance
+  room.beginTurn(by.Ann);
+  room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } });
+});
+
+test('building: one building per colour set per turn; turbo lets one street go up first', () => {
+  const { room, by } = setup(2);
+  own(room, 1, by.Ann); own(room, 3, by.Ann);
+  own(room, 6, by.Ann); own(room, 8, by.Ann); own(room, 9, by.Ann);
+  room.buildHouse(by.Ann, 1);
+  room.buildHouse(by.Ann, 6); // another set in the same turn is fine
+  assert.throws(() => room.buildHouse(by.Ann, 3), /err\.mono\.buildLimit/);
+  room.beginTurn(by.Ann);
+  room.buildHouse(by.Ann, 3);
+
+  const t = setup(2, { turbo: true });
+  own(t.room, 37, t.by.Ann); own(t.room, 39, t.by.Ann);
+  for (let i = 0; i < 5; i++) { t.room.beginTurn(t.by.Ann); t.room.buildHouse(t.by.Ann, 39); }
+  assert.strictEqual(t.room.g.props[39].houses, 5, 'a hotel on Arbat while Malaya Bronnaya is empty');
+  assert.strictEqual(t.room.g.props[37].houses, 0);
+  assert.throws(() => t.room.buildHouse(t.by.Ann, 37), /err\.mono\.buildLimit/, 'still one per set per turn');
+  t.room.sellHouse(t.by.Ann, 39); // and it can be sold down without evening out
+  assert.strictEqual(t.room.g.props[39].houses, 4);
+});
+
+test('turbo speed die: numbers add, bus picks a die, Mr. Monopoly goes to the next unowned property, triples go anywhere', () => {
+  const t = setup(2, { turbo: true });
+  const { room, by, dice } = t;
+  const speeds = [];
+  room.rollSpeed = () => speeds.shift();
+  // a number adds to the move
+  dice.push([1, 2]); speeds.push(3);
+  room.roll(by.Ann);
+  assert.strictEqual(gp(room, by.Ann).pos, 6);
+  assert.strictEqual(room.g.lastDice.speed, 3);
+  // the bus: choose one die
+  room.beginTurn(by.Bob);
+  dice.push([2, 5]); speeds.push('bus');
+  room.roll(by.Bob);
+  assert.strictEqual(room.g.turn.stage, 'bus');
+  assert.throws(() => room.endTurn(by.Bob), /err\.mono\.wrongStage/);
+  room.busMove(by.Bob, 1); // the 5 only: the Riga railway
+  assert.strictEqual(gp(room, by.Bob).pos, 5);
+  // Mr. Monopoly: move, deal with the square, then on to the next property nobody owns
+  room.beginTurn(by.Ann);
+  gp(room, by.Ann).pos = 0;
+  own(room, 6, by.Bob); own(room, 8, by.Bob); own(room, 9, by.Bob);
+  dice.push([1, 2]); speeds.push('mr');
+  room.roll(by.Ann); // to 3 (Nagatinskaya, unowned)
+  assert.strictEqual(room.g.turn.stage, 'buy');
+  room.decline(by.Ann);
+  room.closeAuction();
+  assert.strictEqual(gp(room, by.Ann).pos, 5, 'on to the Riga railway, skipping owned streets');
+  assert.strictEqual(room.g.turn.stage, 'buy');
+  const mrMove = room.g.lastMove.segs.at(-1);
+  assert.deepStrictEqual([mrMove.kind, mrMove.from, mrMove.to], ['mr', 3, 5]);
+  // triples: pick any square
+  room.beginTurn(by.Bob);
+  dice.push([2, 2]); speeds.push(2);
+  room.roll(by.Bob);
+  assert.strictEqual(room.g.turn.stage, 'pick');
+  room.pickSquare(by.Bob, 39);
+  assert.strictEqual(gp(room, by.Bob).pos, 39);
+  assert.strictEqual(room.g.turn.stage, 'buy');
+  // no speed die when rolling out of jail, and none outside turbo
+  room.beginTurn(by.Ann);
+  room.sendToJail(by.Ann);
+  dice.push([1, 2]);
+  room.roll(by.Ann);
+  assert.strictEqual(room.g.lastDice.speed, null);
+});
+
+test('move path: the walk, the card drawn, and where the card sent you, in order', () => {
+  const { room, by, dice } = setup(2);
+  room.g.decks.chance = ['c.arbat', ...room.g.decks.chance.filter(c => c !== 'c.arbat')];
+  dice.push([3, 4]); // GO -> 7 (Chance) -> Arbat
+  room.roll(by.Ann);
+  const segs = room.g.lastMove.segs.map(sg => [sg.kind, sg.from ?? sg.at, sg.to ?? sg.card]);
+  assert.deepStrictEqual(segs, [['walk', 0, 7], ['draw', 7, 'c.arbat'], ['card', 7, 39]]);
+  // "Go to jail": the walk there, then the trip to jail
+  room.beginTurn(by.Bob);
+  gp(room, by.Bob).pos = 25;
+  dice.push([2, 3]);
+  room.roll(by.Bob);
+  assert.deepStrictEqual(room.g.lastMove.segs.map(sg => [sg.kind, sg.from, sg.to]), [['walk', 25, 30], ['jail', 30, 10]]);
+  assert.strictEqual(gp(room, by.Bob).pos, 10);
+});
+
+test('offer clock: the other side has 30 s, the turn clock waits meanwhile, an unanswered offer is declined', () => {
+  const t = setup(2, { turnSeconds: 90 });
+  const { room, by, timers } = t;
+  own(room, 6, by.Ann); own(room, 8, by.Bob);
+  const before = room.g.turn.endsAt;
+  assert.ok(before, 'the turn clock runs');
+  const tr = room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } });
+  assert.ok(tr.endsAt - Date.now() > 29000 && tr.endsAt - Date.now() <= 30000, 'Bob gets 30 s');
+  assert.strictEqual(room.g.turn.endsAt, null, 'the turn clock is paused');
+  assert.ok(room.g.turn.pausedLeft > 80000, 'and keeps what was left');
+  // the timer armed now is the offer's (it comes before the paused turn)
+  assert.ok(Math.abs(timers.at(-1).ms - 30000) < 1000);
+  timers.at(-1).fn(); // nobody answered
+  assert.strictEqual(room.g.trades.length, 0);
+  assert.ok(room.g.log.some(e => e.key === 'mono.log.tradeTimedOut'));
+  assert.ok(room.g.turn.endsAt > Date.now() + 80000, 'the turn clock runs again');
+  assert.strictEqual(room.g.turn.pausedLeft, undefined);
+  assert.strictEqual(room.g.turn.stage, 'roll', 'the turn itself was not played for Ann');
+  // answering also starts the turn clock again
+  const tr2 = room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } });
+  room.respondTrade(by.Bob, tr2.id, true);
+  assert.ok(room.g.turn.endsAt > Date.now());
+});
+
+test('restore: a game saved by the previous version (no offer clocks, no per-turn counters) carries on', () => {
+  const { room, by } = setup(2, { turnSeconds: 90 });
+  own(room, 6, by.Ann); own(room, 8, by.Bob);
+  room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } });
+  const data = JSON.parse(JSON.stringify(room.toJSON()));
+  // what the old version saved: no clocks on offers, no new turn fields, no move path, no turbo setting
+  for (const tr of data.g.trades) delete tr.endsAt;
+  for (const k of ['built', 'offered', 'rolled', 'speed', 'pausedLeft']) delete data.g.turn[k];
+  delete data.g.moveSeq; delete data.g.lastMove; delete data.settings.turbo;
+  const timers = [];
+  const back = MonoRoom.restore(data, { setTimer: (fn, ms) => { timers.push({ fn, ms }); return 1; }, clearTimer: () => {} });
+  assert.strictEqual(back.settings.turbo, false);
+  assert.ok(back.g.trades[0].endsAt > Date.now(), 'the open offer gets a clock');
+  assert.strictEqual(back.g.turn.endsAt, null, 'and the turn waits for it');
+  back.respondTrade(by.Bob, back.g.trades[0].id, true);
+  assert.strictEqual(back.g.props[6].owner, by.Bob);
+  back.rollDice = () => [1, 3];
+  back.roll(by.Ann);
+  assert.strictEqual(back.g.lastMove.segs[0].to, 4);
+  own(back, 1, by.Ann); own(back, 3, by.Ann);
+  back.buildHouse(by.Ann, 1);
+  assert.throws(() => back.buildHouse(by.Ann, 3), /err\.mono\.buildLimit/);
 });
