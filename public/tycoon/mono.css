@@ -528,3 +528,5 @@ body.picking .squares { box-shadow: 0 0 0 4px #f59e0b, 0 40px 100px -30px rgba(0
 }
 @keyframes sheet-up { from { transform: translateY(110%); } }
 .mini-timer.paused::before { content: ''; display: inline-block; width: 7px; height: 9px; margin-right: 6px; border-left: 2.5px solid currentColor; border-right: 2.5px solid currentColor; box-sizing: border-box; vertical-align: -1px; }
+/* the dice are only a picture: a tumbling cube must never sit on top of the Roll button */
+.dice, .dice * { pointer-events: none; }
