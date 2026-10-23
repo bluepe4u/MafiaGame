@@ -273,7 +273,7 @@ const DICT = {
     'err.mono.maxBuilt': 'Already a hotel',
     'err.mono.buildEvenly': 'Build evenly across the set',
     'err.mono.tradeOwnTurn': 'Offer deals on your own turn, before you roll',
-    'err.mono.tradeLimit': 'You’ve already sent {name} an offer this turn',
+    'err.mono.tradeLimit': 'You’ve sent {name} {n} offers this turn, the most allowed',
     'err.mono.buildLimit': 'One building per colour set per turn',
     'mono.log.rolledSpeed': p => `${p.name} rolled ${p.a} + ${p.b} and ${p.s === 'mr' ? 'Mr. Monopoly' : p.s === 'bus' ? 'the bus' : '+' + p.s} on the speed die.`,
     'mono.log.triples': '{name} rolled triples and may move to any square.',
@@ -290,14 +290,25 @@ const DICT = {
     'mono.pick.title': 'Triples! Click any square on the board to move there.',
     'mono.pick.stay': 'Stay here',
     'mono.deals.title': 'Open offers',
-    'mono.deals.until': 'Open until the end of {name}’s turn',
-    'mono.trade.whenHint': 'Offers go out on your turn, before you roll, one per player. They stay open until your turn ends.',
+    'mono.deals.until': '30 seconds to answer; {name}’s turn clock waits',
+    'mono.trade.whenHint': 'Offers go out on your turn, before you roll, up to three to each player. The other side has 30 seconds to answer; your turn clock waits meanwhile.',
     'mono.trade.later': 'Deals can be offered on your turn, before you roll.',
     'mono.builtThisTurn': 'You’ve built on this set this turn. One building per set per turn.',
     'mono.card.close': 'Close',
     'mono.trade.clear': 'Clear',
     'mono.skipAnim': 'Skip',
     'mono.dealWith': 'Offer a deal to',
+    'mono.log.tradeTimedOut': '{name} didn’t answer {from}’s offer in time.',
+    'mono.deal.answerIn': p => `Answer in ${p.n}s`,
+    'mono.clockPaused': 'The turn clock waits while an offer is open',
+    'mono.clockPausedShort': 'paused',
+    'mono.bank.title': 'Bank',
+    'mono.bank.houses': p => `${p.n} ${p.n === 1 ? 'house' : 'houses'}`,
+    'mono.bank.hotels': p => `${p.n} ${p.n === 1 ? 'hotel' : 'hotels'}`,
+    'mono.bank.pot': 'jackpot {n}',
+    'mono.build.title': 'Build',
+    'mono.build.hint': 'One building per set per turn',
+    'mono.build.done': 'Built this turn',
     'mono.trade.sent': 'Offer sent',
     'err.mono.sellEvenly': 'Sell evenly across the set',
     'err.mono.noHouses': 'The bank is out of houses',
@@ -894,7 +905,7 @@ Mortgage a property for half its price (buying back costs +10%; with a mortgage 
 Pay 50 ₽, use a "Get out of jail" card, or try for doubles; after three tries you pay and move.
 
 ## Deals
-On your turn, before you roll, offer a deal to another player: properties, cash and jail cards (one offer to each player per turn). They answer while your turn lasts; an offer nobody answered is withdrawn when it ends. Everyone at the table sees it. Clearly lopsided deals (giving away a colour set cheaply, more than twice the value for nothing) are refused.
+On your turn, before you roll, offer a deal to another player: properties, cash and jail cards (up to three offers to each player per turn). They have 30 seconds to answer, and your turn clock waits meanwhile; an offer left unanswered is declined. Everyone at the table sees it. Clearly lopsided deals (giving away a colour set cheaply, more than twice the value for nothing) are refused.
 
 ## Turbo
 With the turbo setting a third, speed die is rolled too: 1–3 adds steps; Mr. Monopoly takes you on to the next property nobody owns (or, when all are owned, the next one where you pay rent) after your square is dealt with; the bus lets you move by one die or both. Triples let you go to any square. In turbo you may build up one street of a set before the others (still one building per set per turn).
@@ -1643,7 +1654,7 @@ Space — roll / end turn / pay / skip the animation. B — buy. A — auction. 
     'err.mono.maxBuilt': 'Уже стоит отель',
     'err.mono.buildEvenly': 'Стройте равномерно по группе',
     'err.mono.tradeOwnTurn': 'Сделку можно предложить только в свой ход, до броска кубиков',
-    'err.mono.tradeLimit': 'Вы уже предлагали сделку игроку {name} в этот ход',
+    'err.mono.tradeLimit': p => `Игроку ${p.name} в этот ход уже отправлено ${p.n} ${ruPlural(p.n, 'предложение', 'предложения', 'предложений')} — больше нельзя`,
     'err.mono.buildLimit': 'За ход — одна постройка в каждой цветовой группе',
     'mono.log.rolledSpeed': p => `${p.name} бросает кубики: ${p.a} и ${p.b}, на скоростном кубике — ${p.s === 'mr' ? 'Мистер Монополия' : p.s === 'bus' ? 'автобус' : '+' + p.s}.`,
     'mono.log.triples': '{name} выбрасывает тройку и может пойти на любое поле.',
@@ -1660,14 +1671,25 @@ Space — roll / end turn / pay / skip the animation. B — buy. A — auction. 
     'mono.pick.title': 'Тройка! Нажмите на любое поле, чтобы перейти туда.',
     'mono.pick.stay': 'Остаться здесь',
     'mono.deals.title': 'Предложения',
-    'mono.deals.until': 'Действует до конца хода игрока {name}',
-    'mono.trade.whenHint': 'Предложения отправляются в свой ход до броска, одно каждому игроку. Они действуют до конца вашего хода.',
+    'mono.deals.until': 'На ответ 30 секунд; время хода игрока {name} стоит',
+    'mono.trade.whenHint': 'Предложения отправляются в свой ход до броска, до трёх каждому игроку. На ответ — 30 секунд; время вашего хода пока стоит.',
     'mono.trade.later': 'Сделку можно предложить в свой ход, до броска кубиков.',
     'mono.builtThisTurn': 'В этой группе вы уже строили в этот ход. За ход — одна постройка в группе.',
     'mono.card.close': 'Закрыть',
     'mono.trade.clear': 'Сбросить',
     'mono.skipAnim': 'Пропустить',
     'mono.dealWith': 'Предложить сделку',
+    'mono.log.tradeTimedOut': '{name} не успел(а) ответить на предложение игрока {from}.',
+    'mono.deal.answerIn': p => `Ответ за ${p.n} с`,
+    'mono.clockPaused': 'Пока открыто предложение, время хода стоит',
+    'mono.clockPausedShort': 'пауза',
+    'mono.bank.title': 'Банк',
+    'mono.bank.houses': p => `${p.n} ${ruPlural(p.n, 'дом', 'дома', 'домов')}`,
+    'mono.bank.hotels': p => `${p.n} ${ruPlural(p.n, 'отель', 'отеля', 'отелей')}`,
+    'mono.bank.pot': 'джекпот {n}',
+    'mono.build.title': 'Строительство',
+    'mono.build.hint': 'За ход — одна постройка в группе',
+    'mono.build.done': 'В этот ход уже строили',
     'mono.trade.sent': 'Предложение отправлено',
     'err.mono.sellEvenly': 'Продавайте равномерно по группе',
     'err.mono.noHouses': 'В банке закончились дома',
@@ -2264,7 +2286,7 @@ Space — roll / end turn / pay / skip the animation. B — buy. A — auction. 
 Заплатите 50 ₽, используйте карточку «Освобождение из тюрьмы» или пробуйте выбросить дубль; после трёх попыток платите и идёте.
 
 ## Сделки
-В свой ход, до броска кубиков, предложите сделку другому игроку: участки, деньги, карточки тюрьмы (одно предложение каждому игроку за ход). Он отвечает, пока длится ваш ход; неотвеченное предложение снимается в конце хода. Сделку видит весь стол. Явно нечестные сделки (отдать группу за бесценок, больше чем вдвое дороже без выгоды) не пройдут.
+В свой ход, до броска кубиков, предложите сделку другому игроку: участки, деньги, карточки тюрьмы (до трёх предложений каждому игроку за ход). На ответ — 30 секунд, и время вашего хода пока стоит; без ответа предложение отклоняется. Сделку видит весь стол. Явно нечестные сделки (отдать группу за бесценок, больше чем вдвое дороже без выгоды) не пройдут.
 
 ## Турбо
 В режиме «Турбо» бросается ещё скоростной кубик: 1–3 добавляют шаги; Мистер Монополия после вашего поля ведёт к следующему свободному участку (а если свободных нет — к следующему, где платить ренту); автобус позволяет идти на значение одного кубика или обоих. Тройка — можно пойти на любое поле. В «Турбо» одну улицу группы можно застроить раньше остальных (но всё так же одна постройка в группе за ход).

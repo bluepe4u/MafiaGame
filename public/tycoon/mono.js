@@ -744,7 +744,15 @@ function drawDice(roll, animate = false) {
     $('#dice').classList.add('bounce');
   }
 }
+// before anyone has rolled: the dice wait on the board (and the speed die in a turbo game)
+function drawIdleDice() {
+  ensureDice();
+  if ($('#dice').dataset.idle === String(!!state.settings.turbo)) return;
+  $('#dice').dataset.idle = String(!!state.settings.turbo);
+  drawDice({ dice: [6, 5], speed: state.settings.turbo ? 'mr' : null });
+}
 function animateDice(roll) {
+  delete $('#dice').dataset.idle;
   drawDice(roll, !reducedMotion());
 }
 
@@ -753,15 +761,18 @@ function renderGame() {
   if (!BOARD) return;
   const g = state.game;
   updateBoard();
+  if (!g.lastDice) drawIdleDice();
+  renderBuild();
   if (fittedFor !== `${Math.round($('#board').getBoundingClientRect().width)}|${lang}`) fitNames();
   renderCenter();
   renderPlayers();
   renderDeal();
   if (deal && !$('#tradeModal').classList.contains('hidden')) renderTrade();
   if (!$('#sqInfo').classList.contains('hidden') && openSq !== null) openSquare(openSq, true);
-  $('#bankInfo').innerHTML = `<span class="bank-item" title="${esc(t('mono.bankSupply', { h: g.housesLeft, t: g.hotelsLeft }))}"><i class="house"></i>${g.housesLeft}</span>
-    <span class="bank-item"><i class="hotel"></i>${g.hotelsLeft}</span>
-    ${state.settings.freeParking ? `<span class="bank-item" title="${esc(t('mono.pot', { n: g.pot }))}">${ART.car}${money(g.pot)}</span>` : ''}`;
+  $('#bankInfo').innerHTML = `<span class="bank-label">${esc(t('mono.bank.title'))}</span>
+    <span class="bank-item" title="${esc(t('mono.bankSupply', { h: g.housesLeft, t: g.hotelsLeft }))}"><i class="house"></i><span>${esc(t('mono.bank.houses', { n: g.housesLeft }))}</span></span>
+    <span class="bank-item" title="${esc(t('mono.bankSupply', { h: g.housesLeft, t: g.hotelsLeft }))}"><i class="hotel"></i><span>${esc(t('mono.bank.hotels', { n: g.hotelsLeft }))}</span></span>
+    ${state.settings.freeParking ? `<span class="bank-item" title="${esc(t('mono.pot', { n: g.pot }))}">${ART.car}<span>${esc(t('mono.bank.pot', { n: money(g.pot) }))}</span></span>` : ''}`;
   const playing = state.phase === 'playing' && !state.me.spectator && gp(state.me.id) && !gp(state.me.id).bankrupt;
   $('#resignBtn').classList.toggle('hidden', !playing);
   $('#autoEndBtn').classList.toggle('hidden', !playing);
@@ -850,7 +861,7 @@ function renderCenter() {
   }
   const turnPid = g.turn.pid;
   info.innerHTML = `${pieceOf(turnPid)}
-    <b>${esc(turnPid === me ? t('mono.yourTurn') : t('mono.turnOf', { name: nameOf(turnPid) }))}</b> ${timerHtml(g.auction ? g.auction.endsAt : g.debts.length ? g.debts[0].endsAt : g.turn.endsAt)}`;
+    <b>${esc(turnPid === me ? t('mono.yourTurn') : t('mono.turnOf', { name: nameOf(turnPid) }))}</b> ${timerHtml(g.auction ? g.auction.endsAt : g.debts.length ? g.debts[0].endsAt : g.turn.endsAt || g.turn.pausedLeft !== undefined)}`;
   if (g.auction) {
     const a = g.auction;
     const canBid = myGp && !myGp.bankrupt;
@@ -940,10 +951,29 @@ function renderCenter() {
 }
 
 function tickTimer() {
+  if (!state || !state.game) return;
+  // each open offer counts down for everyone to see
+  for (const el of $$('[data-ends]')) {
+    const left = Math.max(0, Math.ceil((Number(el.dataset.ends) - (Date.now() + clockOffset)) / 1000));
+    el.textContent = el.dataset.mine ? t('mono.deal.answerIn', { n: left }) : `${left}s`;
+    el.classList.toggle('low', left <= 10);
+    const bar = el.parentElement && el.parentElement.querySelector('.deal-bar i');
+    if (bar) bar.style.width = `${Math.min(100, (100 * left) / 30)}%`;
+  }
   const el = $('#turnTimer');
-  if (!el || !state || !state.game) return;
+  if (!el) return;
   const g = state.game;
   const endsAt = g.auction ? g.auction.endsAt : g.debts.length ? g.debts[0].endsAt : g.turn && g.turn.endsAt;
+  // the turn clock waits while an offer is open
+  if (!endsAt && g.turn && g.turn.pausedLeft !== undefined) {
+    el.textContent = `${t('mono.clockPausedShort')} · ${Math.ceil(g.turn.pausedLeft / 1000)}s`;
+    el.title = t('mono.clockPaused');
+    el.classList.add('paused');
+    el.classList.remove('low');
+    return;
+  }
+  el.classList.remove('paused');
+  el.title = '';
   if (!endsAt) { el.textContent = ''; return; }
   const left = Math.max(0, Math.ceil((endsAt - (Date.now() + clockOffset)) / 1000));
   el.textContent = `${left}s`;
@@ -1039,6 +1069,39 @@ function manageHtml(i) {
   return btns.length ? `<div class="sq-manage"><span class="muted small-text">${esc(t('mono.yourProperty'))}</span><div class="row">${btns.join('')}</div>${note ? `<p class="manage-note">${esc(note)}</p>` : ''}</div>` : '';
 }
 
+// ---------- building: every complete set in one list, one click per building ----------
+const GROUP_ORDER = ['brown', 'lightblue', 'pink', 'orange', 'red', 'yellow', 'green', 'darkblue'];
+function renderBuild() {
+  const box = $('#buildBox');
+  const g = state.game;
+  const me = state.me.id;
+  const mine = state.phase === 'playing' && gp(me) && !gp(me).bankrupt;
+  const sets = mine ? GROUP_ORDER.filter(grp => BOARD.groups[grp].every(sq => g.props[sq] && g.props[sq].owner === me)) : [];
+  box.classList.toggle('hidden', !sets.length);
+  if (!sets.length) { box.innerHTML = ''; return; }
+  const myTurn = g.turn && g.turn.pid === me && !g.debts.length && !g.auction;
+  const cash = gp(me).cash;
+  const row = grp => {
+    const set = BOARD.groups[grp];
+    const done = ((g.turn && g.turn.pid === me && g.turn.built) || {})[grp] >= 1;
+    const mortgaged = set.some(sq => g.props[sq].mortgaged);
+    const min = Math.min(...set.map(sq => g.props[sq].houses));
+    const cells = set.map(sq => {
+      const pr = g.props[sq];
+      const s = BOARD.squares[sq];
+      const can = myTurn && !done && !mortgaged && pr.houses < 5 && cash >= s.house && (state.settings.turbo || pr.houses === min)
+        && (pr.houses === 4 ? g.hotelsLeft > 0 : g.housesLeft > 0);
+      const level = pr.houses === 5 ? '<i class="hotel"></i>' : '<i class="house"></i>'.repeat(pr.houses) || '<span class="bl-none">—</span>';
+      return `<button class="bl-street" data-build="${sq}" ${can ? '' : 'disabled'} title="${esc(sqName(sq))} · ${money(s.house)}">
+        <span class="bl-name">${esc(sqShort(sq))}</span><span class="bl-level">${level}</span><span class="bl-plus">+${money(s.house)}</span></button>`;
+    }).join('');
+    const note = mortgaged ? t('err.mono.groupMortgaged') : done ? t('mono.build.done') : '';
+    return `<div class="bl-set g-${grp} ${done ? 'done' : ''}"><span class="bl-strip"></span><div class="bl-streets">${cells}</div>${note ? `<span class="bl-note">${esc(note)}</span>` : ''}</div>`;
+  };
+  box.innerHTML = `<div class="bl-head"><h3>${esc(t('mono.build.title'))}</h3><span class="muted small-text">${esc(myTurn ? t('mono.build.hint') : t('err.mono.buildOnYourTurn'))}</span></div>${sets.map(row).join('')}`;
+  for (const b of box.querySelectorAll('[data-build]')) b.onclick = () => { b.disabled = true; send('build', { square: Number(b.dataset.build) }); };
+}
+
 // ---------- player menu: deal or profile ----------
 function openPlayerMenu(pid, anchor) {
   const menu = $('#playerMenu');
@@ -1090,7 +1153,7 @@ function offerBlocked(to) {
   const g = state.game;
   const tr = g.turn;
   if (state.phase !== 'playing' || !tr || tr.pid !== state.me.id || tr.stage !== 'roll' || tr.rolled || g.debts.length || g.auction) return t('mono.trade.later');
-  if (((tr.offered || {})[to] || 0) >= 1) return t('err.mono.tradeLimit', { name: nameOf(to) });
+  if (((tr.offered || {})[to] || 0) >= 3) return t('err.mono.tradeLimit', { name: nameOf(to), n: 3 });
   return null;
 }
 const tradeable = pid => owned(pid).filter(sq => {
@@ -1193,30 +1256,39 @@ $('#tradeModal').addEventListener('pointerdown', e => { if (e.target.id === 'tra
 const seenDeals = new Set();
 function renderDeal() {
   const box = $('#dealsBox');
+  const sheet = $('#dealSheet');
   const g = state.game;
   const list = state.phase === 'playing' ? g.trades : [];
-  box.classList.toggle('hidden', !list.length);
-  if (!list.length) { box.innerHTML = ''; return; }
   const me = state.me.id;
+  // on a phone the list is below the board: an offer for you comes up from the bottom instead
+  const forMe = list.filter(tr => tr.to === me);
+  sheet.classList.toggle('hidden', !forMe.length);
+  box.classList.toggle('hidden', !list.length);
+  box.classList.toggle('has-mine', !!forMe.length);
+  if (!list.length) { box.innerHTML = ''; sheet.innerHTML = ''; return; }
   const sideHtml = (pid, x) => `<div class="deal-side"><div class="deal-who">${pieceOf(pid)}<b>${esc(t('mono.deal.gives', { name: nameOf(pid) }))}</b><span class="side-value">${money(sideValue(x))}</span></div>
     <div class="deal-items">${x.props.map(sq => `<span class="deal-prop g-${BOARD.squares[sq].group || BOARD.squares[sq].type}"><i></i>${esc(sqShort(sq))}</span>`).join('')}
     ${x.cash ? `<span class="deal-cash">${money(x.cash)}</span>` : ''}${x.cards ? `<span class="deal-cash">${esc(t('mono.trade.cards'))} ×${x.cards}</span>` : ''}
     ${!x.props.length && !x.cash && !x.cards ? `<span class="muted">${esc(t('mono.trade.nothing'))}</span>` : ''}</div></div>`;
-  box.innerHTML = `<div class="deals-head"><h3>${esc(t('mono.deals.title'))}</h3><span class="muted small-text">${esc(t('mono.deals.until', { name: nameOf(g.turn.pid) }))}</span></div>`
-    + list.map(tr => `<div class="deal-card ${tr.to === me ? 'for-me' : ''} ${seenDeals.has(tr.id) ? '' : 'pop'}" data-deal-id="${tr.id}">
+  const card = tr => `<div class="deal-card ${tr.to === me ? 'for-me' : ''} ${seenDeals.has(tr.id) ? '' : 'pop'}" data-deal-id="${tr.id}">
       <div class="deal-title">${esc(t('mono.deal.offer', { from: nameOf(tr.from), to: nameOf(tr.to) }))}</div>
+      ${tr.endsAt ? `<div class="deal-clock"><span class="deal-bar"><i></i></span><span class="deal-timer" data-ends="${tr.endsAt}" ${tr.to === me ? 'data-mine="1"' : ''}></span></div>` : ''}
       ${sideHtml(tr.from, tr.give)}<div class="deal-arrow">⇅</div>${sideHtml(tr.to, tr.take)}
       <div class="row deal-btns">${tr.to === me ? `<button class="primary small" data-deal="accept">${esc(t('mono.trade.accept'))}</button><button class="small" data-deal="decline">${esc(t('mono.trade.decline'))}</button>`
         : tr.from === me ? `<button class="small" data-deal="cancel">${esc(t('mono.trade.cancel'))}</button>` : `<span class="muted small-text">${esc(t('mono.deal.waiting', { name: nameOf(tr.to) }))}</span>`}</div>
-    </div>`).join('');
+    </div>`;
+  box.innerHTML = `<div class="deals-head"><h3>${esc(t('mono.deals.title'))}</h3><span class="muted small-text">${esc(t('mono.deals.until', { name: nameOf(g.turn.pid) }))}</span></div>`
+    + list.map(card).join('');
+  sheet.innerHTML = forMe.map(card).join('');
   for (const tr of list) {
     if (seenDeals.has(tr.id)) continue;
     seenDeals.add(tr.id);
     if (tr.to === me) { SFX.turn(); toast(t('mono.alert.deal', { name: nameOf(tr.from) }), 'info'); }
   }
-  for (const card of box.querySelectorAll('[data-deal-id]')) {
-    for (const b of card.querySelectorAll('[data-deal]')) b.onclick = () => { b.disabled = true; send('tradeRespond', { id: card.dataset.dealId, accept: b.dataset.deal === 'accept' }); };
+  for (const el of [...box.querySelectorAll('[data-deal-id]'), ...sheet.querySelectorAll('[data-deal-id]')]) {
+    for (const b of el.querySelectorAll('[data-deal]')) b.onclick = () => { b.disabled = true; send('tradeRespond', { id: el.dataset.dealId, accept: b.dataset.deal === 'accept' }); };
   }
+  tickTimer();
 }
 
 $('#sqInfo').addEventListener('pointerdown', e => { if (e.target.id === 'sqInfo') $('#sqInfo').classList.add('hidden'); });

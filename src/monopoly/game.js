@@ -21,7 +21,8 @@ const HOUSES = 32;
 const HOTELS = 12;
 const AUCTION_MS = 10000; // the auction ends this long after the last bid
 const TRADE_TTL_MS = 2 * 60 * 1000;
-const OFFERS_PER_TARGET = 1; // offers a player may send to each opponent per turn
+const OFFERS_PER_TARGET = 3; // offers a player may send to each opponent per turn
+const OFFER_MS = 30 * 1000; // how long the other side has to answer; the turn clock waits meanwhile
 const BUILDS_PER_GROUP = 1; // buildings a player may add to each colour set per turn
 // the turbo game's third die: 1–3 extra steps, Mr. Monopoly (twice) or the bus
 const SPEED_FACES = [1, 2, 3, 'mr', 'mr', 'bus'];
@@ -94,6 +95,9 @@ class MonoRoom {
     if (room.g && room.phase === 'playing') {
       if (room.g.turn) room.g.turn.endsAt = room.turnDeadline();
       if (room.g.auction) room.g.auction.endsAt = Date.now() + AUCTION_MS;
+      // offers saved before they had their own clock get one, and the turn clock waits for them
+      for (const tr of room.g.trades || []) tr.endsAt = Date.now() + OFFER_MS;
+      if (room.g.turn && room.g.trades?.length) { room.g.turn.endsAt = null; room.pauseTurnClock(); }
       room.armTimer();
     }
     return room;
@@ -359,8 +363,30 @@ class MonoRoom {
   }
 
   setStage(stage) {
-    this.g.turn.stage = stage;
-    this.g.turn.endsAt = this.turnDeadline();
+    const t = this.g.turn;
+    t.stage = stage;
+    if (t.pausedLeft !== undefined) t.pausedLeft = this.settings.turnSeconds * 1000; // a new stage, a full clock once the offers are answered
+    else t.endsAt = this.turnDeadline();
+  }
+
+  // While an offer waits for an answer, the turn clock stands still (it keeps what was left).
+  pauseTurnClock() {
+    const t = this.g.turn;
+    if (!t || t.pausedLeft !== undefined || !this.settings.turnSeconds) return;
+    t.pausedLeft = t.endsAt ? Math.max(5000, t.endsAt - Date.now()) : this.settings.turnSeconds * 1000;
+    t.endsAt = null;
+  }
+
+  resumeTurnClock() {
+    const t = this.g.turn;
+    if (!t || t.pausedLeft === undefined || this.g.trades.length) return;
+    t.endsAt = Date.now() + t.pausedLeft;
+    delete t.pausedLeft;
+  }
+
+  removeTrade(tr) {
+    this.g.trades = this.g.trades.filter(x => x !== tr);
+    this.resumeTurnClock();
   }
 
   // ---------- timer: one at a time, for whichever deadline comes first ----------
@@ -368,16 +394,38 @@ class MonoRoom {
     if (this.timer) this.clearTimer(this.timer);
     this.timer = null;
     if (this.phase !== 'playing' || !this.g) return;
-    const deadline = this.g.auction ? this.g.auction.endsAt : this.g.debts.length ? this.g.debts[0].endsAt : this.g.turn?.endsAt;
-    if (!deadline) return;
+    const main = this.mainDeadline();
+    const offer = this.offerDeadline();
+    const deadline = [main, offer].filter(Boolean).reduce((a, b) => Math.min(a, b), Infinity);
+    if (deadline === Infinity) return;
     const seq = ++this.timerSeq;
     this.timer = this.setTimer(() => { if (this.timerSeq === seq) this.onDeadline(); }, Math.max(0, deadline - Date.now()));
+  }
+
+  mainDeadline() {
+    const g = this.g;
+    return g.auction ? g.auction.endsAt : g.debts.length ? g.debts[0].endsAt : g.turn?.endsAt;
+  }
+
+  offerDeadline() {
+    const ends = (this.g.trades || []).map(tr => tr.endsAt).filter(Boolean);
+    return ends.length ? Math.min(...ends) : null;
   }
 
   // The clock ran out: play the move for whoever is idle.
   onDeadline() {
     if (this.phase !== 'playing') return;
     const g = this.g;
+    // an offer nobody answered in time is declined (whichever deadline came first fired)
+    const offer = this.offerDeadline();
+    const main = this.mainDeadline();
+    if (offer && (!main || offer <= main)) {
+      for (const tr of g.trades.filter(x => x.endsAt && x.endsAt <= offer)) {
+        this.removeTrade(tr);
+        this.addLog('mono.log.tradeTimedOut', { name: this.nameOf(tr.to), from: this.nameOf(tr.from) });
+      }
+      return this.touch();
+    }
     if (g.auction) return this.closeAuction();
     if (g.debts.length) {
       const d = g.debts[0];
@@ -1083,6 +1131,7 @@ class MonoRoom {
     gp.bankruptAt = this.active().length; // finishing place: the last one standing is 1st
     gp.outRound = this.g.round;
     g.trades = g.trades.filter(tr => tr.from !== pid && tr.to !== pid);
+    this.resumeTurnClock();
   }
 
   afterBankruptcy(pid) {
@@ -1170,7 +1219,9 @@ class MonoRoom {
     this.assert(tr.give.props.length || tr.give.cash || tr.give.cards || tr.take.props.length || tr.take.cash || tr.take.cards, 'err.mono.emptyTrade');
     this.validateTrade(tr);
     offered[to] = (offered[to] || 0) + 1;
+    tr.endsAt = Date.now() + OFFER_MS;
     this.g.trades.push(tr);
+    this.pauseTurnClock();
     this.addLog('mono.log.tradeOffered', { name: this.nameOf(pid), to: this.nameOf(to) });
     this.touch();
     return tr;
@@ -1220,7 +1271,7 @@ class MonoRoom {
     this.assert(tr, 'err.mono.tradeGone');
     if (!accept) {
       this.assert(pid === tr.to || pid === tr.from, 'err.invalidTarget');
-      this.g.trades = this.g.trades.filter(x => x !== tr);
+      this.removeTrade(tr);
       this.addLog(pid === tr.from ? 'mono.log.tradeCancelled' : 'mono.log.tradeDeclined', { name: this.nameOf(pid) });
       this.touch();
       return;
@@ -1247,7 +1298,7 @@ class MonoRoom {
     const dealValue = x => x.props.reduce((s, sq) => s + SQUARES[sq].price, 0) + x.cash + x.cards * JAIL_CARD_VALUE;
     const value = dealValue(tr.give) + dealValue(tr.take);
     if (value > (this.g.highlights.deal?.value || 0)) this.g.highlights.deal = { from: tr.from, to: tr.to, value, give: tr.give, take: tr.take };
-    this.g.trades = this.g.trades.filter(x => x !== tr);
+    this.removeTrade(tr);
     this.addLog('mono.log.tradeDone', { name: this.nameOf(tr.from), to: this.nameOf(tr.to) });
     this.trackPeaks();
     this.touch();
@@ -1257,7 +1308,7 @@ class MonoRoom {
     const now = Date.now();
     const before = this.g?.trades.length || 0;
     if (this.g) this.g.trades = this.g.trades.filter(tr => now - tr.at < TRADE_TTL_MS);
-    if (this.g && this.g.trades.length !== before) this.touch();
+    if (this.g && this.g.trades.length !== before) { this.resumeTurnClock(); this.touch(); }
   }
 
   // ---------- end of game ----------
@@ -1341,4 +1392,4 @@ class MonoRoom {
   }
 }
 
-module.exports = { MonoRoom, TOKENS, MIN_PLAYERS, MAX_PLAYERS, AUCTION_MS, BAIL, SALARY, SCALE, SPEED_FACES };
+module.exports = { MonoRoom, TOKENS, MIN_PLAYERS, MAX_PLAYERS, AUCTION_MS, BAIL, SALARY, SCALE, SPEED_FACES, OFFER_MS, OFFERS_PER_TARGET };

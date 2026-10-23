@@ -478,3 +478,53 @@ body.picking .squares { box-shadow: 0 0 0 4px #f59e0b, 0 40px 100px -30px rgba(0
 /* the luxury tax ring is a narrow drawing: give it a bit more height than the round icons */
 .sq.left .art-ring, .sq.right .art-ring { height: 76%; max-height: 58px; }
 .sq.top .art-ring, .sq.bottom .art-ring { height: 64%; }
+
+/* ---------- the bank, labelled ---------- */
+.bank-info { flex-wrap: wrap; gap: 6px 14px; font-family: inherit; font-size: .82rem; }
+.bank-label { text-transform: uppercase; letter-spacing: .08em; font-size: .7rem; font-weight: 700; }
+.bank-item span { font-family: var(--mono); }
+
+/* ---------- the turn clock waits while an offer is open ---------- */
+.mini-timer.paused { color: #92400e; background: #fef3c7; }
+
+/* ---------- open offers: the answer clock ---------- */
+.deal-clock { display: flex; align-items: center; gap: 8px; }
+.deal-bar { flex: 1; height: 4px; border-radius: 99px; background: rgba(0, 0, 0, .1); overflow: hidden; }
+.deal-bar i { display: block; height: 100%; width: 100%; background: #f59e0b; border-radius: inherit; transition: width .25s linear; }
+.deal-timer { font: 700 .76rem/1 var(--mono); color: #92400e; white-space: nowrap; }
+.deal-timer.low { color: #b91c1c; }
+.deal-card.for-me .deal-bar i { background: #dc2626; }
+
+/* ---------- build list: every complete set, one click per building ---------- */
+.build-box { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); }
+.bl-head { display: flex; flex-direction: column; gap: 2px; }
+.bl-head h3 { margin: 0; font-size: .95rem; }
+.bl-set { position: relative; display: flex; flex-direction: column; gap: 4px; padding-left: 10px; }
+.bl-strip { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; border-radius: 3px; background: var(--gc); }
+.bl-streets { display: flex; gap: 6px; }
+.bl-street { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px; border-radius: 9px; background: #f6f1e3; color: #17211b; border: 1px solid #c9c3b3; font-size: .72rem; }
+.bl-street:hover:not(:disabled) { background: #fffaf0; border-color: var(--gold); box-shadow: 0 0 0 2px rgba(245, 197, 66, .35); }
+.bl-street:disabled { opacity: .55; }
+.bl-name { font-weight: 700; text-transform: uppercase; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-level { display: flex; gap: 2px; align-items: center; min-height: 12px; }
+.bl-level .house { width: 9px; } .bl-level .hotel { width: 20px; height: 9px; }
+.bl-none { color: #9ca3af; }
+.bl-plus { font-family: var(--mono); font-weight: 700; color: #166534; }
+.bl-note { font-size: .72rem; color: var(--muted); }
+.bl-set.done .bl-note { color: #4ade80; }
+
+/* ---------- phones: an offer for you comes up from the bottom of the screen ---------- */
+.deal-sheet { display: none; }
+@media (max-width: 1100px) {
+  .deal-sheet:not(.hidden) {
+    display: flex; flex-direction: column; gap: 8px; position: fixed; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 70;
+    max-height: 60vh; overflow-y: auto; animation: sheet-up .35s cubic-bezier(.2, 1.1, .4, 1);
+  }
+  .deal-sheet .deal-card { box-shadow: 0 -10px 40px rgba(0, 0, 0, .55); }
+  .deal-sheet .deal-btns button { flex: 1; padding: 11px 14px; font-size: .95rem; }
+  /* the copy in the list below the board would only repeat it */
+  .deals-box .deal-card.for-me { display: none; }
+  .deals-box.has-mine:not(:has(.deal-card:not(.for-me))) { display: none; }
+}
+@keyframes sheet-up { from { transform: translateY(110%); } }
+.mini-timer.paused::before { content: ''; display: inline-block; width: 7px; height: 9px; margin-right: 6px; border-left: 2.5px solid currentColor; border-right: 2.5px solid currentColor; box-sizing: border-box; vertical-align: -1px; }

@@ -549,15 +549,17 @@ test('round limit: after N rounds the richest player wins; places by net worth; 
   assert.throws(() => setup(2, { roundLimit: 3 }), /err\.mono\.roundRange/);
 });
 
-test('trades: only on your own turn before rolling, one offer per opponent per turn, gone when the turn ends', () => {
+test('trades: only on your own turn before rolling, three offers per opponent per turn, gone when the turn ends', () => {
   const { room, by, dice } = setup();
   own(room, 6, by.Ann);
   own(room, 8, by.Bob);
   own(room, 9, by.Cid);
   assert.throws(() => room.proposeTrade(by.Bob, { to: by.Ann, give: { props: [8] }, take: { props: [6] } }), /err\.mono\.tradeOwnTurn/, 'not Bob\'s turn');
-  const a = room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } });
-  room.respondTrade(by.Bob, a.id, false);
-  assert.throws(() => room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } }), /err\.mono\.tradeLimit/, 'one offer to Bob per turn');
+  for (let i = 0; i < 3; i++) {
+    const a = room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } });
+    room.respondTrade(by.Bob, a.id, false);
+  }
+  assert.throws(() => room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } }), /err\.mono\.tradeLimit/, 'three offers to Bob per turn');
   room.proposeTrade(by.Ann, { to: by.Cid, give: { props: [6] }, take: { props: [9] } }); // a different opponent is fine
   dice.push([1, 3]); // to the income tax
   room.roll(by.Ann);
@@ -654,4 +656,52 @@ test('move path: the walk, the card drawn, and where the card sent you, in order
   room.roll(by.Bob);
   assert.deepStrictEqual(room.g.lastMove.segs.map(sg => [sg.kind, sg.from, sg.to]), [['walk', 25, 30], ['jail', 30, 10]]);
   assert.strictEqual(gp(room, by.Bob).pos, 10);
+});
+
+test('offer clock: the other side has 30 s, the turn clock waits meanwhile, an unanswered offer is declined', () => {
+  const t = setup(2, { turnSeconds: 90 });
+  const { room, by, timers } = t;
+  own(room, 6, by.Ann); own(room, 8, by.Bob);
+  const before = room.g.turn.endsAt;
+  assert.ok(before, 'the turn clock runs');
+  const tr = room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } });
+  assert.ok(tr.endsAt - Date.now() > 29000 && tr.endsAt - Date.now() <= 30000, 'Bob gets 30 s');
+  assert.strictEqual(room.g.turn.endsAt, null, 'the turn clock is paused');
+  assert.ok(room.g.turn.pausedLeft > 80000, 'and keeps what was left');
+  // the timer armed now is the offer's (it comes before the paused turn)
+  assert.ok(Math.abs(timers.at(-1).ms - 30000) < 1000);
+  timers.at(-1).fn(); // nobody answered
+  assert.strictEqual(room.g.trades.length, 0);
+  assert.ok(room.g.log.some(e => e.key === 'mono.log.tradeTimedOut'));
+  assert.ok(room.g.turn.endsAt > Date.now() + 80000, 'the turn clock runs again');
+  assert.strictEqual(room.g.turn.pausedLeft, undefined);
+  assert.strictEqual(room.g.turn.stage, 'roll', 'the turn itself was not played for Ann');
+  // answering also starts the turn clock again
+  const tr2 = room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } });
+  room.respondTrade(by.Bob, tr2.id, true);
+  assert.ok(room.g.turn.endsAt > Date.now());
+});
+
+test('restore: a game saved by the previous version (no offer clocks, no per-turn counters) carries on', () => {
+  const { room, by } = setup(2, { turnSeconds: 90 });
+  own(room, 6, by.Ann); own(room, 8, by.Bob);
+  room.proposeTrade(by.Ann, { to: by.Bob, give: { props: [6] }, take: { props: [8] } });
+  const data = JSON.parse(JSON.stringify(room.toJSON()));
+  // what the old version saved: no clocks on offers, no new turn fields, no move path, no turbo setting
+  for (const tr of data.g.trades) delete tr.endsAt;
+  for (const k of ['built', 'offered', 'rolled', 'speed', 'pausedLeft']) delete data.g.turn[k];
+  delete data.g.moveSeq; delete data.g.lastMove; delete data.settings.turbo;
+  const timers = [];
+  const back = MonoRoom.restore(data, { setTimer: (fn, ms) => { timers.push({ fn, ms }); return 1; }, clearTimer: () => {} });
+  assert.strictEqual(back.settings.turbo, false);
+  assert.ok(back.g.trades[0].endsAt > Date.now(), 'the open offer gets a clock');
+  assert.strictEqual(back.g.turn.endsAt, null, 'and the turn waits for it');
+  back.respondTrade(by.Bob, back.g.trades[0].id, true);
+  assert.strictEqual(back.g.props[6].owner, by.Bob);
+  back.rollDice = () => [1, 3];
+  back.roll(by.Ann);
+  assert.strictEqual(back.g.lastMove.segs[0].to, 4);
+  own(back, 1, by.Ann); own(back, 3, by.Ann);
+  back.buildHouse(by.Ann, 1);
+  assert.throws(() => back.buildHouse(by.Ann, 3), /err\.mono\.buildLimit/);
 });

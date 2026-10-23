@@ -165,6 +165,7 @@
         <aside class="players-col">
           <div id="playerList" class="player-list"></div>
           <div id="dealsBox" class="deals-box hidden" aria-live="polite"></div>
+          <div id="buildBox" class="build-box hidden"></div>
           <p id="bankInfo" class="muted small-text bank-info"></p>
           <div class="row col-actions">
             <button id="restartBtn" class="danger small hidden" data-i18n="mono.backToLobby"></button>
@@ -243,6 +244,8 @@
     </div>
   </div>
 
+  <!-- on a phone: an offer made to you, pinned to the bottom of the screen -->
+  <div id="dealSheet" class="deal-sheet hidden" role="dialog" aria-live="assertive"></div>
   <div id="toast" class="toast hidden"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/i18n.js"></script>

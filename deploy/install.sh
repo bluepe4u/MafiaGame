@@ -30,8 +30,9 @@ SITE_ADDRESSES="$(IFS=,; echo "${DOMAINS[*]}" | sed 's/,/, /g')"
 export DEBIAN_FRONTEND=noninteractive
 
 # --- Node.js -----------------------------------------------------------------
-current_major() { command -v node >/dev/null && node -p 'process.versions.node.split(".")[0]' || echo 0; }
-if (( $(current_major) < 20 )); then
+# the app's database is node:sqlite, which needs Node 22.5 or newer
+node_version() { command -v node >/dev/null && node -p 'const [a, b] = process.versions.node.split(".").map(Number); a * 100 + b' || echo 0; }
+if (( $(node_version) < 2205 )); then
   log "Installing Node.js ${NODE_MAJOR}.x (NodeSource)"
   apt-get update -qq
   apt-get install -y -qq ca-certificates curl gnupg
