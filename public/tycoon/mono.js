@@ -621,7 +621,8 @@ function fxOnState(prev, s) {
   const lm = g.lastMove;
   if (seenMoveSeq === undefined) seenMoveSeq = lm ? lm.seq : 0;
   else if (lm && lm.seq !== seenMoveSeq) {
-    if (g.players[lm.pid]) queuePath(lm, { afterDice: freshDice && lm.pid === g.lastDice.pid });
+    // a roll that hasn't moved anyone yet (the bus, triples) has an empty path: nothing to play
+    if (g.players[lm.pid] && lm.segs.length) queuePath(lm, { afterDice: freshDice && lm.pid === g.lastDice.pid });
     seenMoveSeq = lm.seq;
   }
   if (!prev || !prev.game) return;
