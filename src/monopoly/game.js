@@ -21,6 +21,10 @@ const HOUSES = 32;
 const HOTELS = 12;
 const AUCTION_MS = 10000; // the auction ends this long after the last bid
 const TRADE_TTL_MS = 2 * 60 * 1000;
+const OFFERS_PER_TARGET = 1; // offers a player may send to each opponent per turn
+const BUILDS_PER_GROUP = 1; // buildings a player may add to each colour set per turn
+// the turbo game's third die: 1–3 extra steps, Mr. Monopoly (twice) or the bus
+const SPEED_FACES = [1, 2, 3, 'mr', 'mr', 'bus'];
 const LOG_KEEP = 300;
 // player colours: each player's piece on the board is a ring in their colour
 const TOKENS = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316', '#eab308', '#64748b'];
@@ -63,6 +67,7 @@ class MonoRoom {
     this.settings = {
       startingCash: 1500 * SCALE, doubleGo: true, freeParking: false, auctions: true, noRentInJail: false, turnSeconds: 90, mortgageTurns: 15,
       roundLimit: 0, // a shorter game: after this many rounds the richest player wins (0 = play to the end)
+      turbo: false, // the speed die, and no even-building rule (still one building per set per turn)
       family: false,
       voice: true, // voice chat in this room (when the admin has it on for the site)
     };
@@ -83,7 +88,7 @@ class MonoRoom {
     const defaults = room.settings;
     for (const k of SAVED_FIELDS) if (data[k] !== undefined) room[k] = data[k];
     room.settings = { ...defaults, ...room.settings };
-    if (room.g) { room.g.worth ||= []; room.g.highlights ||= { rent: null, deal: null }; }
+    if (room.g) { room.g.worth ||= []; room.g.highlights ||= { rent: null, deal: null }; room.g.moveSeq ||= 0; }
     for (const p of [...room.players, ...room.spectators]) p.connected = false;
     // give whoever was acting a fresh turn clock after the downtime
     if (room.g && room.phase === 'playing') {
@@ -103,6 +108,8 @@ class MonoRoom {
 
   touch() {
     this.lastActivity = Date.now();
+    // the client has this path now; anything that moves later starts a new one
+    if (this.g && this.g.lastMove) this.g.lastMove.sent = true;
     this.armTimer();
     this.onChange(this);
   }
@@ -247,7 +254,7 @@ class MonoRoom {
     const f = this.features();
     this.assert(!s.family || f.family, 'err.featureOff');
     this.assert(!s.voice || f.voice, 'err.featureOff');
-    for (const k of ['doubleGo', 'freeParking', 'auctions', 'noRentInJail', 'family', 'voice']) if (s[k] !== undefined) this.settings[k] = !!s[k];
+    for (const k of ['doubleGo', 'freeParking', 'auctions', 'noRentInJail', 'family', 'voice', 'turbo']) if (s[k] !== undefined) this.settings[k] = !!s[k];
     this.touch();
   }
 
@@ -279,6 +286,8 @@ class MonoRoom {
       trades: [], // [{ id, from, to, give: { props, cash, cards }, take: { props, cash, cards }, at }]
       lastCard: null,
       lastDice: null,
+      moveSeq: 0,
+      lastMove: null, // { seq, pid, segs: [{ kind: walk|back|card|jail|mr|pick|draw, from, to }] } for the client to animate
       log: [],
       winner: null,
       ended: false,
@@ -381,6 +390,8 @@ class MonoRoom {
     this.addLog('mono.log.timeout', { name: this.nameOf(t.pid) });
     if (t.stage === 'roll') return this.roll(t.pid);
     if (t.stage === 'buy') return this.decline(t.pid);
+    if (t.stage === 'bus') return this.busMove(t.pid, 2);
+    if (t.stage === 'pick') return this.pickSquare(t.pid, this.gp(t.pid).pos);
     if (t.stage === 'end') return this.endTurn(t.pid);
   }
 
@@ -405,7 +416,11 @@ class MonoRoom {
 
   // ---------- turns ----------
   beginTurn(pid) {
-    this.g.turn = { pid, stage: 'roll', dice: null, doublesCount: 0, extraRoll: false, endsAt: this.turnDeadline() };
+    this.g.turn = {
+      pid, stage: 'roll', dice: null, speed: null, rolled: false, doublesCount: 0, extraRoll: false, endsAt: this.turnDeadline(),
+      built: {}, // colour set -> buildings added this turn
+      offered: {}, // opponent -> offers sent this turn
+    };
     this.tickMortgages(pid);
     this.touch();
   }
@@ -434,6 +449,22 @@ class MonoRoom {
     return [1 + Math.floor(this.rng() * 6), 1 + Math.floor(this.rng() * 6)];
   }
 
+  rollSpeed() {
+    return SPEED_FACES[Math.floor(this.rng() * SPEED_FACES.length)];
+  }
+
+  // The path a token takes during one action, so the client can animate it step by step.
+  beginMoves(pid) {
+    this.g.moveSeq = (this.g.moveSeq || 0) + 1;
+    this.g.lastMove = { seq: this.g.moveSeq, pid, segs: [] };
+  }
+
+  pushSeg(pid, seg) {
+    const lm = this.g.lastMove;
+    if (!lm || lm.pid !== pid || lm.sent) this.beginMoves(pid);
+    this.g.lastMove.segs.push(seg);
+  }
+
   roll(pid) {
     this.requireTurn(pid, 'roll');
     const g = this.g;
@@ -441,10 +472,16 @@ class MonoRoom {
     const t = g.turn;
     const dice = this.rollDice();
     const doubles = dice[0] === dice[1];
+    // the speed die is rolled with the others in a turbo game, except when trying to get out of jail
+    const speed = this.settings.turbo && !gp.inJail ? this.rollSpeed() : null;
     t.dice = dice;
-    g.lastDice = { dice, pid, at: Date.now() };
+    t.speed = speed;
+    t.rolled = true;
+    t.mrPending = false;
+    g.lastDice = { dice, speed, pid, at: Date.now() };
+    this.beginMoves(pid);
     if (doubles) gp.stats.doubles += 1;
-    this.addLog('mono.log.rolled', { name: this.nameOf(pid), a: dice[0], b: dice[1] });
+    this.addLog(speed === null ? 'mono.log.rolled' : 'mono.log.rolledSpeed', { name: this.nameOf(pid), a: dice[0], b: dice[1], s: speed });
 
     if (gp.inJail) {
       if (doubles) {
@@ -480,21 +517,78 @@ class MonoRoom {
       }
     }
     t.extraRoll = doubles;
-    this.move(pid, dice[0] + dice[1]);
+    if (speed !== null) {
+      // triples: go to any square you like (and the turn ends there)
+      if (speed === dice[0] && doubles) {
+        t.extraRoll = false;
+        this.addLog('mono.log.triples', { name: this.nameOf(pid) });
+        this.setStage('pick');
+        return this.touch();
+      }
+      // the bus: move by either die or by both
+      if (speed === 'bus') {
+        this.setStage('bus');
+        return this.touch();
+      }
+      if (speed === 'mr') t.mrPending = true;
+    }
+    this.move(pid, dice[0] + dice[1] + (typeof speed === 'number' ? speed : 0));
     return this.afterAction();
+  }
+
+  // The bus on the speed die: 0 = the first die, 1 = the second, 2 = both.
+  busMove(pid, choice) {
+    this.requireTurn(pid, 'bus');
+    const d = this.g.turn.dice;
+    const steps = [d[0], d[1], d[0] + d[1]][Number(choice)];
+    this.assert(steps !== undefined, 'err.invalidTarget');
+    this.g.turn.stage = 'resolved';
+    this.beginMoves(pid);
+    this.move(pid, steps);
+    return this.afterAction();
+  }
+
+  // Triples on the speed die: move to any square (salary if that means passing GO).
+  pickSquare(pid, sq) {
+    this.requireTurn(pid, 'pick');
+    sq = Number(sq);
+    this.assert(Number.isInteger(sq) && sq >= 0 && sq < 40, 'err.invalidTarget');
+    this.g.turn.stage = 'resolved';
+    this.beginMoves(pid);
+    const gp = this.gp(pid);
+    if (sq === gp.pos) { this.land(pid); return this.afterAction(); }
+    this.advanceTo(pid, sq, 'pick');
+    return this.afterAction();
+  }
+
+  // Mr. Monopoly: after the move, go on to the next property nobody owns; if every one is owned,
+  // to the next one where rent is due.
+  mrMonopolyMove(pid) {
+    const gp = this.gp(pid);
+    const due = sq => { const pr = this.prop(sq); return pr && pr.owner !== pid && !pr.mortgaged; };
+    let target = null;
+    for (const test of [sq => isProperty(sq) && !this.prop(sq), sq => isProperty(sq) && due(sq)]) {
+      for (let k = 1; k < 40 && target === null; k++) if (test((gp.pos + k) % 40)) target = (gp.pos + k) % 40;
+      if (target !== null) break;
+    }
+    this.addLog('mono.log.mrMonopoly', { name: this.nameOf(pid), square: target ?? gp.pos });
+    if (target === null) return;
+    this.advanceTo(pid, target, 'mr');
   }
 
   move(pid, steps) {
     const gp = this.gp(pid);
     const from = gp.pos;
     gp.pos = (from + steps + 40) % 40;
+    this.pushSeg(pid, { kind: 'walk', from, to: gp.pos });
     if (steps > 0 && gp.pos < from) this.passGo(pid, gp.pos === 0);
     this.land(pid);
   }
 
-  // move forward to a square (cards), collecting salary when passing GO
-  advanceTo(pid, sq) {
+  // move forward to a square (cards, Mr. Monopoly, triples), collecting salary when passing GO
+  advanceTo(pid, sq, kind = 'card') {
     const gp = this.gp(pid);
+    this.pushSeg(pid, { kind, from: gp.pos, to: sq });
     if (sq <= gp.pos && sq !== gp.pos) this.passGo(pid, sq === 0);
     else if (sq === 0 && gp.pos !== 0) this.passGo(pid, true);
     gp.pos = sq;
@@ -510,6 +604,7 @@ class MonoRoom {
 
   sendToJail(pid) {
     const gp = this.gp(pid);
+    if (gp.pos !== JAIL || !gp.inJail) this.pushSeg(pid, { kind: 'jail', from: gp.pos, to: JAIL });
     gp.pos = JAIL;
     gp.inJail = true;
     gp.jailTurns = 0;
@@ -618,6 +713,15 @@ class MonoRoom {
       this.afterAction();
       return;
     }
+    // Mr. Monopoly moves on once the first square is dealt with (not from jail)
+    if (g.turn.mrPending) {
+      g.turn.mrPending = false;
+      if (!this.gp(g.turn.pid).inJail) {
+        this.mrMonopolyMove(g.turn.pid);
+        this.afterAction();
+        return;
+      }
+    }
     this.setStage(g.turn.extraRoll && !this.gp(g.turn.pid).inJail ? 'roll' : 'end');
     this.touch();
   }
@@ -655,6 +759,8 @@ class MonoRoom {
     if (this.settings.roundLimit && g.round > this.settings.roundLimit) { this.finishByRounds(); return; }
     g.turnIdx = idx;
     g.lastCard = null;
+    if (g.trades.length) this.addLog('mono.log.tradesExpired', { n: g.trades.length });
+    g.trades = [];
     this.beginTurn(order[idx]);
   }
 
@@ -753,13 +859,19 @@ class MonoRoom {
     const cardId = deck.shift();
     const card = (deckName === 'chance' ? CHANCE : CHEST).find(c => c.id === cardId);
     g.lastCard = { deck: deckName, id: cardId, pid, at: Date.now() };
+    this.pushSeg(pid, { kind: 'draw', at: this.gp(pid).pos, deck: deckName, card: cardId });
     this.gp(pid).stats.cardsDrawn += 1;
     this.addLog('mono.log.card', { name: this.nameOf(pid), deck: deckName, card: cardId });
     if (card.jailFree) { this.gp(pid).jailCards.push(cardId); return; } // kept until used
     deck.push(cardId);
     const gp = this.gp(pid);
     if (card.advance !== undefined) return this.advanceTo(pid, card.advance);
-    if (card.back) { gp.pos = (gp.pos - card.back + 40) % 40; return this.land(pid); }
+    if (card.back) {
+      const from = gp.pos;
+      gp.pos = (gp.pos - card.back + 40) % 40;
+      this.pushSeg(pid, { kind: 'back', from, to: gp.pos });
+      return this.land(pid);
+    }
     if (card.jail) return this.sendToJail(pid);
     if (card.money > 0) { gp.cash += card.money; return; }
     if (card.money < 0) return this.charge(pid, -card.money, null, 'card');
@@ -782,6 +894,7 @@ class MonoRoom {
     if (card.nearest) {
       let sq = gp.pos;
       do sq = (sq + 1) % 40; while (SQUARES[sq].type !== card.nearest);
+      this.pushSeg(pid, { kind: 'card', from: gp.pos, to: sq });
       if (sq < gp.pos) this.passGo(pid, false);
       gp.pos = sq;
       const pr = this.prop(sq);
@@ -818,8 +931,13 @@ class MonoRoom {
     this.assert(this.ownsGroup(pid, sqr.group), 'err.mono.needSet');
     this.assert(!GROUPS[sqr.group].some(s => this.prop(s).mortgaged), 'err.mono.groupMortgaged');
     this.assert(pr.houses < 5, 'err.mono.maxBuilt');
-    const min = Math.min(...GROUPS[sqr.group].map(s => this.prop(s).houses));
-    this.assert(pr.houses === min, 'err.mono.buildEvenly');
+    const built = this.g.turn.built ||= {};
+    this.assert((built[sqr.group] || 0) < BUILDS_PER_GROUP, 'err.mono.buildLimit', { n: BUILDS_PER_GROUP });
+    // the turbo game lets you build one street up before the others
+    if (!this.settings.turbo) {
+      const min = Math.min(...GROUPS[sqr.group].map(s => this.prop(s).houses));
+      this.assert(pr.houses === min, 'err.mono.buildEvenly');
+    }
     this.assert(this.gp(pid).cash >= sqr.house, 'err.mono.notEnoughCash');
     if (pr.houses === 4) {
       this.assert(this.g.hotelsLeft > 0, 'err.mono.noHotels');
@@ -833,6 +951,7 @@ class MonoRoom {
     }
     this.gp(pid).cash -= sqr.house;
     pr.houses += 1;
+    built[sqr.group] = (built[sqr.group] || 0) + 1;
     this.addLog(pr.houses === 5 ? 'mono.log.hotel' : 'mono.log.house', { name: this.nameOf(pid), square: sq });
     this.trackPeaks();
     this.touch();
@@ -842,8 +961,10 @@ class MonoRoom {
     const pr = this.manageCheck(pid, sq);
     const sqr = SQUARES[sq];
     this.assert(pr.houses > 0, 'err.mono.nothingToSell');
-    const max = Math.max(...GROUPS[sqr.group].map(s => this.prop(s).houses));
-    this.assert(pr.houses === max, 'err.mono.sellEvenly');
+    if (!this.settings.turbo) {
+      const max = Math.max(...GROUPS[sqr.group].map(s => this.prop(s).houses));
+      this.assert(pr.houses === max, 'err.mono.sellEvenly');
+    }
     this.sellHouseRaw(pid, sq);
     this.addLog('mono.log.sold', { name: this.nameOf(pid), square: sq });
     this.touch();
@@ -909,6 +1030,7 @@ class MonoRoom {
     this.g.debts.shift();
     this.transfer(pid, d.amount, d.to && !this.gp(d.to).bankrupt ? d.to : null, d.reason);
     this.addLog('mono.log.debtPaid', { name: this.nameOf(pid), amount: d.amount });
+    if (this.g.turn && this.g.turn.pendingMove && this.g.turn.pid === pid) this.beginMoves(pid);
     if (this.g.debts[0]) this.g.debts[0].endsAt = this.turnDeadline();
     this.afterAction();
   }
@@ -1030,10 +1152,15 @@ class MonoRoom {
 
   // ---------- trades ----------
   // offer: { to, give: { props, cash, cards }, take: { props, cash, cards } }
+  // Offers are made on your own turn before you roll; the other side answers while that turn lasts.
   proposeTrade(pid, offer) {
     this.assert(this.phase === 'playing' && this.player(pid) && !this.gp(pid).bankrupt, 'err.notInRoom');
     const to = offer?.to;
     this.assert(to && to !== pid && this.g.players[to] && !this.gp(to).bankrupt, 'err.invalidTarget');
+    const t = this.g.turn;
+    this.assert(this.current() === pid && t.stage === 'roll' && !t.rolled && !this.isBlocked(), 'err.mono.tradeOwnTurn');
+    const offered = t.offered ||= {};
+    this.assert((offered[to] || 0) < OFFERS_PER_TARGET, 'err.mono.tradeLimit', { name: this.nameOf(to), n: OFFERS_PER_TARGET });
     const clean = side => ({
       props: [...new Set((side?.props || []).map(Number))],
       cash: Math.max(0, Math.floor(Number(side?.cash) || 0)),
@@ -1042,7 +1169,7 @@ class MonoRoom {
     const tr = { id: id(4), from: pid, to, give: clean(offer.give), take: clean(offer.take), at: Date.now() };
     this.assert(tr.give.props.length || tr.give.cash || tr.give.cards || tr.take.props.length || tr.take.cash || tr.take.cards, 'err.mono.emptyTrade');
     this.validateTrade(tr);
-    this.g.trades = this.g.trades.filter(x => x.from !== pid); // one open offer per player
+    offered[to] = (offered[to] || 0) + 1;
     this.g.trades.push(tr);
     this.addLog('mono.log.tradeOffered', { name: this.nameOf(pid), to: this.nameOf(to) });
     this.touch();
@@ -1099,7 +1226,7 @@ class MonoRoom {
       return;
     }
     this.assert(pid === tr.to, 'err.invalidTarget');
-    this.assert(!this.g.auction, 'err.mono.waitForOthers');
+    this.assert(!this.g.auction && !this.g.debts.length, 'err.mono.waitForOthers');
     this.validateTrade(tr);
     // taking over a mortgaged property costs 10% interest right away
     const interest = props => props.filter(sq => this.prop(sq).mortgaged).reduce((s, sq) => s + Math.ceil(SQUARES[sq].price / 20), 0);
@@ -1202,6 +1329,7 @@ class MonoRoom {
         trades: g.trades,
         lastCard: g.lastCard,
         lastDice: g.lastDice,
+        lastMove: g.lastMove,
         log: g.log.slice(-200),
         winner: g.winner,
         round: g.round,
@@ -1213,4 +1341,4 @@ class MonoRoom {
   }
 }
 
-module.exports = { MonoRoom, TOKENS, MIN_PLAYERS, MAX_PLAYERS, AUCTION_MS, BAIL, SALARY, SCALE };
+module.exports = { MonoRoom, TOKENS, MIN_PLAYERS, MAX_PLAYERS, AUCTION_MS, BAIL, SALARY, SCALE, SPEED_FACES };

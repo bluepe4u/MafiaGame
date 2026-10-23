@@ -34,15 +34,47 @@ Voice.init({ socket, me: () => state && state.me && state.me.id, route: () => tr
 $('#profileBtn').onclick = () => openProfile();
 $('#homeProfile').onclick = () => openProfile();
 
-// ---------- sound effects (muted with the bell, like the alerts) ----------
-const beep = (f, at = 0, dur = 0.15, type = 'triangle', vol = 0.06) => alertsOn && tone({ f, at, dur, type, vol, attack: 0.01 });
+// ---------- sound effects: short and soft, muted with the bell like the alerts ----------
+// Filtered noise for physical sounds (dice, steps, cards), quiet sine notes for money and turns.
+let noiseBuf = null;
+function noise({ at = 0, dur = 0.05, vol = 0.05, freq = 2500, q = 1.2, type = 'bandpass' }) {
+  if (!alertsOn || !audioCtx) return;
+  if (!noiseBuf) {
+    noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate / 2, audioCtx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const now = audioCtx.currentTime + at;
+  const src = audioCtx.createBufferSource();
+  src.buffer = noiseBuf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = type;
+  filter.frequency.value = freq;
+  filter.Q.value = q;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vol, now);
+  gain.gain.exponentialRampToValueAtTime(0.0005, now + dur);
+  src.connect(filter).connect(gain).connect(audioCtx.destination);
+  src.start(now, Math.random() * 0.3);
+  src.stop(now + dur + 0.02);
+}
+const soft = (f, at, dur, vol, f2) => alertsOn && tone({ f, f2, at, dur, type: 'sine', vol, attack: 0.005 });
 const SFX = {
-  dice: () => { for (let i = 0; i < 6; i++) beep(180 + Math.random() * 260, i * 0.05, 0.05, 'square', 0.03); },
-  coin: () => { beep(988, 0, 0.12); beep(1319, 0.08, 0.3); },
-  pay: () => { beep(392, 0, 0.18, 'sine', 0.07); beep(294, 0.1, 0.25, 'sine', 0.06); },
-  turn: () => { beep(660, 0, 0.12); beep(880, 0.1, 0.25); },
-  win: () => [523, 659, 784, 1046].forEach((f, i) => beep(f, i * 0.1, 0.5)),
+  dice: () => [0, 0.07, 0.15, 0.26, 0.34].forEach((at, i) => noise({ at, dur: 0.035, vol: 0.09 - i * 0.014, freq: 1800 + Math.random() * 1400, q: 2 })),
+  step: () => noise({ dur: 0.03, vol: 0.03, freq: 900, q: 1.5 }),
+  land: () => { noise({ dur: 0.07, vol: 0.055, freq: 450, q: 1 }); soft(196, 0, 0.12, 0.03, 150); },
+  card: () => noise({ dur: 0.2, vol: 0.045, freq: 3200, q: 0.7, type: 'highpass' }),
+  jail: () => { noise({ dur: 0.12, vol: 0.06, freq: 300, q: 4 }); soft(392, 0.05, 0.22, 0.04); soft(311, 0.25, 0.35, 0.04); },
+  leap: () => soft(523, 0, 0.35, 0.03, 784),
+  coin: () => { soft(1568, 0, 0.16, 0.03); soft(2093, 0.06, 0.24, 0.025); },
+  pay: () => { soft(523, 0, 0.16, 0.035, 440); soft(392, 0.09, 0.22, 0.03, 349); },
+  build: () => { noise({ dur: 0.05, vol: 0.06, freq: 700, q: 3 }); noise({ at: 0.09, dur: 0.05, vol: 0.05, freq: 800, q: 3 }); },
+  turn: () => { soft(784, 0, 0.18, 0.045); soft(1175, 0.11, 0.3, 0.04); },
+  win: () => [523, 659, 784, 1046].forEach((f, i) => soft(f, i * 0.12, 0.5, 0.05)),
 };
+// animations can be skipped (Space or the button) and then finish at once
+let skipAnim = false;
+const wait = ms => new Promise(r => setTimeout(r, skipAnim ? 0 : ms));
 
 // ---------- board data ----------
 fetch('/api/mono/board').then(r => r.json()).then(d => { BOARD = d; buildBoard(); render(); });
@@ -196,7 +228,7 @@ function renderLobby() {
     s.turnSeconds ? `${t('mono.turnTime').split('(')[0].trim()}: ${s.turnSeconds} s` : t('mono.turnTime').split('(')[0].trim() + ': ∞',
     s.mortgageTurns ? `${t('mono.mortgageTurns').split('(')[0].trim()}: ${s.mortgageTurns}` : '',
     s.roundLimit ? t('mono.sumRounds', { n: s.roundLimit }) : '',
-    ...['doubleGo', 'auctions', 'freeParking', 'noRentInJail'].filter(k => s[k]).map(k => t('mono.rule.' + k)),
+    ...['turbo', 'doubleGo', 'auctions', 'freeParking', 'noRentInJail'].filter(k => s[k]).map(k => t('mono.rule.' + k)),
     s.family ? t('ui.family') : '',
     state.features && state.features.voice ? t(s.voice !== false ? 'sum.voiceOn' : 'sum.voiceOff') : '',
   ].filter(Boolean).map(x => `<li>${esc(x)}</li>`).join('');
@@ -333,8 +365,32 @@ function buildBoard() {
     const [row, col, side] = gridPos(i);
     return `<button class="sq ${side} t-${sq.type} ${sq.group ? 'g-' + sq.group : ''}" style="grid-row:${row};grid-column:${col}" data-sq="${i}" aria-label="${esc(sqName(i))}">${cellHtml(sq, i)}</button>`;
   }).join('');
-  for (const b of $$('#squares [data-sq]')) b.onclick = () => openSquare(Number(b.dataset.sq));
+  for (const b of $$('#squares [data-sq]')) b.onclick = () => (picking() ? send('pick', { square: Number(b.dataset.sq) }) : openSquare(Number(b.dataset.sq)));
+  requestAnimationFrame(fitNames);
 }
+// long names shrink until they fit their square (some Moscow streets are long words)
+let fittedFor = '';
+function fitNames() {
+  const w = $('#board').getBoundingClientRect().width;
+  if (!w) return; // not on screen yet: measured once the game is shown
+  fittedFor = `${Math.round(w)}|${lang}`;
+  for (const el of $$('#squares .sq-name, #squares .corner-name')) {
+    // words stay whole while the text shrinks; only a word that still won't fit is broken
+    el.style.fontSize = '';
+    el.style.overflowWrap = 'normal';
+    const over = () => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+    let size = 100;
+    while (size > 64 && over()) {
+      size -= 6;
+      el.style.fontSize = `${size * 0.0086}em`;
+    }
+    if (over()) el.style.overflowWrap = 'anywhere';
+  }
+}
+let fitTimer = null;
+window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitNames, 150); });
+// triples on the speed die: the board itself is the menu
+const picking = () => !!(state && state.game && state.phase === 'playing' && state.game.turn && state.game.turn.pid === state.me.id && state.game.turn.stage === 'pick');
 
 // current rent on an owned square, as shown on its tag
 function rentNow(i) {
@@ -369,9 +425,13 @@ function updateBoard() {
   renderTokens();
 }
 
-// ---------- tokens: hop square by square ----------
-const shownPos = {}; // pid -> square currently drawn
-const hopping = {};
+// ---------- tokens: every move plays back the path the server recorded ----------
+const shownPos = {}; // pid -> square the token is drawn on
+const moving = {}; // pid -> its path is playing (or waiting to)
+let seenMoveSeq; // undefined until the game has been seen once
+let movePlaying = Promise.resolve();
+let moveBacklog = 0;
+const tokenEl = pid => $(`#tokens [data-token="${pid}"]`);
 function tokenXY(sq, k, n) {
   const el = $(`#squares [data-sq="${sq}"]`);
   const board = $('#board').getBoundingClientRect();
@@ -382,12 +442,12 @@ function tokenXY(sq, k, n) {
   const dy = n > 1 ? Math.sin(angle) * spread : 0;
   return [r.left - board.left + r.width / 2 + dx, r.top - board.top + r.height / 2 + dy];
 }
+const tf = ([x, y], lift = 0, scale = 1) => `translate(${x}px, ${y - lift}px) translate(-50%, -50%) scale(${scale})`;
 function renderTokens() {
   const g = state.game;
   const layer = $('#tokens');
-  const alive = g.order.filter(pid => !gp(pid).bankrupt);
   for (const pid of g.order) {
-    let el = layer.querySelector(`[data-token="${pid}"]`);
+    let el = tokenEl(pid);
     if (gp(pid).bankrupt) { if (el) el.remove(); continue; }
     if (!el) {
       el = document.createElement('span');
@@ -401,49 +461,136 @@ function renderTokens() {
     el.style.setProperty('--pc', colorOf(pid));
     el.classList.toggle('active', g.turn && g.turn.pid === pid);
     el.classList.toggle('jailed', gp(pid).inJail);
-    const target = gp(pid).pos;
-    if (shownPos[pid] === undefined) shownPos[pid] = target;
-    if (shownPos[pid] !== target && !hopping[pid]) hop(pid, target);
+    if (!moving[pid] || shownPos[pid] === undefined) shownPos[pid] = gp(pid).pos;
   }
-  placeTokens(alive);
+  placeTokens();
 }
-function placeTokens(alive = state.game.order.filter(pid => !gp(pid).bankrupt)) {
+// tokens sharing a square spread out around its centre (a moving token is placed by its animation)
+function placeTokens() {
+  const g = state.game;
   const bySquare = {};
-  for (const pid of alive) (bySquare[shownPos[pid]] ||= []).push(pid);
+  for (const pid of g.order) if (!gp(pid).bankrupt && !(moving[pid] && tokenEl(pid)?.classList.contains('moving'))) (bySquare[shownPos[pid]] ||= []).push(pid);
   for (const [sq, pids] of Object.entries(bySquare)) {
     pids.forEach((pid, k) => {
-      const el = $(`[data-token="${pid}"]`);
-      if (!el) return;
-      const [x, y] = tokenXY(Number(sq), k, pids.length);
-      el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+      const el = tokenEl(pid);
+      if (el) el.style.transform = tf(tokenXY(Number(sq), k, pids.length));
     });
   }
 }
-function hop(pid, target) {
-  const steps = (target - shownPos[pid] + 40) % 40;
-  // jumps (jail, cards going backwards, long moves) teleport; dice moves walk
-  if (reducedMotion() || steps === 0 || steps > 12 || (gp(pid).inJail && target === 10)) {
-    shownPos[pid] = target;
-    placeTokens();
-    if (steps) flashSquare(target, pid);
+window.addEventListener('resize', () => state && state.game && placeTokens());
+
+async function animateTo(el, frames, ms, easing) {
+  const a = el.animate(frames, { duration: skipAnim ? 1 : ms, easing, fill: 'forwards' });
+  try { await a.finished; } catch {}
+  el.style.transform = frames[frames.length - 1].transform;
+  a.cancel();
+}
+// one square along the board: a small hop
+async function stepTo(pid, el, sq, ms) {
+  const a = tokenXY(shownPos[pid], 0, 1), b = tokenXY(sq, 0, 1);
+  const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  await animateTo(el, [{ transform: tf(a) }, { transform: tf(mid, 14, 1.1), offset: 0.45 }, { transform: tf(b) }], ms, 'cubic-bezier(.33, .7, .4, 1)');
+  shownPos[pid] = sq;
+}
+// a card, Mr. Monopoly or triples: the token lifts off and lands on the new square
+async function leapTo(pid, el, sq, ms, cls) {
+  const a = tokenXY(shownPos[pid], 0, 1), b = tokenXY(sq, 0, 1);
+  const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  el.classList.add(cls);
+  await animateTo(el, [{ transform: tf(a) }, { transform: tf(a, 18, 1.25), offset: 0.15 }, { transform: tf(mid, Math.min(140, 40 + dist * 0.3), 1.4), offset: 0.55 }, { transform: tf(b) }], ms, 'cubic-bezier(.45, 0, .3, 1)');
+  el.classList.remove(cls);
+  shownPos[pid] = sq;
+}
+async function playPath(lm, { afterDice }) {
+  const pid = lm.pid;
+  const el = tokenEl(pid);
+  const quick = !el || reducedMotion() || document.hidden || moveBacklog > 2;
+  const draws = lm.segs.filter(sg => sg.kind === 'draw');
+  if (quick) {
+    if (draws.length) showCard(draws[draws.length - 1]);
     return;
   }
-  hopping[pid] = true;
-  let left = steps;
-  const tick = () => {
-    shownPos[pid] = (shownPos[pid] + 1) % 40;
-    placeTokens();
-    beep(500 + (steps - left) * 40, 0, 0.05, 'sine', 0.025);
-    if (--left > 0) setTimeout(tick, 150);
-    else {
-      hopping[pid] = false;
-      if (shownPos[pid] !== gp(pid).pos) hop(pid, gp(pid).pos);
-      else flashSquare(target, pid);
+  el.classList.add('moving');
+  placeTokens(); // whoever shared the square closes up
+  const first = lm.segs.find(sg => sg.kind !== 'draw');
+  if (first && shownPos[pid] !== first.from) shownPos[pid] = first.from;
+  el.style.transform = tf(tokenXY(shownPos[pid], 0, 1));
+  if (afterDice) await wait(750); // let the dice land first
+  for (const sg of lm.segs) {
+    if (sg.kind === 'walk' || sg.kind === 'back') {
+      const dir = sg.kind === 'back' ? -1 : 1;
+      let n = ((sg.to - shownPos[pid]) * dir + 40) % 40;
+      const per = n > 9 ? 150 : 185;
+      while (n-- > 0) {
+        if (!skipAnim) SFX.step();
+        await stepTo(pid, el, (shownPos[pid] + dir + 40) % 40, per);
+      }
+      SFX.land();
+      flashSquare(sg.to, pid);
+    } else if (sg.kind === 'draw') {
+      await wait(250);
+      showCard(sg);
+      await wait(1300); // time to read it before the token moves on
+    } else if (sg.kind === 'jail') {
+      await wait(200);
+      SFX.jail();
+      await leapTo(pid, el, sg.to, 950, 'to-jail');
+      flashSquare(sg.to, pid);
+    } else {
+      await wait(200);
+      SFX.leap();
+      await leapTo(pid, el, sg.to, 800, 'leap');
+      SFX.land();
+      flashSquare(sg.to, pid);
     }
-  };
-  setTimeout(tick, 120);
+  }
+  el.classList.remove('moving');
 }
-window.addEventListener('resize', () => state && state.game && placeTokens());
+function queuePath(lm, opts) {
+  moving[lm.pid] = true;
+  moveBacklog += 1;
+  movePlaying = movePlaying
+    .then(() => playPath(lm, opts))
+    .catch(() => {})
+    .then(() => {
+      moveBacklog -= 1;
+      if (moveBacklog === 0) {
+        for (const k of Object.keys(moving)) moving[k] = false;
+        skipAnim = false;
+      }
+      // the buttons held back while the token moved come in now
+      if (state && state.game) render();
+    });
+}
+
+function skipAnimation() {
+  skipAnim = true;
+  for (const el of $$('#tokens .token')) for (const a of el.getAnimations()) a.finish();
+}
+
+// the card just drawn: shown on the board for a few seconds, never in the way of the buttons
+let cardTimer = null;
+function showCard(c) {
+  const cs = $('#cardShow');
+  cs.className = `card-show deck-${c.deck}`;
+  cs.innerHTML = `<div class="card-deck">${c.deck === 'chance' ? ART.chance : ART.chest}<span>${esc(t('mono.deck.' + c.deck))}</span></div>
+    <div class="card-text">${esc(t('mono.card.' + c.card))}</div>
+    <button class="card-x" type="button" aria-label="${esc(t('mono.card.close'))}">✕</button>`;
+  void cs.offsetWidth;
+  cs.classList.add('in');
+  SFX.card();
+  cs.querySelector('.card-x').onclick = hideCard;
+  clearTimeout(cardTimer);
+  cardTimer = setTimeout(hideCard, 6000);
+}
+function hideCard() {
+  clearTimeout(cardTimer);
+  const cs = $('#cardShow');
+  if (cs.classList.contains('hidden')) return;
+  cs.classList.add('out');
+  setTimeout(() => cs.classList.add('hidden'), 250);
+}
 
 // where a token lands lights up in the player's colour
 function flashSquare(sq, pid) {
@@ -458,14 +605,24 @@ function flashSquare(sq, pid) {
 
 // ---------- dice, cards and sounds on changes ----------
 let lastDiceAt = null;
+let fxGameId = null;
 function fxOnState(prev, s) {
   const g = s.game;
   if (!g) return;
+  if (s.gameId !== fxGameId) { fxGameId = s.gameId; seenMoveSeq = undefined; lastDiceAt = null; }
+  let freshDice = false;
   if (g.lastDice && g.lastDice.at !== lastDiceAt) {
-    const fresh = lastDiceAt !== null;
+    freshDice = lastDiceAt !== null;
     lastDiceAt = g.lastDice.at;
-    if (fresh) { animateDice(g.lastDice.dice); SFX.dice(); }
-    else drawDice(g.lastDice.dice);
+    if (freshDice) { animateDice(g.lastDice); SFX.dice(); }
+    else drawDice(g.lastDice);
+  }
+  // the first state after loading the page (or a new game) is drawn as it is; later moves play back
+  const lm = g.lastMove;
+  if (seenMoveSeq === undefined) seenMoveSeq = lm ? lm.seq : 0;
+  else if (lm && lm.seq !== seenMoveSeq) {
+    if (g.players[lm.pid]) queuePath(lm, { afterDice: freshDice && lm.pid === g.lastDice.pid });
+    seenMoveSeq = lm.seq;
   }
   if (!prev || !prev.game) return;
   const me = s.me && s.me.id;
@@ -476,6 +633,8 @@ function fxOnState(prev, s) {
     else if (g.players[me].cash < pg.cash) SFX.pay();
   }
   if (s.phase === 'ended' && prev.phase !== 'ended') { SFX.win(); setTimeout(openResults, 900); }
+  const houses = gg => Object.values(gg.props).reduce((n, p) => n + (p.houses || 0), 0);
+  if (houses(g) > houses(prev.game)) SFX.build();
 }
 // Money that changed hands: each card shows +/− for a moment, and a single payment (rent, a
 // deal's cash) flies as a chip from the payer's card to the receiver's.
@@ -550,11 +709,28 @@ const faceHtml = n => `<span class="face f${n}">${Array.from({ length: 9 }, (_, 
 function ensureDice() {
   const box = $('#dice');
   if (box.querySelector('.cube')) return;
-  box.innerHTML = [0, 1].map(() => `<span class="die3d"><span class="cube">${[1, 2, 3, 4, 5, 6].map(faceHtml).join('')}</span></span>`).join('');
+  box.innerHTML = [0, 1].map(() => `<span class="die3d"><span class="cube">${[1, 2, 3, 4, 5, 6].map(faceHtml).join('')}</span></span>`).join('')
+    + '<span class="speed-die hidden" aria-live="polite"></span>';
+}
+// the turbo game's third die: +1..3, Mr. Monopoly or the bus
+const SPEED_FACE = {
+  mr: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="9" y="5" width="14" height="14" rx="2" fill="#111827"/><rect x="9" y="15" width="14" height="3" fill="#dc2626"/><rect x="4" y="19" width="24" height="4" rx="2" fill="#111827"/></svg>',
+  bus: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="7" width="24" height="16" rx="3" fill="#f59e0b" stroke="#78350f" stroke-width="1.5"/><rect x="7" y="10" width="5" height="5" rx="1" fill="#e0f2fe"/><rect x="13.5" y="10" width="5" height="5" rx="1" fill="#e0f2fe"/><rect x="20" y="10" width="5" height="5" rx="1" fill="#e0f2fe"/><circle cx="10" cy="24" r="3" fill="#111827"/><circle cx="22" cy="24" r="3" fill="#111827"/></svg>',
+};
+function drawSpeed(speed, animate) {
+  const el = $('#dice .speed-die');
+  if (!el) return;
+  el.classList.toggle('hidden', speed === null || speed === undefined);
+  if (speed === null || speed === undefined) return;
+  el.innerHTML = SPEED_FACE[speed] || `<b>+${speed}</b>`;
+  el.title = speed === 'mr' ? t('mono.speed.mr') : speed === 'bus' ? t('mono.speed.bus') : `+${speed}`;
+  if (animate) { el.classList.remove('spin'); void el.offsetWidth; el.classList.add('spin'); }
 }
 const spins = [0, 0];
-function drawDice(d, animate = false) {
+function drawDice(roll, animate = false) {
   ensureDice();
+  const d = roll.dice;
+  drawSpeed(roll.speed, animate);
   $$('#dice .cube').forEach((cube, k) => {
     const [x, y] = FACE_ROT[d[k]];
     if (animate) spins[k] += 2 + Math.floor(Math.random() * 2); // extra full turns so it really tumbles
@@ -568,8 +744,8 @@ function drawDice(d, animate = false) {
     $('#dice').classList.add('bounce');
   }
 }
-function animateDice(final) {
-  drawDice(final, !reducedMotion());
+function animateDice(roll) {
+  drawDice(roll, !reducedMotion());
 }
 
 // ---------- game screen ----------
@@ -577,6 +753,7 @@ function renderGame() {
   if (!BOARD) return;
   const g = state.game;
   updateBoard();
+  if (fittedFor !== `${Math.round($('#board').getBoundingClientRect().width)}|${lang}`) fitNames();
   renderCenter();
   renderPlayers();
   renderDeal();
@@ -615,7 +792,7 @@ document.addEventListener('keydown', e => {
     b.click();
     return true;
   };
-  const keys = { Space: ['#rollBtn', '#endBtn', '#payDebtBtn'], KeyB: ['#buyBtn'], KeyA: ['#declineBtn'], KeyP: ['#bailBtn'] };
+  const keys = { Space: ['#skipBtn', '#rollBtn', '#endBtn', '#payDebtBtn'], KeyB: ['#buyBtn'], KeyA: ['#declineBtn'], KeyP: ['#bailBtn'] };
   const digit = /^Digit([1-3])$/.exec(e.code);
   if (digit) press(`#actions [data-key="${digit[1]}"]`);
   else for (const sel of keys[e.code] || []) if (press(sel)) break;
@@ -632,7 +809,7 @@ function scheduleAutoEnd() {
     const g = state && state.game;
     const still = autoEnd && g && state.phase === 'playing' && g.turn && g.turn.pid === state.me.id && g.turn.stage === 'end' && !g.debts.length && !g.auction
       && `${g.round}:${g.lastDice && g.lastDice.at}` === key;
-    if (still && $$('.overlay:not(.hidden)').length) { autoEndTimer = setTimeout(fire, 1000); return; }
+    if (still && ($$('.overlay:not(.hidden)').length || moveBacklog > 0)) { autoEndTimer = setTimeout(fire, 1000); return; }
     autoEndTimer = null;
     if (still) send('endTurn');
   }, 2000);
@@ -667,7 +844,8 @@ function renderCenter() {
     $('#feed').innerHTML = '';
     actions.innerHTML = `<button id="openResults" class="primary">${esc(t('mono.results'))}</button>`;
     $('#openResults').onclick = openResults;
-    $('#cardShow').classList.add('hidden');
+    hideCard();
+    document.body.classList.remove('picking');
     return;
   }
   const turnPid = g.turn.pid;
@@ -693,6 +871,8 @@ function renderCenter() {
           <div class="row center"><button id="payDebtBtn" class="primary" ${myGp.cash < d.amount ? 'disabled' : ''}>${esc(t('mono.payDebt', { amount: d.amount }))}</button>
           <button id="bankruptBtn" class="danger">${esc(t('mono.goBankrupt'))}</button></div></div>`
       : `<div class="muted">${esc(t('mono.waitDebt', { name: nameOf(d.pid), amount: d.amount }))}</div>`;
+  } else if (turnPid === me && moving[turnPid] && moveBacklog > 0) {
+    html = `<button id="skipBtn" class="ghost small skip-btn">${esc(t('mono.skipAnim'))}${kbd('␣')}</button>`;
   } else if (turnPid === me) {
     const st = g.turn.stage;
     if (st === 'roll') {
@@ -702,17 +882,33 @@ function renderCenter() {
             <button id="bailBtn" ${myGp.cash < 50 ? 'disabled' : ''}>${esc(t('mono.payBail', { n: 50 }))}${kbd('P')}</button>
             ${myGp.jailCards ? `<button id="cardBtn">${esc(t('mono.useCard'))}</button>` : ''}</div>`
         : `<button id="rollBtn" class="primary big-roll">${esc(t('mono.roll'))}${kbd('␣')}</button>`;
+      // deals go out before the roll, so the way to make one sits right here
+      const partners = g.order.filter(pid => pid !== me && !gp(pid).bankrupt && !offerBlocked(pid));
+      if (!g.turn.rolled && partners.length) {
+        html += `<div class="deal-with"><span>${esc(t('mono.dealWith'))}</span>${partners.map(pid => `<button class="deal-with-btn" data-deal-with="${pid}" title="${esc(nameOf(pid))}" aria-label="${esc(t('mono.trade.title', { name: nameOf(pid) }))}">${pieceOf(pid)}<span>${esc(nameOf(pid))}</span></button>`).join('')}</div>`;
+      }
     } else if (st === 'buy') {
       const sq = g.turn.offer;
       const price = BOARD.squares[sq].price;
       html = `<button class="mini-deed g-${BOARD.squares[sq].group || BOARD.squares[sq].type}" data-info="${sq}"><span class="md-strip"></span><b>${esc(sqName(sq))}</b><span class="md-price">${price} ₽</span></button>
         <div class="row center"><button id="buyBtn" class="primary" ${myGp.cash < price ? 'disabled' : ''}>${esc(t('mono.buy', { price }))}${kbd('B')}</button>
         <button id="declineBtn">${esc(t(state.settings.auctions ? 'mono.decline' : 'mono.declineNoAuction'))}${kbd('A')}</button></div>`;
+    } else if (st === 'bus') {
+      const d = g.turn.dice;
+      html = `<div class="choice-title">${SPEED_FACE.bus}<span>${esc(t('mono.bus.title'))}</span></div><div class="row center">
+        <button data-bus="0" data-key="1">${esc(t('mono.bus.steps', { n: d[0] }))}${kbd(1)}</button>
+        <button data-bus="1" data-key="2">${esc(t('mono.bus.steps', { n: d[1] }))}${kbd(2)}</button>
+        <button class="primary" data-bus="2" data-key="3">${esc(t('mono.bus.both', { n: d[0] + d[1] }))}${kbd(3)}</button></div>`;
+    } else if (st === 'pick') {
+      html = `<div class="choice-title"><span>${esc(t('mono.pick.title'))}</span></div>
+        <button id="stayBtn">${esc(t('mono.pick.stay'))}</button>`;
     } else if (st === 'end') {
       html = `<button id="endBtn" class="primary">${esc(t('mono.endTurn'))}${kbd('␣')}</button>`;
       if (autoEnd) scheduleAutoEnd();
     }
   }
+  if (g.turn.mrPending && !g.auction) html += `<div class="mr-hint">${SPEED_FACE.mr}<span>${esc(t('mono.speed.mrHint'))}</span></div>`;
+  document.body.classList.toggle('picking', picking());
   actions.innerHTML = html;
   const bind = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
   bind('#rollBtn', () => send('roll'));
@@ -722,6 +918,10 @@ function renderCenter() {
   bind('#buyBtn', () => send('buy'));
   bind('#declineBtn', () => send('decline'));
   bind('#endBtn', () => send('endTurn'));
+  bind('#stayBtn', () => send('pick', { square: myGp.pos }));
+  bind('#skipBtn', skipAnimation);
+  for (const b of $$('#actions [data-deal-with]')) b.onclick = () => openTrade(b.dataset.dealWith);
+  for (const b of $$('#actions [data-bus]')) b.onclick = () => send('bus', { choice: Number(b.dataset.bus) });
   bind('#payDebtBtn', () => send('payDebt'));
   bind('#bankruptBtn', async () => (await askConfirm({ title: t('mono.goBankrupt'), text: t('mono.confirmBankrupt'), danger: true })) && send('bankrupt'));
   bind('#bidBtn', () => send('bid', { amount: parseInt($('#bidInput').value, 10) }));
@@ -734,13 +934,6 @@ function renderCenter() {
     return `<li style="--age:${arr.length - 1 - i}">${who ? `<span class="pdot" style="--pc:${colorOf(who.id)}"></span>` : ''}${esc(fmtLog(e))}</li>`;
   }).join('');
 
-  // the card just drawn
-  const card = g.lastCard;
-  const cs = $('#cardShow');
-  if (card) {
-    cs.className = `card-show deck-${card.deck}`;
-    cs.innerHTML = `<div class="card-deck">${esc(t('mono.deck.' + card.deck))}</div><div class="card-text">${esc(t('mono.card.' + card.id))}</div>`;
-  } else cs.classList.add('hidden');
   $('#logBtn').innerHTML = `${COMMON_ICONS.list}<span>${esc(t('mono.log.all', { n: g.log.length }))}</span>`;
   if (!$('#logSheet').classList.contains('hidden')) renderLog();
   tickTimer();
@@ -829,15 +1022,21 @@ function manageHtml(i) {
   const ownsSet = s.group && set.every(x => g.props[x] && g.props[x].owner === me);
   const groupBuilt = set.some(x => g.props[x] && g.props[x].houses);
   const myTurn = g.turn && g.turn.pid === me && !g.debts.length;
+  const builtHere = myTurn && ((g.turn.built || {})[s.group] || 0) >= 1;
   const btns = [];
+  let note = '';
   if (s.type === 'street' && ownsSet && !pr.mortgaged && pr.houses < 5) {
     const min = Math.min(...set.map(x => g.props[x].houses));
-    btns.push(`<button class="primary small" data-act="build" ${!myTurn || pr.houses !== min || cash < s.house || set.some(x => g.props[x].mortgaged) ? 'disabled' : ''}>${esc(t('mono.build'))} · ${money(s.house)}</button>`);
+    const uneven = !state.settings.turbo && pr.houses !== min;
+    btns.push(`<button class="primary small" data-act="build" ${!myTurn || builtHere || uneven || cash < s.house || set.some(x => g.props[x].mortgaged) ? 'disabled' : ''}>${esc(t('mono.build'))} · ${money(s.house)}</button>`);
+    if (builtHere) note = t('mono.builtThisTurn');
+    else if (!myTurn) note = t('err.mono.buildOnYourTurn');
+    else if (uneven) note = t('err.mono.buildEvenly');
   }
   if (pr.houses) btns.push(`<button class="small" data-act="sell">${esc(t('mono.sell'))} · +${money(s.house / 2)}</button>`);
   if (!pr.mortgaged && !groupBuilt) btns.push(`<button class="small" data-act="mortgage">${esc(t('mono.mortgage', { n: money(s.price / 2) }))}</button>`);
   if (pr.mortgaged) btns.push(`<button class="small" data-act="unmortgage" ${cash < g.unmortgageCosts[i] ? 'disabled' : ''}>${esc(t('mono.unmortgage', { n: money(g.unmortgageCosts[i]) }))}</button>`);
-  return btns.length ? `<div class="sq-manage"><span class="muted small-text">${esc(t('mono.yourProperty'))}</span><div class="row">${btns.join('')}</div></div>` : '';
+  return btns.length ? `<div class="sq-manage"><span class="muted small-text">${esc(t('mono.yourProperty'))}</span><div class="row">${btns.join('')}</div>${note ? `<p class="manage-note">${esc(note)}</p>` : ''}</div>` : '';
 }
 
 // ---------- player menu: deal or profile ----------
@@ -885,73 +1084,140 @@ function tradeCheck(from, to, give, take) {
   return { ok: a + b > 0, msg: a + b > 0 ? t('mono.trade.fairOk') : '' };
 }
 
-let deal = null; // { to, give: Set, take: Set, giveCash, takeCash, giveCards, takeCards }
+let deal = null; // { to, give: Set, take: Set, giveCash, takeCash, giveCards, takeCards, sig }
+// Offers go out on your own turn before you roll, one per opponent per turn (the server checks too).
+function offerBlocked(to) {
+  const g = state.game;
+  const tr = g.turn;
+  if (state.phase !== 'playing' || !tr || tr.pid !== state.me.id || tr.stage !== 'roll' || tr.rolled || g.debts.length || g.auction) return t('mono.trade.later');
+  if (((tr.offered || {})[to] || 0) >= 1) return t('err.mono.tradeLimit', { name: nameOf(to) });
+  return null;
+}
+const tradeable = pid => owned(pid).filter(sq => {
+  const s = BOARD.squares[sq];
+  return !s.group || !BOARD.groups[s.group].some(x => state.game.props[x] && state.game.props[x].houses);
+}).sort((a, b) => a - b);
+const dealSides = () => ({
+  give: { props: [...deal.give], cash: deal.giveCash, cards: deal.giveCards },
+  take: { props: [...deal.take], cash: deal.takeCash, cards: deal.takeCards },
+});
 function openTrade(pid) {
-  deal = { to: pid, give: new Set(), take: new Set(), giveCash: 0, takeCash: 0, giveCards: 0, takeCards: 0 };
+  deal = { to: pid, give: new Set(), take: new Set(), giveCash: 0, takeCash: 0, giveCards: 0, takeCards: 0, sig: null };
   $('#tradeTitle').textContent = t('mono.trade.title', { name: nameOf(pid) });
   $('#tradeModal').classList.remove('hidden');
   renderTrade();
 }
+// Built once, then only the totals and the button change, so typing is never interrupted.
+// It is rebuilt only when what can be traded changes (a property sold, a building put up...).
 function renderTrade() {
   if (!deal || !state || !state.game) return;
   const g = state.game;
   const me = state.me.id;
-  const tradeable = pid => owned(pid).filter(sq => {
-    const s = BOARD.squares[sq];
-    return !s.group || !BOARD.groups[s.group].some(x => g.props[x] && g.props[x].houses);
-  }).sort((a, b) => a - b);
-  const tile = (sq, set, key) => `<button class="deed-tile g-${BOARD.squares[sq].group || BOARD.squares[sq].type} ${set.has(sq) ? 'on' : ''} ${g.props[sq].mortgaged ? 'mort' : ''}" data-tile="${key}" data-sq="${sq}">
-    <span class="dt-strip"></span><span class="dt-name">${esc(sqShort(sq))}</span><span class="dt-price">${money(BOARD.squares[sq].price)}</span></button>`;
-  const side = (pid, key) => {
-    const set = deal[key];
-    const cashKey = key + 'Cash', cardKey = key + 'Cards';
-    const v = sideValue({ props: [...set], cash: deal[cashKey], cards: deal[cardKey] });
-    return `<div class="trade-side">
-      <div class="side-head"><h4>${esc(t(key === 'give' ? 'mono.trade.give' : 'mono.trade.get'))}</h4><span class="side-value">${money(v)}</span></div>
-      <div class="side-who">${pieceOf(pid)}<span>${esc(nameOf(pid))}</span><span class="muted">${money(gp(pid).cash)}</span></div>
-      <div class="deed-grid">${tradeable(pid).map(sq => tile(sq, set, key)).join('') || '<span class="muted small-text">—</span>'}</div>
-      <label class="tcash">${esc(t('mono.trade.cash'))} <input type="number" min="0" step="10" max="${gp(pid).cash}" data-num="${cashKey}" value="${deal[cashKey]}"></label>
-      ${gp(pid).jailCards ? `<label class="tcash">${esc(t('mono.trade.cards'))} <input type="number" min="0" max="${gp(pid).jailCards}" data-num="${cardKey}" value="${deal[cardKey]}"></label>` : ''}
+  if (!gp(deal.to) || gp(deal.to).bankrupt || state.phase !== 'playing') { closeTrade(); return; }
+  const sig = JSON.stringify([tradeable(me), tradeable(deal.to), gp(me).jailCards, gp(deal.to).jailCards, lang]);
+  if (sig !== deal.sig) {
+    deal.sig = sig;
+    // forget picks that can no longer be traded
+    for (const key of ['give', 'take']) for (const sq of [...deal[key]]) if (!tradeable(key === 'give' ? me : deal.to).includes(sq)) deal[key].delete(sq);
+    const tile = (sq, set, key) => `<button class="deed-tile g-${BOARD.squares[sq].group || BOARD.squares[sq].type} ${set.has(sq) ? 'on' : ''} ${g.props[sq].mortgaged ? 'mort' : ''}" data-tile="${key}" data-sq="${sq}" aria-pressed="${set.has(sq)}">
+      <span class="dt-strip"></span><span class="dt-name">${esc(sqShort(sq))}</span><span class="dt-price">${money(BOARD.squares[sq].price)}</span></button>`;
+    const side = (pid, key) => `<div class="trade-side">
+      <div class="side-head"><h4>${esc(t(key === 'give' ? 'mono.trade.give' : 'mono.trade.get'))}</h4><span class="side-value" data-value="${key}"></span></div>
+      <div class="side-who">${pieceOf(pid)}<span>${esc(nameOf(pid))}</span><span class="muted" data-cash-of="${key}"></span></div>
+      <div class="deed-grid">${tradeable(pid).map(sq => tile(sq, deal[key], key)).join('') || '<span class="muted small-text">—</span>'}</div>
+      <label class="tcash">${esc(t('mono.trade.cash'))}
+        <span class="cash-field"><input type="text" inputmode="numeric" autocomplete="off" data-num="${key}Cash" value="${deal[key + 'Cash'] || ''}" placeholder="0"><span class="cash-unit">₽</span></span></label>
+      <div class="cash-chips">${[50, 100, 500].map(x => `<button type="button" class="chip" data-add="${key}Cash" data-amt="${x}">+${x}</button>`).join('')}<button type="button" class="chip ghost" data-add="${key}Cash" data-amt="0">${esc(t('mono.trade.clear'))}</button></div>
+      ${gp(pid).jailCards ? `<label class="tcash">${esc(t('mono.trade.cards'))} <input type="text" inputmode="numeric" data-num="${key}Cards" value="${deal[key + 'Cards'] || ''}" placeholder="0"></label>` : ''}
     </div>`;
-  };
-  const give = { props: [...deal.give], cash: deal.giveCash, cards: deal.giveCards };
-  const take = { props: [...deal.take], cash: deal.takeCash, cards: deal.takeCards };
-  const check = tradeCheck(me, deal.to, give, take);
-  const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.num;
-  $('#tradeBody').innerHTML = `<div class="trade-cols">${side(me, 'give')}${side(deal.to, 'take')}</div>
-    <div class="trade-foot"><span class="fair ${check.ok ? 'ok' : 'bad'}">${esc(check.msg)}</span>
-    <button id="sendTrade" class="primary" ${check.ok ? '' : 'disabled'}>${esc(t('mono.trade.send'))}</button></div>`;
-  if (focused) { const el = $(`#tradeBody [data-num="${focused}"]`); if (el) { el.focus(); el.setSelectionRange?.(el.value.length, el.value.length); } }
-  for (const b of $$('#tradeBody [data-tile]')) b.onclick = () => { const set = deal[b.dataset.tile]; const sq = Number(b.dataset.sq); set.has(sq) ? set.delete(sq) : set.add(sq); renderTrade(); };
-  for (const n of $$('#tradeBody [data-num]')) n.oninput = () => { deal[n.dataset.num] = Math.max(0, parseInt(n.value, 10) || 0); renderTrade(); };
-  $('#sendTrade').onclick = async () => {
-    const res = await send('trade', { to: deal.to, give, take });
-    if (res && res.ok) { $('#tradeModal').classList.add('hidden'); deal = null; }
-  };
+    const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.num;
+    $('#tradeBody').innerHTML = `<div class="trade-cols">${side(me, 'give')}${side(deal.to, 'take')}</div>
+      <div class="trade-foot"><div class="trade-notes"><span class="fair" id="tradeFair"></span><span class="muted small-text" id="tradeWhen"></span></div>
+      <button id="sendTrade" class="primary">${esc(t('mono.trade.send'))}</button></div>`;
+    if (focused) $(`#tradeBody [data-num="${focused}"]`)?.focus();
+    for (const b of $$('#tradeBody [data-tile]')) b.onclick = () => {
+      const set = deal[b.dataset.tile];
+      const sq = Number(b.dataset.sq);
+      set.has(sq) ? set.delete(sq) : set.add(sq);
+      b.classList.toggle('on', set.has(sq));
+      b.setAttribute('aria-pressed', String(set.has(sq)));
+      updateTrade();
+    };
+    for (const n of $$('#tradeBody [data-num]')) n.oninput = () => { setDealNum(n.dataset.num, n.value, n); updateTrade(); };
+    for (const c of $$('#tradeBody [data-add]')) c.onclick = () => {
+      const key = c.dataset.add;
+      setDealNum(key, Number(c.dataset.amt) ? (deal[key] || 0) + Number(c.dataset.amt) : 0);
+      updateTrade();
+    };
+    $('#sendTrade').onclick = async () => {
+      const b = $('#sendTrade');
+      b.disabled = true;
+      const res = await send('trade', { to: deal.to, ...dealSides() });
+      if (res && res.ok) { closeTrade(); toast(t('mono.trade.sent'), 'info'); } else updateTrade();
+    };
+  }
+  updateTrade();
 }
-$('#tradeClose').onclick = () => { $('#tradeModal').classList.add('hidden'); deal = null; };
-$('#tradeModal').addEventListener('pointerdown', e => { if (e.target.id === 'tradeModal') { $('#tradeModal').classList.add('hidden'); deal = null; } });
+// a number field: digits only, never more than that player has
+function setDealNum(key, raw, input) {
+  const me = state.me.id;
+  const pid = key.startsWith('give') ? me : deal.to;
+  const max = key.endsWith('Cards') ? gp(pid).jailCards : gp(pid).cash;
+  const v = Math.min(max, parseInt(String(raw).replace(/\D/g, ''), 10) || 0);
+  deal[key] = v;
+  const el = input || $(`#tradeBody [data-num="${key}"]`);
+  if (el && el.value !== (v ? String(v) : '')) el.value = v ? String(v) : '';
+}
+function updateTrade() {
+  if (!deal || !$('#sendTrade')) return;
+  const me = state.me.id;
+  const { give, take } = dealSides();
+  const check = tradeCheck(me, deal.to, give, take);
+  const blocked = offerBlocked(deal.to);
+  $('#tradeBody [data-value="give"]').textContent = money(sideValue(give));
+  $('#tradeBody [data-value="take"]').textContent = money(sideValue(take));
+  $('#tradeBody [data-cash-of="give"]').textContent = money(gp(me).cash);
+  $('#tradeBody [data-cash-of="take"]').textContent = money(gp(deal.to).cash);
+  const fair = $('#tradeFair');
+  fair.textContent = check.msg;
+  fair.className = `fair ${check.ok ? 'ok' : 'bad'}`;
+  $('#tradeWhen').textContent = blocked || t('mono.trade.whenHint');
+  $('#tradeWhen').classList.toggle('warn', !!blocked);
+  $('#sendTrade').disabled = !check.ok || !!blocked;
+}
+function closeTrade() { $('#tradeModal').classList.add('hidden'); deal = null; }
+$('#tradeClose').onclick = closeTrade;
+$('#tradeModal').addEventListener('pointerdown', e => { if (e.target.id === 'tradeModal') closeTrade(); });
 
-// ---------- open deals, shown to the whole table ----------
+// ---------- open offers: a panel beside the board, never on top of it ----------
+const seenDeals = new Set();
 function renderDeal() {
-  const box = $('#dealShow');
+  const box = $('#dealsBox');
   const g = state.game;
-  const tr = state.phase === 'playing' && g.trades.length ? g.trades[g.trades.length - 1] : null;
-  if (!tr) { box.classList.add('hidden'); box.dataset.id = ''; return; }
+  const list = state.phase === 'playing' ? g.trades : [];
+  box.classList.toggle('hidden', !list.length);
+  if (!list.length) { box.innerHTML = ''; return; }
   const me = state.me.id;
   const sideHtml = (pid, x) => `<div class="deal-side"><div class="deal-who">${pieceOf(pid)}<b>${esc(t('mono.deal.gives', { name: nameOf(pid) }))}</b><span class="side-value">${money(sideValue(x))}</span></div>
     <div class="deal-items">${x.props.map(sq => `<span class="deal-prop g-${BOARD.squares[sq].group || BOARD.squares[sq].type}"><i></i>${esc(sqShort(sq))}</span>`).join('')}
     ${x.cash ? `<span class="deal-cash">${money(x.cash)}</span>` : ''}${x.cards ? `<span class="deal-cash">${esc(t('mono.trade.cards'))} ×${x.cards}</span>` : ''}
     ${!x.props.length && !x.cash && !x.cards ? `<span class="muted">${esc(t('mono.trade.nothing'))}</span>` : ''}</div></div>`;
-  box.innerHTML = `<div class="deal-title">${esc(t('mono.deal.offer', { from: nameOf(tr.from), to: nameOf(tr.to) }))}</div>
-    <div class="deal-sides">${sideHtml(tr.from, tr.give)}<span class="deal-arrow">⇄</span>${sideHtml(tr.to, tr.take)}</div>
-    <div class="row center">${tr.to === me ? `<button class="primary" data-deal="accept">${esc(t('mono.trade.accept'))}</button><button data-deal="decline">${esc(t('mono.trade.decline'))}</button>`
-      : tr.from === me ? `<button data-deal="cancel">${esc(t('mono.trade.cancel'))}</button>` : `<span class="muted small-text">${esc(t('mono.deal.waiting', { name: nameOf(tr.to) }))}</span>`}</div>`;
-  if (box.dataset.id !== tr.id) { box.dataset.id = tr.id; box.classList.remove('hidden', 'pop'); void box.offsetWidth; box.classList.add('pop'); if (tr.to !== me) SFX.turn(); }
-  box.classList.remove('hidden');
-  for (const b of box.querySelectorAll('[data-deal]')) b.onclick = () => send('tradeRespond', { id: tr.id, accept: b.dataset.deal === 'accept' });
+  box.innerHTML = `<div class="deals-head"><h3>${esc(t('mono.deals.title'))}</h3><span class="muted small-text">${esc(t('mono.deals.until', { name: nameOf(g.turn.pid) }))}</span></div>`
+    + list.map(tr => `<div class="deal-card ${tr.to === me ? 'for-me' : ''} ${seenDeals.has(tr.id) ? '' : 'pop'}" data-deal-id="${tr.id}">
+      <div class="deal-title">${esc(t('mono.deal.offer', { from: nameOf(tr.from), to: nameOf(tr.to) }))}</div>
+      ${sideHtml(tr.from, tr.give)}<div class="deal-arrow">⇅</div>${sideHtml(tr.to, tr.take)}
+      <div class="row deal-btns">${tr.to === me ? `<button class="primary small" data-deal="accept">${esc(t('mono.trade.accept'))}</button><button class="small" data-deal="decline">${esc(t('mono.trade.decline'))}</button>`
+        : tr.from === me ? `<button class="small" data-deal="cancel">${esc(t('mono.trade.cancel'))}</button>` : `<span class="muted small-text">${esc(t('mono.deal.waiting', { name: nameOf(tr.to) }))}</span>`}</div>
+    </div>`).join('');
+  for (const tr of list) {
+    if (seenDeals.has(tr.id)) continue;
+    seenDeals.add(tr.id);
+    if (tr.to === me) { SFX.turn(); toast(t('mono.alert.deal', { name: nameOf(tr.from) }), 'info'); }
+  }
+  for (const card of box.querySelectorAll('[data-deal-id]')) {
+    for (const b of card.querySelectorAll('[data-deal]')) b.onclick = () => { b.disabled = true; send('tradeRespond', { id: card.dataset.dealId, accept: b.dataset.deal === 'accept' }); };
+  }
 }
-
 
 $('#sqInfo').addEventListener('pointerdown', e => { if (e.target.id === 'sqInfo') $('#sqInfo').classList.add('hidden'); });
 
